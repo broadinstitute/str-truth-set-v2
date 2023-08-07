@@ -1,12 +1,17 @@
 import os
 import pandas as pd
 
+# Links: https://projects.ensembl.org/hprc/
+# https://genomebiology.biomedcentral.com/articles/10.1186/s13059-020-02168-z
+
 from step_pipeline import pipeline, Backend, Localize
 
 DOCKER_IMAGE = "weisburd/hprc-pipeline@sha256:70360d3cb05a49afcf303ca36aa794462159e2e758142f81ec0f1e4bcaf60039"
 
-bp = pipeline(backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline_gnomad")
+bp = pipeline("HPRC dipcall pipeline", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline_gnomad")
+
 parser = bp.get_config_arg_parser()
+parser.add_argument("-s", "--sample-id", action="append", help="Process only this sample id. Can be specified more than once.")
 parser.add_argument("--output-dir", default="gs://str-truth-set-v2/hprc_dipcall")
 args = bp.parse_known_args()
 
@@ -15,6 +20,9 @@ df_urls = pd.read_table("hprc_assembly_urls.tsv")
 accession_to_url_map = dict(zip(df_urls.accession, df_urls.url))
 df["url_pat"] = df["accession_pat"].map(accession_to_url_map)
 df["url_mat"] = df["accession_mat"].map(accession_to_url_map)
+
+if args.sample_id:
+    df = df[df.sample_id.isin(args.sample_id)]
 
 for i, (_, row) in enumerate(df.iterrows()):
 
