@@ -95,3 +95,11 @@ GCA_018852615.1	https://hgdownload.soe.ucsc.edu/hubs/GCA/018/852/615/GCA_0188526
 GCA_018852605.1	https://hgdownload.soe.ucsc.edu/hubs/GCA/018/852/605/GCA_018852605.1/GCA_018852605.1.fa.gz
 GCA_018506965.1	https://hgdownload.soe.ucsc.edu/hubs/GCA/018/506/965/GCA_018506965.1/GCA_018506965.1.fa.gz
 GCA_018506945.1	https://hgdownload.soe.ucsc.edu/hubs/GCA/018/506/945/GCA_018506945.1/GCA_018506945.1.fa.gz
+CHM1_20220129	https://storage.googleapis.com/str-truth-set-v2/new_assemblies_from_vollger_2023/CHM1_2022-01-29.fasta.gz
+CHM13v2_T2T	https://storage.googleapis.com/str-truth-set-v2/new_assemblies_from_vollger_2023/CHM13v2_T2T.fasta.gz
+HG00514_hap1	https://storage.googleapis.com/str-truth-set-v2/new_assemblies_from_vollger_2023/HG00514.hifiasm.dip.hap1.p_ctg.gfa.fasta.gz
+HG00514_hap2	https://storage.googleapis.com/str-truth-set-v2/new_assemblies_from_vollger_2023/HG00514.hifiasm.dip.hap2.p_ctg.gfa.fasta.gz
+HG03125_hap1	https://storage.googleapis.com/str-truth-set-v2/new_assemblies_from_vollger_2023/HG03125.hifiasm.dip.hap1.p_ctg.gfa.fasta.gz
+HG03125_hap2	https://storage.googleapis.com/str-truth-set-v2/new_assemblies_from_vollger_2023/HG03125.hifiasm.dip.hap2.p_ctg.gfa.fasta.gz
+NA12878_hap1	https://storage.googleapis.com/str-truth-set-v2/new_assemblies_from_vollger_2023/NA12878.hifiasm.dip.hap1.p_ctg.gfa.fasta.gz
+NA12878_hap2	https://storage.googleapis.com/str-truth-set-v2/new_assemblies_from_vollger_2023/NA12878.hifiasm.dip.hap2.p_ctg.gfa.fasta.gz
