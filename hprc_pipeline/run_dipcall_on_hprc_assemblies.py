@@ -1,10 +1,21 @@
+"""Hail Batch pipeline for running dipcall on HPRC assemblies.
+
+Relevant links:
+
+HPRC assemblies
+  https://projects.ensembl.org/hprc/
+
+The design and construction of reference pangenome graphs with minigraph by Li et al. 2020
+  https://genomebiology.biomedcentral.com/articles/10.1186/s13059-020-02168-z
+
+Increased mutation and gene conversion within human segmental duplications by Vollger et al.
+  https://www.nature.com/articles/s41586-023-05895-y
+
+"""
 import os
 import pandas as pd
-
-# Links: https://projects.ensembl.org/hprc/
-# https://genomebiology.biomedcentral.com/articles/10.1186/s13059-020-02168-z
-
 from step_pipeline import pipeline, Backend, Localize
+
 
 DOCKER_IMAGE = "weisburd/hprc-pipeline@sha256:70360d3cb05a49afcf303ca36aa794462159e2e758142f81ec0f1e4bcaf60039"
 
