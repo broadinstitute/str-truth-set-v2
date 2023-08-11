@@ -55,4 +55,7 @@ RUN wget https://github.com/lh3/dipcall/releases/download/v0.3/dipcall-0.3_x64-l
 RUN python3 -m pip install --upgrade cmake pip
 RUN python3 -m pip install str_analysis==0.9.18
 
+RUN git clone https://github.com/broadinstitute/str-truth-set.git
+
+
 ENTRYPOINT ["/bin/bash"]
