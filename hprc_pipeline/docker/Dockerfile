@@ -36,7 +36,6 @@ RUN wget https://github.com/samtools/htslib/releases/download/${SAMTOOLS_VERSION
     && make install \
     && make clean
 
-
 # install gcloud
 ENV GCLOUD_SDK_VERISON="441.0.0"
 RUN wget https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-${GCLOUD_SDK_VERISON}-linux-x86_64.tar.gz \
@@ -47,6 +46,12 @@ RUN wget https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud
 
 ENV PATH=/google-cloud-sdk/bin:$PATH
 
+# install bedtools
+ENV BED_TOOLS_VERSION="2.31.0"
+RUN wget https://github.com/arq5x/bedtools2/releases/download/v${BED_TOOLS_VERSION}/bedtools.static \
+	&& chmod 777 bedtools.static \
+	&& mv bedtools.static /usr/bin/bedtools
+
 # install dipcall
 RUN wget https://github.com/lh3/dipcall/releases/download/v0.3/dipcall-0.3_x64-linux.tar.bz2 \
  	&& tar -jxf dipcall-0.3_x64-linux.tar.bz2 \
@@ -55,7 +60,12 @@ RUN wget https://github.com/lh3/dipcall/releases/download/v0.3/dipcall-0.3_x64-l
 RUN python3 -m pip install --upgrade cmake pip
 RUN python3 -m pip install str_analysis==0.9.18
 
-RUN git clone https://github.com/broadinstitute/str-truth-set.git
+# install str-truth-set repo
+COPY str-truth-set/requirements.txt /
+RUN python3 -m pip install -r /requirements.txt
+
+COPY str-truth-set /str-truth-set
+COPY hprc_pipeline/scripts /hprc_pipeline/scripts
 
 
 ENTRYPOINT ["/bin/bash"]

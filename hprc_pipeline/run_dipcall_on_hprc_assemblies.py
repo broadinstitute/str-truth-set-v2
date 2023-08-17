@@ -17,7 +17,7 @@ import pandas as pd
 from step_pipeline import pipeline, Backend, Localize
 
 
-DOCKER_IMAGE = "weisburd/hprc-pipeline@sha256:70360d3cb05a49afcf303ca36aa794462159e2e758142f81ec0f1e4bcaf60039"
+DOCKER_IMAGE = "weisburd/hprc-pipeline@sha256:656e50b22fb8a5c28cd8aa66678f467f280a0097e0d26121d0eadaacc97649bb"
 
 bp = pipeline("HPRC dipcall pipeline", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline_gnomad")
 
@@ -67,11 +67,34 @@ for i, (_, row) in enumerate(df.iterrows()):
     s1.command("ls -lhtr")
     s1.command(f"[ -s {row.sample_id}.dip.bed ] || exit 1")  # check that the bed file isn't emtpy
 
+    s1.command(f"bgzip {row.sample_id}.dip.bed")
+    s1.command(f"tabix {row.sample_id}.dip.bed.gz")
+
     s1.output(f"{row.sample_id}.dip.vcf.gz")
-    s1.output(f"{row.sample_id}.dip.bed")
+    s1.output(f"{row.sample_id}.dip.bed.gz")
+    s1.output(f"{row.sample_id}.dip.bed.gz.tbi")
+
     #s1.output(f"{row.sample_id}.hap1.bed")
     #s1.output(f"{row.sample_id}.hap2.bed")
     #s1.output(f"{row.sample_id}.pair.vcf.gz")
+
+# combine high-confidence regions  (intersection, union)
+#s2 = bp.new_step(
+#    f"Combine high-confidence regions",
+#    image=DOCKER_IMAGE,
+#    arg_suffix="step2",
+#    cpu=1,
+#    output_dir=args.output_dir)
+#
+#s2.command("set -exuo pipefail")
+#for _, row in df.iterrows():
+#    current_input = s2.input(os.path.join(args.output_dir, f"{row.sample_id}.dip.bed"))
+#    s2.command(f"cat {current_input} >> all.dip.bed")
+#output_bed_filename = f"combined.high_confidence_regions.{len(df)}_samples.union.bed.gz"
+#s2.command(f"bedtools sort -i all.dip.bed | bedtools merge -i - | bgzip > {output_bed_filename}")
+#s2.command(f"tabix {output_bed_filename}")
+#s2.output(output_bed_filename)
+#s2.output(f"{output_bed_filename}.tbi")
 
 bp.run()
 

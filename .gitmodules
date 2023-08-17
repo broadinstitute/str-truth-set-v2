@@ -1,0 +1,3 @@
+[submodule "str-truth-set"]
+	path = str-truth-set
+	url = https://github.com/broadinstitute/str-truth-set.git
