@@ -67,5 +67,8 @@ RUN python3 -m pip install -r /requirements.txt
 COPY str-truth-set /str-truth-set
 COPY hprc_pipeline/scripts /hprc_pipeline/scripts
 
+# set up "aliases" for MacOSX commands
+RUN apt-get install -y --no-install-recommends bc
+RUN cp /bin/zcat /bin/gzcat
 
 ENTRYPOINT ["/bin/bash"]
