@@ -16,7 +16,7 @@ import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize
 
-STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:89d59d62ce0d3c1129207bda0246501735e60a471495f9aa86311441201a0105"
+STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:e13cf6e945bf04f1fbfbe1da880f543a7bb223026e995b2682324cebc8c18649"
 DOCKER_IMAGE = "weisburd/hprc-pipeline@sha256:89d59d62ce0d3c1129207bda0246501735e60a471495f9aa86311441201a0105"
 
 
@@ -79,72 +79,68 @@ def create_filter_step(bp, row, args, suffix):
     return filter_step
 
 
-def create_annotate_step(bp, row, args, suffix):
+def create_annotate_steps(bp, row, args, suffix):
 
-    annotate_step = bp.new_step(
-        f"annotate: {row.sample_id}",
-        image=DOCKER_IMAGE,
-        arg_suffix="annotate-step",
-        cpu=4,
-        memory="highmem",
-        output_dir=os.path.join(args.output_dir, row.sample_id),
-    )
-    variants_bed_input = annotate_step.input(
-        os.path.join(args.output_dir, row.sample_id, f"{row.sample_id}{suffix}.variants.bed.gz"))
+    annotate_steps = []
+    for table_type in "variants", "alleles":
 
-    for input_bed_path in [
-        "gs://str-truth-set/hg38/ref/other/illumina_variant_catalog.sorted.bed.gz",
-        "gs://str-truth-set/hg38/ref/other/hg38_ver13.adjusted.bed.gz",
-        "gs://str-truth-set/hg38/ref/other/hg38_ver17.adjusted.bed.gz",
-        "gs://str-truth-set/hg38/ref/other/hg38.hipstr_reference.adjusted.bed.gz",
-        "gs://str-truth-set/hg38/ref/other/known_disease_associated_STR_loci.GRCh38.bed.gz",
-        "gs://str-truth-set/hg38/ref/other/GRCh38GenomicSuperDup.without_decoys.sorted.bed.gz",
-    ]:
-        input_catalog, _ = annotate_step.inputs(input_bed_path, f"{input_bed_path}.tbi")
+        annotate_step = bp.new_step(
+            f"annotate {table_type}: {row.sample_id}",
+            image=DOCKER_IMAGE,
+            arg_suffix=f"annotate-{table_type}-step",
+            cpu=4,
+            memory="standard",
+            output_dir=os.path.join(args.output_dir, row.sample_id),
+        )
+        bed_input = annotate_step.input(
+            os.path.join(args.output_dir, row.sample_id, f"{row.sample_id}{suffix}.variants.bed.gz"))
 
-    for input_gtf in [
-        "gs://str-truth-set/hg38/ref/other/gencode.v43.annotation.gtf.gz",
-        "gs://str-truth-set/hg38/ref/other/MANE.GRCh38.v1.2.ensembl_genomic.gtf.gz",
-    ]:
-        input_gtf, _ = annotate_step.inputs(input_gtf, f"{input_gtf}.tbi")
+        for input_bed_path in [
+            "gs://str-truth-set/hg38/ref/other/illumina_variant_catalog.sorted.bed.gz",
+            "gs://str-truth-set/hg38/ref/other/hg38_ver13.adjusted.bed.gz",
+            "gs://str-truth-set/hg38/ref/other/hg38_ver17.adjusted.bed.gz",
+            "gs://str-truth-set/hg38/ref/other/hg38.hipstr_reference.adjusted.bed.gz",
+            "gs://str-truth-set/hg38/ref/other/known_disease_associated_STR_loci.GRCh38.bed.gz",
+            "gs://str-truth-set/hg38/ref/other/GRCh38GenomicSuperDup.without_decoys.sorted.bed.gz",
+        ]:
+            input_catalog, _ = annotate_step.inputs(input_bed_path, f"{input_bed_path}.tbi")
 
-    for i in range(6, 31, 3):
-        annotate_step.inputs(
-            f"gs://str-truth-set/hg38/ref/other/repeat_specs_GRCh38_without_mismatches.including_homopolymers.sorted.at_least_{i}bp.bed.gz",
-            f"gs://str-truth-set/hg38/ref/other/repeat_specs_GRCh38_without_mismatches.including_homopolymers.sorted.at_least_{i}bp.bed.gz.tbi")
+        for input_gtf in [
+            "gs://str-truth-set/hg38/ref/other/gencode.v43.annotation.gtf.gz",
+            "gs://str-truth-set/hg38/ref/other/MANE.GRCh38.v1.2.ensembl_genomic.gtf.gz",
+        ]:
+            input_gtf, _ = annotate_step.inputs(input_gtf, f"{input_gtf}.tbi")
 
-    variants_tsv_input = annotate_step.input(
-        os.path.join(args.output_dir, row.sample_id, f"{row.sample_id}{suffix}.variants.tsv.gz"))
-    alleles_tsv_input = annotate_step.input(
-        os.path.join(args.output_dir, row.sample_id, f"{row.sample_id}{suffix}.alleles.tsv.gz"))
+        for i in range(6, 31, 3):
+            annotate_step.inputs(
+                f"gs://str-truth-set/hg38/ref/other/repeat_specs_GRCh38_without_mismatches.including_homopolymers.sorted.at_least_{i}bp.bed.gz",
+                f"gs://str-truth-set/hg38/ref/other/repeat_specs_GRCh38_without_mismatches.including_homopolymers.sorted.at_least_{i}bp.bed.gz.tbi")
 
-    annotate_step.command("mkdir /ref")
-    annotate_step.command(f"ln -s {input_catalog.local_dir} /ref/other")
+        tsv_input_table = annotate_step.input(
+            os.path.join(args.output_dir, row.sample_id, f"{row.sample_id}{suffix}.{table_type}.tsv.gz"))
 
-    annotate_step.command("set -exuo pipefail")
-    annotate_step.command(f"/hprc_pipeline/scripts/compute_overlap_with_other_catalogs_using_bedtools.sh {variants_bed_input}")
+        annotate_step.command("mkdir /ref")
+        annotate_step.command(f"ln -s {input_catalog.local_dir} /ref/other")
 
-    annotate_step.command(f"""
-        python3 -u /hprc_pipeline/scripts/compute_overlap_with_other_catalogs.py --all-repeats --all-motifs {variants_tsv_input}  {row.sample_id}{suffix}.variants.with_overlap_columns.tsv.gz     
-        python3 -u /hprc_pipeline/scripts/compute_overlap_with_other_catalogs.py --all-repeats --all-motifs {alleles_tsv_input}  {row.sample_id}{suffix}.alleles.with_overlap_columns.tsv.gz
-        mv {row.sample_id}{suffix}.variants.with_overlap_columns.tsv.gz {row.sample_id}{suffix}.variants.tsv.gz
-        mv {row.sample_id}{suffix}.alleles.with_overlap_columns.tsv.gz  {row.sample_id}{suffix}.alleles.tsv.gz
-        
-        python3 -u /hprc_pipeline/scripts/compute_overlap_with_gene_models.py /ref/other/gencode.v43.annotation.sorted.gtf.gz {row.sample_id}{suffix}.variants.tsv.gz  {row.sample_id}{suffix}.variants.with_gencode_columns.tsv.gz
-        python3 -u /hprc_pipeline/scripts/compute_overlap_with_gene_models.py /ref/other/gencode.v43.annotation.sorted.gtf.gz {row.sample_id}{suffix}.alleles.tsv.gz   {row.sample_id}{suffix}.alleles.with_gencode_columns.tsv.gz
-        mv {row.sample_id}{suffix}.variants.with_gencode_columns.tsv.gz {row.sample_id}{suffix}.variants.tsv.gz
-        mv {row.sample_id}{suffix}.alleles.with_gencode_columns.tsv.gz {row.sample_id}{suffix}.alleles.tsv.gz
-        
-        python3 -u /hprc_pipeline/scripts/compute_overlap_with_gene_models.py /ref/other/MANE.v1.2.ensembl_genomic.sorted.gtf.gz {row.sample_id}{suffix}.variants.tsv.gz {row.sample_id}{suffix}.variants.with_MANE_columns.tsv.gz
-        python3 -u /hprc_pipeline/scripts/compute_overlap_with_gene_models.py /ref/other/MANE.v1.2.ensembl_genomic.sorted.gtf.gz {row.sample_id}{suffix}.alleles.tsv.gz  {row.sample_id}{suffix}.alleles.with_MANE_columns.tsv.gz
-        mv {row.sample_id}{suffix}.variants.with_MANE_columns.tsv.gz {row.sample_id}{suffix}.annotated.variants.tsv.gz
-        mv {row.sample_id}{suffix}.alleles.with_MANE_columns.tsv.gz {row.sample_id}{suffix}.annotated.alleles.tsv.gz
-        """)
+        annotate_step.command("set -exuo pipefail")
+        annotate_step.command(f"/hprc_pipeline/scripts/compute_overlap_with_other_catalogs_using_bedtools.sh {bed_input}")
 
-    annotate_step.output(f"{row.sample_id}{suffix}.annotated.variants.tsv.gz")
-    annotate_step.output(f"{row.sample_id}{suffix}.annotated.alleles.tsv.gz")
+        annotate_step.command(f"""
+            python3 -u /hprc_pipeline/scripts/compute_overlap_with_other_catalogs.py --all-repeats --all-motifs {tsv_input_table}  {row.sample_id}{suffix}.{table_type}.with_overlap_columns.tsv.gz     
+            mv {row.sample_id}{suffix}.{table_type}.with_overlap_columns.tsv.gz {row.sample_id}{suffix}.{table_type}.tsv.gz
+            
+            python3 -u /hprc_pipeline/scripts/compute_overlap_with_gene_models.py /ref/other/gencode.v43.annotation.sorted.gtf.gz {row.sample_id}{suffix}.{table_type}.tsv.gz  {row.sample_id}{suffix}.variants.with_gencode_columns.tsv.gz
+            mv {row.sample_id}{suffix}.{table_type}.with_gencode_columns.tsv.gz {row.sample_id}{suffix}.{table_type}.tsv.gz
+            
+            python3 -u /hprc_pipeline/scripts/compute_overlap_with_gene_models.py /ref/other/MANE.v1.2.ensembl_genomic.sorted.gtf.gz {row.sample_id}{suffix}.{table_type}.tsv.gz {row.sample_id}{suffix}.variants.with_MANE_columns.tsv.gz
+            mv {row.sample_id}{suffix}.{table_type}.with_MANE_columns.tsv.gz {row.sample_id}{suffix}.annotated.{table_type}.tsv.gz
+            """)
 
-    return annotate_step
+        annotate_step.output(f"{row.sample_id}{suffix}.annotated.{table_type}.tsv.gz")
+
+        annotate_steps.append(annotate_step)
+
+    return annotate_steps
 
 
 def create_variant_catalogs_step(bp, row, args, suffix):
@@ -292,14 +288,15 @@ def main():
         filter_step = create_filter_step(bp, row, args, suffix)
         filter_steps.append(filter_step)
 
-        annotate_step = create_annotate_step(bp, row, args, suffix)
-        annotate_step.depends_on(filter_step)
+        annotate_variants_step, annotate_alleles_step = create_annotate_steps(bp, row, args, suffix)
+        annotate_variants_step.depends_on(filter_step)
+        annotate_alleles_step.depends_on(filter_step)
 
         variant_catalogs_step = create_variant_catalogs_step(bp, row, args, suffix)
         variant_catalogs_step.depends_on(filter_step)
 
         plot_step = create_plot_step(bp, row, args, suffix)
-        plot_step.depends_on(annotate_step)
+        plot_step.depends_on(annotate_alleles_step)
 
     create_combine_results_step(bp, df, args, suffix, filter_steps)
 
