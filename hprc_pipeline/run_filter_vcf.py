@@ -20,15 +20,14 @@ STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:e13cf6e945bf04f1fbfbe1
 DOCKER_IMAGE = "weisburd/hprc-pipeline@sha256:89d59d62ce0d3c1129207bda0246501735e60a471495f9aa86311441201a0105"
 
 
-def create_filter_step(bp, row, args, suffix):
+def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False):
     filter_step = bp.new_step(
         f"filter_vcf: {row.sample_id}",
         image=STR_ANALYSIS_DOCKER_IMAGE,
         arg_suffix="filter-step",
         cpu=1,
         memory="highmem",
-        #storage="50Gi",
-        output_dir=os.path.join(args.output_dir, row.sample_id))
+        output_dir=output_dir)
 
     hg38_fasta_input, _ = filter_step.inputs(
         "gs://str-truth-set/hg38/ref/hg38.fa",
@@ -50,8 +49,8 @@ def create_filter_step(bp, row, args, suffix):
             | bgzip > {row.sample_id}.high_confidence_regions.vcf.gz")
     filter_step.command(f"tabix -f {row.sample_id}.high_confidence_regions.vcf.gz")
 
-    min_repeat_unit_length = 2 if args.exclude_homopolymers else 1
-    allow_interruptions = "no" if args.only_pure_repeats else "only-if-pure-repeats-not-found"
+    min_repeat_unit_length = 2 if exclude_homopolymers else 1
+    allow_interruptions = "no" if only_pure_repeats else "only-if-pure-repeats-not-found"
     filter_step.command(f"python3 -u -m str_analysis.filter_vcf_to_STR_variants \
             -R {hg38_fasta_input} \
             --allow-interruptions {allow_interruptions} \
@@ -79,7 +78,7 @@ def create_filter_step(bp, row, args, suffix):
     return filter_step
 
 
-def create_annotate_steps(bp, row, args, suffix):
+def create_annotate_steps(bp, row, suffix, output_dir):
 
     annotate_steps = []
     for table_type in "variants", "alleles":
@@ -90,10 +89,10 @@ def create_annotate_steps(bp, row, args, suffix):
             arg_suffix=f"annotate-{table_type}-step",
             cpu=4,
             memory="standard",
-            output_dir=os.path.join(args.output_dir, row.sample_id),
+            output_dir=output_dir,
         )
         bed_input = annotate_step.input(
-            os.path.join(args.output_dir, row.sample_id, f"{row.sample_id}{suffix}.variants.bed.gz"))
+            os.path.join(output_dir, f"{row.sample_id}{suffix}.variants.bed.gz"))
 
         for input_bed_path in [
             "gs://str-truth-set/hg38/ref/other/illumina_variant_catalog.sorted.bed.gz",
@@ -117,24 +116,26 @@ def create_annotate_steps(bp, row, args, suffix):
                 f"gs://str-truth-set/hg38/ref/other/repeat_specs_GRCh38_without_mismatches.including_homopolymers.sorted.at_least_{i}bp.bed.gz.tbi")
 
         tsv_input_table = annotate_step.input(
-            os.path.join(args.output_dir, row.sample_id, f"{row.sample_id}{suffix}.{table_type}.tsv.gz"))
+            os.path.join(output_dir, f"{row.sample_id}{suffix}.{table_type}.tsv.gz"))
 
         annotate_step.command("mkdir /ref")
         annotate_step.command(f"ln -s {input_catalog.local_dir} /ref/other")
 
         annotate_step.command("set -exuo pipefail")
-        annotate_step.command(f"/hprc_pipeline/scripts/compute_overlap_with_other_catalogs_using_bedtools.sh {bed_input}")
 
         annotate_step.command(f"""
+            python3 -u /hprc_pipeline/scripts/compute_overlap_with_gene_models.py /ref/other/gencode.v43.annotation.gtf.gz {row.sample_id}{suffix}.{table_type}.tsv.gz  {row.sample_id}{suffix}.variants.with_gencode_columns.tsv.gz
+            mv {row.sample_id}{suffix}.{table_type}.with_gencode_columns.tsv.gz {row.sample_id}{suffix}.{table_type}.tsv.gz
+            
+            python3 -u /hprc_pipeline/scripts/compute_overlap_with_gene_models.py /ref/other/MANE.GRCh38.v1.2.ensembl_genomic.gtf.gz {row.sample_id}{suffix}.{table_type}.tsv.gz {row.sample_id}{suffix}.variants.with_MANE_columns.tsv.gz
+            mv {row.sample_id}{suffix}.{table_type}.with_MANE_columns.tsv.gz {row.sample_id}{suffix}.{table_type}.tsv.gz
+
             python3 -u /hprc_pipeline/scripts/compute_overlap_with_other_catalogs.py --all-repeats --all-motifs {tsv_input_table}  {row.sample_id}{suffix}.{table_type}.with_overlap_columns.tsv.gz     
             mv {row.sample_id}{suffix}.{table_type}.with_overlap_columns.tsv.gz {row.sample_id}{suffix}.{table_type}.tsv.gz
             
-            python3 -u /hprc_pipeline/scripts/compute_overlap_with_gene_models.py /ref/other/gencode.v43.annotation.sorted.gtf.gz {row.sample_id}{suffix}.{table_type}.tsv.gz  {row.sample_id}{suffix}.variants.with_gencode_columns.tsv.gz
-            mv {row.sample_id}{suffix}.{table_type}.with_gencode_columns.tsv.gz {row.sample_id}{suffix}.{table_type}.tsv.gz
-            
-            python3 -u /hprc_pipeline/scripts/compute_overlap_with_gene_models.py /ref/other/MANE.v1.2.ensembl_genomic.sorted.gtf.gz {row.sample_id}{suffix}.{table_type}.tsv.gz {row.sample_id}{suffix}.variants.with_MANE_columns.tsv.gz
-            mv {row.sample_id}{suffix}.{table_type}.with_MANE_columns.tsv.gz {row.sample_id}{suffix}.annotated.{table_type}.tsv.gz
-            """)
+            mv {row.sample_id}{suffix}.{table_type}.tsv.gz {row.sample_id}{suffix}.annotated.{table_type}.tsv.gz            
+        """)
+        annotate_step.command(f"/hprc_pipeline/scripts/compute_overlap_with_other_catalogs_using_bedtools.sh {bed_input}")
 
         annotate_step.output(f"{row.sample_id}{suffix}.annotated.{table_type}.tsv.gz")
 
@@ -143,21 +144,21 @@ def create_annotate_steps(bp, row, args, suffix):
     return annotate_steps
 
 
-def create_variant_catalogs_step(bp, row, args, suffix):
+def create_variant_catalogs_step(bp, row, suffix, output_dir):
     variant_catalogs_step = bp.new_step(
         f"variant catalogs: {row.sample_id}",
         image=DOCKER_IMAGE,
         arg_suffix="variant-catalogs-step",
         cpu=1,
-        output_dir=os.path.join(args.output_dir, row.sample_id),
+        output_dir=output_dir,
     )
 
     high_confidence_regions_bed_input = variant_catalogs_step.input(
         os.path.join("gs://str-truth-set-v2/hprc_dipcall", row.sample_id, f"{row.sample_id}.dip.bed.gz"))
     variants_tsv_input = variant_catalogs_step.input(
-        os.path.join(args.output_dir, row.sample_id, f"{row.sample_id}{suffix}.variants.tsv.gz"))
+        os.path.join(output_dir, f"{row.sample_id}{suffix}.variants.tsv.gz"))
     variants_bed_input = variant_catalogs_step.input(
-        os.path.join(args.output_dir, row.sample_id, f"{row.sample_id}{suffix}.variants.bed.gz"))
+        os.path.join(output_dir, f"{row.sample_id}{suffix}.variants.bed.gz"))
     all_hg38_repeats_bed_input, _ = variant_catalogs_step.inputs(
         "gs://str-truth-set/hg38/ref/other/repeat_specs_GRCh38_without_mismatches.including_homopolymers.sorted.at_least_9bp.bed.gz",
         "gs://str-truth-set/hg38/ref/other/repeat_specs_GRCh38_without_mismatches.including_homopolymers.sorted.at_least_9bp.bed.gz.tbi")
@@ -179,21 +180,22 @@ def create_variant_catalogs_step(bp, row, args, suffix):
 
     variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/expansion_hunter/positive_loci.EHv5.001_of_001.json")
     variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/expansion_hunter/negative_loci.EHv5.001_of_001.json")
+
     return variant_catalogs_step
 
 
-def create_plot_step(bp, row, args, suffix):
+def create_plot_step(bp, row, suffix, output_dir):
     # generate plots
     plot_step = bp.new_step(
         f"plots: {row.sample_id}",
         image=DOCKER_IMAGE,
         arg_suffix="plots-step",
-        output_dir=os.path.join(args.output_dir, row.sample_id),
+        output_dir=output_dir,
     )
 
     plot_step.command("set -exuo pipefail")
 
-    alleles_tsv_input = plot_step.input(os.path.join(args.output_dir, row.sample_id, f"{row.sample_id}{suffix}.annotated.alleles.tsv.gz"))
+    alleles_tsv_input = plot_step.input(os.path.join(output_dir, f"{row.sample_id}{suffix}.annotated.alleles.tsv.gz"))
 
     plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_summary_stats.py  --only-plot 2 --width 8 --height 5.5  --truth-set-alleles-table {alleles_tsv_input} --image-type png")
     plot_step.command("ls -l")
@@ -207,7 +209,7 @@ def create_plot_step(bp, row, args, suffix):
     return plot_step
 
 
-def create_combine_results_step(bp, df, args, suffix, filter_steps):
+def create_combine_results_step(bp, df, suffix, filter_steps, output_dir):
     for combine_step_type, combine_step_prefix, combine_step_suffix in [
         ("concat tsvs", "concat", "tsv"),
         ("join tsvs", "joined", "tsv"),
@@ -219,7 +221,7 @@ def create_combine_results_step(bp, df, args, suffix, filter_steps):
             image=DOCKER_IMAGE,
             cpu=2,
             memory="highmem",
-            output_dir=os.path.join(args.output_dir, "combined"),
+            output_dir=os.path.join(output_dir, "combined"),
             depends_on=filter_steps,
         )
 
@@ -227,7 +229,7 @@ def create_combine_results_step(bp, df, args, suffix, filter_steps):
 
         input_files = [
             combine_step.input(
-                os.path.join(args.output_dir, row.sample_id, f"{row.sample_id}{suffix}.variants.{combine_step_suffix}.gz")
+                os.path.join(output_dir, f"{row.sample_id}{suffix}.variants.{combine_step_suffix}.gz")
             ) for _, row in df.iterrows()
         ]
 
@@ -282,23 +284,36 @@ def main():
     if args.exclude_homopolymers:
         suffix += ".excluding_homopolymers"
 
+    if args.only_pure_repeats and args.exclude_homopolymers:
+        output_dir_suffix = "pure_repeats_excluding_homopolymers"
+    elif args.only_pure_repeats:
+        output_dir_suffix = "pure_repeats_including_homopolymers"
+    elif args.exclude_homopolymers:
+        output_dir_suffix = "all_repeats_excluding_homopolymers"
+    else:
+        output_dir_suffix = "all_repeats_including_homopolymers"
+
     filter_steps = []
     for row_i, (_, row) in enumerate(df.iterrows()):
+        output_dir = os.path.join(args.output_dir, output_dir_suffix, row.sample_id)
 
-        filter_step = create_filter_step(bp, row, args, suffix)
+        filter_step = create_filter_step(bp, row, suffix, output_dir,
+                                         exclude_homopolymers=args.exclude_homopolymers,
+                                         only_pure_repeats=args.only_pure_repeats)
         filter_steps.append(filter_step)
 
-        annotate_variants_step, annotate_alleles_step = create_annotate_steps(bp, row, args, suffix)
+        annotate_variants_step, annotate_alleles_step = create_annotate_steps(bp, row, suffix, output_dir)
         annotate_variants_step.depends_on(filter_step)
         annotate_alleles_step.depends_on(filter_step)
 
-        variant_catalogs_step = create_variant_catalogs_step(bp, row, args, suffix)
+        variant_catalogs_step = create_variant_catalogs_step(bp, row, suffix, output_dir)
         variant_catalogs_step.depends_on(filter_step)
 
-        plot_step = create_plot_step(bp, row, args, suffix)
+        plot_step = create_plot_step(bp, row, suffix, output_dir)
         plot_step.depends_on(annotate_alleles_step)
 
-    create_combine_results_step(bp, df, args, suffix, filter_steps)
+    create_combine_results_step(bp, df, suffix, filter_steps,
+                                output_dir=os.path.join(args.output_dir, output_dir_suffix))
 
     bp.run()
 
