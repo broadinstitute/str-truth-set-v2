@@ -68,7 +68,7 @@ COPY str-truth-set /str-truth-set
 COPY hprc_pipeline/scripts /hprc_pipeline/scripts
 
 # set up "aliases" for MacOSX commands
-RUN apt-get install -y --no-install-recommends bc
+RUN apt-get install -y --no-install-recommends bc dvipng texlive-latex-extra texlive-fonts-recommended cm-super
 RUN cp /bin/zcat /bin/gzcat
 
 ENTRYPOINT ["/bin/bash"]

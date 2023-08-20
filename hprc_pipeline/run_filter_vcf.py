@@ -17,7 +17,7 @@ import pandas as pd
 from step_pipeline import pipeline, Backend, Localize
 
 STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:e13cf6e945bf04f1fbfbe1da880f543a7bb223026e995b2682324cebc8c18649"
-DOCKER_IMAGE = "weisburd/hprc-pipeline@sha256:89d59d62ce0d3c1129207bda0246501735e60a471495f9aa86311441201a0105"
+DOCKER_IMAGE = "weisburd/hprc-pipeline@sha256:4357234bc442997e908ae1e94aaf88c3d2cbd9457fe31184a452aba6ec21dea7"
 
 
 def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False):
@@ -88,7 +88,7 @@ def create_annotate_steps(bp, row, suffix, output_dir):
             image=DOCKER_IMAGE,
             arg_suffix=f"annotate-{table_type}-step",
             cpu=4,
-            memory="standard",
+            memory="highmem",
             output_dir=output_dir,
         )
         bed_input = annotate_step.input(
@@ -105,8 +105,8 @@ def create_annotate_steps(bp, row, suffix, output_dir):
             input_catalog, _ = annotate_step.inputs(input_bed_path, f"{input_bed_path}.tbi")
 
         for input_gtf in [
-            "gs://str-truth-set/hg38/ref/other/gencode.v43.annotation.gtf.gz",
-            "gs://str-truth-set/hg38/ref/other/MANE.GRCh38.v1.2.ensembl_genomic.gtf.gz",
+            "gs://str-truth-set/hg38/ref/other/gencode.v42.annotation.sorted.gtf.gz",
+            "gs://str-truth-set/hg38/ref/other/MANE.v1.0.ensembl_genomic.sorted.gtf.gz",
         ]:
             input_gtf, _ = annotate_step.inputs(input_gtf, f"{input_gtf}.tbi")
 
@@ -124,13 +124,13 @@ def create_annotate_steps(bp, row, suffix, output_dir):
         annotate_step.command("set -exuo pipefail")
 
         annotate_step.command(f"""
-            python3 -u /hprc_pipeline/scripts/compute_overlap_with_gene_models.py /ref/other/gencode.v43.annotation.gtf.gz {row.sample_id}{suffix}.{table_type}.tsv.gz  {row.sample_id}{suffix}.variants.with_gencode_columns.tsv.gz
+            python3 -u /hprc_pipeline/scripts/compute_overlap_with_gene_models.py /ref/other/gencode.v42.annotation.sorted.gtf.gz {tsv_input_table} {row.sample_id}{suffix}.{table_type}.with_gencode_columns.tsv.gz |& tee {row.sample_id}{suffix}.overlap_with_gencode.{table_type}.log 
             mv {row.sample_id}{suffix}.{table_type}.with_gencode_columns.tsv.gz {row.sample_id}{suffix}.{table_type}.tsv.gz
             
-            python3 -u /hprc_pipeline/scripts/compute_overlap_with_gene_models.py /ref/other/MANE.GRCh38.v1.2.ensembl_genomic.gtf.gz {row.sample_id}{suffix}.{table_type}.tsv.gz {row.sample_id}{suffix}.variants.with_MANE_columns.tsv.gz
+            python3 -u /hprc_pipeline/scripts/compute_overlap_with_gene_models.py /ref/other/MANE.v1.0.ensembl_genomic.sorted.gtf.gz {row.sample_id}{suffix}.{table_type}.tsv.gz {row.sample_id}{suffix}.{table_type}.with_MANE_columns.tsv.gz |& tee {row.sample_id}{suffix}.overlap_with_MANE.{table_type}.log
             mv {row.sample_id}{suffix}.{table_type}.with_MANE_columns.tsv.gz {row.sample_id}{suffix}.{table_type}.tsv.gz
 
-            python3 -u /hprc_pipeline/scripts/compute_overlap_with_other_catalogs.py --all-repeats --all-motifs {tsv_input_table}  {row.sample_id}{suffix}.{table_type}.with_overlap_columns.tsv.gz     
+            python3 -u /hprc_pipeline/scripts/compute_overlap_with_other_catalogs.py --all-repeats --all-motifs {row.sample_id}{suffix}.{table_type}.tsv.gz {row.sample_id}{suffix}.{table_type}.with_overlap_columns.tsv.gz |& tee {row.sample_id}{suffix}.overlap_with_other_catalogs.{table_type}.log
             mv {row.sample_id}{suffix}.{table_type}.with_overlap_columns.tsv.gz {row.sample_id}{suffix}.{table_type}.tsv.gz
             
             mv {row.sample_id}{suffix}.{table_type}.tsv.gz {row.sample_id}{suffix}.annotated.{table_type}.tsv.gz            
@@ -138,7 +138,9 @@ def create_annotate_steps(bp, row, suffix, output_dir):
         annotate_step.command(f"/hprc_pipeline/scripts/compute_overlap_with_other_catalogs_using_bedtools.sh {bed_input}")
 
         annotate_step.output(f"{row.sample_id}{suffix}.annotated.{table_type}.tsv.gz")
-
+        annotate_step.output(f"{row.sample_id}{suffix}.overlap_with_gencode.{table_type}.log")
+        annotate_step.output(f"{row.sample_id}{suffix}.overlap_with_MANE.{table_type}.log")
+        annotate_step.output(f"{row.sample_id}{suffix}.overlap_with_other_catalogs.{table_type}.log")
         annotate_steps.append(annotate_step)
 
     return annotate_steps
@@ -148,7 +150,7 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir):
     variant_catalogs_step = bp.new_step(
         f"variant catalogs: {row.sample_id}",
         image=DOCKER_IMAGE,
-        arg_suffix="variant-catalogs-step",
+        arg_suffix="variant-catalog-step",
         cpu=1,
         output_dir=output_dir,
     )
@@ -185,26 +187,76 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir):
 
 
 def create_plot_step(bp, row, suffix, output_dir):
-    # generate plots
+
     plot_step = bp.new_step(
         f"plots: {row.sample_id}",
         image=DOCKER_IMAGE,
-        arg_suffix="plots-step",
+        arg_suffix="plot-step",
         output_dir=output_dir,
     )
 
     plot_step.command("set -exuo pipefail")
 
     alleles_tsv_input = plot_step.input(os.path.join(output_dir, f"{row.sample_id}{suffix}.annotated.alleles.tsv.gz"))
+    dipcall_vcf_input = plot_step.input(f"gs://str-truth-set-v2/hprc_dipcall/{row.sample_id}/{row.sample_id}.dip.vcf.gz")
+    constraint_table_input = plot_step.input(f"gs://str-truth-set/hg38/ref/other/gnomad.v2.1.1.lof_metrics.by_gene.txt.bgz")
+    disease_associated_loci_tsv_input = plot_step.input(f"gs://str-truth-set/hg38/ref/other/known_disease_associated_STR_loci.tsv")
+    repeat_spec_for_motif_distribution_plot_input = plot_step.input("gs://str-truth-set/hg38/ref/other/repeat_specs_GRCh38_without_mismatches.sorted.trimmed.at_least_12bp.bed.gz")
+    ref_dir_local_path = os.path.dirname(repeat_spec_for_motif_distribution_plot_input.local_dir)
 
+    # figure 1 panels
+    plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_syndip_indel_size_distribution.py --width 12 --height 4 --syndip-vcf {dipcall_vcf_input} --image-type png")
+
+    # figure 2 panels
     plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_summary_stats.py  --only-plot 2 --width 8 --height 5.5  --truth-set-alleles-table {alleles_tsv_input} --image-type png")
-    plot_step.command("ls -l")
     plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_summary_stats.py  --only-plot 3 --width 30 --height 6.5  --truth-set-alleles-table {alleles_tsv_input} --image-type png")
-    plot_step.command("ls -l")
     plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_summary_stats.py  --only-plot 4 --width 16 --height 5.5  --truth-set-alleles-table {alleles_tsv_input} --image-type png")
-    plot_step.command("ls -l")
+
+    # figure 3 panels
+    plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_summary_stats.py --only-plot 6 --width 11 --height 12 --truth-set-alleles-table {alleles_tsv_input} --image-type png")
+    plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_motif_distribution.py --width 9 --height 8  --truth-set-alleles-table {alleles_tsv_input} --ref-dir {ref_dir_local_path} --image-type png")
+    plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_motif_distribution.py --width 9 --height 8  --only-pure-repeats --truth-set-alleles-table {alleles_tsv_input} --ref-dir {ref_dir_local_path} --image-type png")
+
+    # figure 7 panels
+    plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_summary_stats.py --image-type png --only-plot 5 --only-pure-repeats --width 8 --height 7 --truth-set-alleles-table {alleles_tsv_input} --image-type png")
+    plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_gene_constraint_info.py --constraint-table {constraint_table_input} --disease-associated-loci-table {disease_associated_loci_tsv_input} --truth-set-alleles-table {alleles_tsv_input} --image-type png")
     plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_mutation_rates.py --truth-set-alleles-table {alleles_tsv_input} --image-type png")
+
+    # supp. figure 2
+    #plot_step.command(f"python3 /str-truth-set/figures_and_tables/paper_generate_table3_and_supp_fig2_repeat_catalogs.py  --truth-set-alleles-table {alleles_tsv_input} --image-type png")
     plot_step.command("ls -l")
+
+    for filename in [
+        "allele_size_distribution_by_number_of_repeats.color_by_interruptions.png",
+        "allele_size_distribution_by_number_of_repeats.x3.png",
+        "allele_size_distribution_by_number_of_repeats_and_motif_size.color_by_multiallelic.png",
+        "allele_size_distribution_by_number_of_repeats_and_motif_size.color_by_overlapssegdupintervals.png",
+        "mutation_rates_by_allele_size.2bp_motifs.png",
+        "mutation_rates_by_allele_size.3-6bp_motifs.png",
+        "mutation_rates_by_fraction_interrupted_repeats.png",
+
+        "gene_constraint_metrics_and_STRs.png",
+        "gene_constraint_metrics_vs_STR_allele_size.png",
+        "motif_distribution.png",
+        "motif_distribution.pure_repeats.png",
+        "motif_distribution_in_hg38_with_atleast_12bp.png",
+
+        "reference_locus_size_distribution.png",
+        "reference_locus_size_distribution.2bp_motifs.png",
+        "reference_locus_size_distribution.2bp_to_6bp_motifs.png",
+        "reference_locus_size_distribution.3bp_motifs.png",
+        "reference_locus_size_distribution.4bp_motifs.png",
+        "reference_locus_size_distribution.5bp_motifs.png",
+        "reference_locus_size_distribution.6bp_motifs.png",
+        "reference_locus_size_distribution.7bp_to_24bp_motifs.png",
+        "reference_locus_size_distribution.25bp_to_50bp_motifs.png",
+
+        "truth_set_gene_overlap.only_pure_repeats.all_regions.MANE_v1.png",
+        "truth_set_gene_overlap.only_pure_repeats.all_regions.gencode_v42.png",
+        "truth_set_gene_overlap.only_pure_repeats.excluding_introns_and_intergenic.MANE_v1.png",
+        "truth_set_gene_overlap.only_pure_repeats.excluding_introns_and_intergenic.gencode_v42.png",
+    ]:
+        plot_step.output(filename, os.path.join(output_dir, "figures", f"{row.sample_id}{suffix}.{filename}"))
 
     return plot_step
 
@@ -229,7 +281,7 @@ def create_combine_results_step(bp, df, suffix, filter_steps, output_dir):
 
         input_files = [
             combine_step.input(
-                os.path.join(output_dir, f"{row.sample_id}{suffix}.variants.{combine_step_suffix}.gz")
+                os.path.join(output_dir, f"{row.sample_id}/{row.sample_id}{suffix}.variants.{combine_step_suffix}.gz")
             ) for _, row in df.iterrows()
         ]
 
