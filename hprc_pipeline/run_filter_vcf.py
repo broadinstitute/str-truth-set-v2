@@ -12,12 +12,13 @@ Increased mutation and gene conversion within human segmental duplications by Vo
   https://www.nature.com/articles/s41586-023-05895-y
 
 """
+import collections
 import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize
 
 STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:e13cf6e945bf04f1fbfbe1da880f543a7bb223026e995b2682324cebc8c18649"
-DOCKER_IMAGE = "weisburd/hprc-pipeline@sha256:1864a81137cf9e0703b8c0d44151fed45784e5868d6268388cdc717004b39f21"
+DOCKER_IMAGE = "weisburd/hprc-pipeline@sha256:06ca8019fce07e4f7241a2f3f0acf15ad141d478ad68d03614160a0edac0bdcc"
 
 
 def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False):
@@ -191,6 +192,8 @@ def create_plot_step(bp, row, suffix, output_dir):
     plot_step = bp.new_step(
         f"plots: {row.sample_id}",
         image=DOCKER_IMAGE,
+        cpu=1,
+        memory="highmem",
         arg_suffix="plot-step",
         output_dir=output_dir,
     )
@@ -216,6 +219,7 @@ def create_plot_step(bp, row, suffix, output_dir):
     plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_summary_stats.py --only-plot 6 --width 11 --height 12 --truth-set-alleles-table {alleles_tsv_input} --image-type png")
     plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_motif_distribution.py --width 9 --height 8  --truth-set-alleles-table {alleles_tsv_input} --ref-dir {ref_dir_local_path} --image-type png")
     plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_motif_distribution.py --width 9 --height 8  --only-pure-repeats --truth-set-alleles-table {alleles_tsv_input} --ref-dir {ref_dir_local_path} --image-type png")
+    plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_motif_distribution.py --width 9 --height 8  --only-pure-repeats --truth-set-alleles-table {alleles_tsv_input} --ref-dir {ref_dir_local_path} --image-type png --include-homopolymers")
 
     # figure 7 panels
     plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_summary_stats.py --image-type png --only-plot 5 --only-pure-repeats --width 8 --height 7 --truth-set-alleles-table {alleles_tsv_input} --image-type png")
@@ -226,6 +230,7 @@ def create_plot_step(bp, row, suffix, output_dir):
     #plot_step.command(f"python3 /str-truth-set/figures_and_tables/paper_generate_table3_and_supp_fig2_repeat_catalogs.py  --truth-set-alleles-table {alleles_tsv_input} --image-type png")
     plot_step.command("ls -l")
 
+    files_to_download = {}
     for filename in [
         "allele_size_distribution_by_number_of_repeats.color_by_interruptions.png",
         "allele_size_distribution_by_number_of_repeats.1bp_motifs.color_by_interruptions.png",
@@ -244,6 +249,7 @@ def create_plot_step(bp, row, suffix, output_dir):
         "gene_constraint_metrics_vs_STR_allele_size.png",
         "motif_distribution.png",
         "motif_distribution.pure_repeats.png",
+        "motif_distribution.including_homopolymers.pure_repeats.png",
         "motif_distribution_in_hg38_with_atleast_12bp.png",
         "mutation_rates_by_allele_size.1bp_and_2bp_motifs.png",
         "mutation_rates_by_allele_size.2bp_motifs.png",
@@ -265,9 +271,11 @@ def create_plot_step(bp, row, suffix, output_dir):
         "truth_set_gene_overlap.only_pure_repeats.excluding_introns_and_intergenic.MANE_v1.png",
         "truth_set_gene_overlap.only_pure_repeats.excluding_introns_and_intergenic.gencode_v42.png",
     ]:
-        plot_step.output(filename, os.path.join(output_dir, "figures", f"{row.sample_id}{suffix}.{filename}"))
+        output_path = os.path.join(output_dir, "figures", f"{row.sample_id}{suffix}.{filename}")
+        plot_step.output(filename, output_path)
+        files_to_download[filename.replace(".png", "")] = output_path
 
-    return plot_step
+    return plot_step, files_to_download
 
 
 def create_combine_results_step(bp, df, suffix, filter_steps, output_dir):
@@ -336,6 +344,8 @@ def main():
     parser.add_argument("--output-dir", default="gs://str-truth-set-v2/filter_vcf")
     args = bp.parse_known_args()
 
+    bp.precache_file_paths("gs://str-truth-set-v2/filter_vcf/**/*.*")
+
     df = pd.read_table("hprc_assemblies.tsv")
     if args.sample_id:
         df = df[df.sample_id.isin(args.sample_id)]
@@ -356,6 +366,7 @@ def main():
         output_dir_suffix = "all_repeats_including_homopolymers"
 
     filter_steps = []
+    figures_to_download = collections.defaultdict(list)
     for row_i, (_, row) in enumerate(df.iterrows()):
         output_dir = os.path.join(args.output_dir, output_dir_suffix, row.sample_id)
 
@@ -371,14 +382,21 @@ def main():
         variant_catalogs_step = create_variant_catalogs_step(bp, row, suffix, output_dir)
         variant_catalogs_step.depends_on(filter_step)
 
-        plot_step = create_plot_step(bp, row, suffix, output_dir)
+        plot_step, figures_to_download_dict = create_plot_step(bp, row, suffix, output_dir)
         plot_step.depends_on(annotate_alleles_step)
+        for label, file_path in figures_to_download_dict.items():
+            figures_to_download[label].append(file_path)
 
     if not args.skip_combine_steps:
         create_combine_results_step(bp, df, suffix, filter_steps,
                                     output_dir=os.path.join(args.output_dir, output_dir_suffix))
 
     bp.run()
+
+    # download figures
+    for label, file_paths in figures_to_download.items():
+        print(f"Downloading {len(file_paths)} figures to figures/{label}")
+        os.system(f"mkdir -p figures/{label} && cd figures/{label} && gsutil -m cp " + " ".join(file_paths) + " .")
 
 
 if __name__ == "__main__":
