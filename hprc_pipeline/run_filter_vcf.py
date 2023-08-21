@@ -17,7 +17,7 @@ import pandas as pd
 from step_pipeline import pipeline, Backend, Localize
 
 STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:e13cf6e945bf04f1fbfbe1da880f543a7bb223026e995b2682324cebc8c18649"
-DOCKER_IMAGE = "weisburd/hprc-pipeline@sha256:4357234bc442997e908ae1e94aaf88c3d2cbd9457fe31184a452aba6ec21dea7"
+DOCKER_IMAGE = "weisburd/hprc-pipeline@sha256:1864a81137cf9e0703b8c0d44151fed45784e5868d6268388cdc717004b39f21"
 
 
 def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False):
@@ -209,8 +209,8 @@ def create_plot_step(bp, row, suffix, output_dir):
 
     # figure 2 panels
     plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_summary_stats.py  --only-plot 2 --width 8 --height 5.5  --truth-set-alleles-table {alleles_tsv_input} --image-type png")
-    plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_summary_stats.py  --only-plot 3 --width 30 --height 6.5  --truth-set-alleles-table {alleles_tsv_input} --image-type png")
-    plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_summary_stats.py  --only-plot 4 --width 16 --height 5.5  --truth-set-alleles-table {alleles_tsv_input} --image-type png")
+    plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_summary_stats.py  --only-plot 3 --width 30 --height 6.5  --truth-set-alleles-table {alleles_tsv_input} --image-type png --only-pure-repeats")
+    plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_summary_stats.py  --only-plot 4 --width 16 --height 5.5  --truth-set-alleles-table {alleles_tsv_input} --image-type png --only-pure-repeats")
 
     # figure 3 panels
     plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_summary_stats.py --only-plot 6 --width 11 --height 12 --truth-set-alleles-table {alleles_tsv_input} --image-type png")
@@ -228,29 +228,38 @@ def create_plot_step(bp, row, suffix, output_dir):
 
     for filename in [
         "allele_size_distribution_by_number_of_repeats.color_by_interruptions.png",
-        "allele_size_distribution_by_number_of_repeats.x3.png",
-        "allele_size_distribution_by_number_of_repeats_and_motif_size.color_by_multiallelic.png",
-        "allele_size_distribution_by_number_of_repeats_and_motif_size.color_by_overlapssegdupintervals.png",
-        "mutation_rates_by_allele_size.2bp_motifs.png",
-        "mutation_rates_by_allele_size.3-6bp_motifs.png",
-        "mutation_rates_by_fraction_interrupted_repeats.png",
-
+        "allele_size_distribution_by_number_of_repeats.1bp_motifs.color_by_interruptions.png",
+        "allele_size_distribution_by_number_of_repeats.2-6bp_motifs.color_by_interruptions.png",
+        "allele_size_distribution_by_number_of_repeats.7-24bp_motifs.color_by_interruptions.png",
+        "allele_size_distribution_by_number_of_repeats.25-50bp_motifs.color_by_interruptions.png",
+        "allele_size_distribution_by_number_of_repeats.x3.only_pure_repeats.including_homopolymers.png",
+        "allele_size_distribution_by_repeat_size_in_base_pairs.x3.only_pure_repeats.including_homopolymers.png",
+        "allele_size_distribution_by_number_of_repeats_and_motif_size.only_pure_repeats.color_by_multiallelic.png",
+        "allele_size_distribution_by_number_of_repeats_and_motif_size.only_pure_repeats.1bp_motifs.color_by_multiallelic.png",
+        "allele_size_distribution_by_number_of_repeats_and_motif_size.only_pure_repeats.2-6bp_motifs.color_by_multiallelic.png",
+        "allele_size_distribution_by_number_of_repeats_and_motif_size.only_pure_repeats.7-24bp_motifs.color_by_multiallelic.png",
+        "allele_size_distribution_by_number_of_repeats_and_motif_size.only_pure_repeats.25-50bp_motifs.color_by_multiallelic.png",
+        "allele_size_distribution_by_number_of_repeats_and_motif_size.only_pure_repeats.color_by_overlapssegdupintervals.png",
         "gene_constraint_metrics_and_STRs.png",
         "gene_constraint_metrics_vs_STR_allele_size.png",
         "motif_distribution.png",
         "motif_distribution.pure_repeats.png",
         "motif_distribution_in_hg38_with_atleast_12bp.png",
-
-        "reference_locus_size_distribution.png",
+        "mutation_rates_by_allele_size.1bp_and_2bp_motifs.png",
+        "mutation_rates_by_allele_size.2bp_motifs.png",
+        "mutation_rates_by_allele_size.3-6bp_motifs.png",
+        "mutation_rates_by_fraction_interrupted_repeats.png",
+        "reference_locus_size_distribution.1bp_motifs.png",
+        "reference_locus_size_distribution.2_to_6bp_motifs.png",
+        "reference_locus_size_distribution.7_to_24bp_motifs.png",
+        "reference_locus_size_distribution.25_to_50bp_motifs.png",
         "reference_locus_size_distribution.2bp_motifs.png",
-        "reference_locus_size_distribution.2bp_to_6bp_motifs.png",
         "reference_locus_size_distribution.3bp_motifs.png",
         "reference_locus_size_distribution.4bp_motifs.png",
         "reference_locus_size_distribution.5bp_motifs.png",
         "reference_locus_size_distribution.6bp_motifs.png",
-        "reference_locus_size_distribution.7bp_to_24bp_motifs.png",
-        "reference_locus_size_distribution.25bp_to_50bp_motifs.png",
-
+        "reference_locus_size_distribution.png",
+        "syndip_indel_size_distribution.png",
         "truth_set_gene_overlap.only_pure_repeats.all_regions.MANE_v1.png",
         "truth_set_gene_overlap.only_pure_repeats.all_regions.gencode_v42.png",
         "truth_set_gene_overlap.only_pure_repeats.excluding_introns_and_intergenic.MANE_v1.png",
@@ -262,16 +271,16 @@ def create_plot_step(bp, row, suffix, output_dir):
 
 
 def create_combine_results_step(bp, df, suffix, filter_steps, output_dir):
-    for combine_step_type, combine_step_prefix, combine_step_suffix in [
-        ("concat tsvs", "concat", "tsv"),
-        ("join tsvs", "joined", "tsv"),
-        ("combine beds", "combined", "bed"),
+    for combine_step_type, combine_step_prefix, combine_step_suffix, cpu in [
+        ("concat tsvs", "concat", "tsv", 4),
+        ("join tsvs", "joined", "tsv", 2),
+        ("combine beds", "combined", "bed", 1),
     ]:
         combine_step = bp.new_step(
             f"{combine_step_type}: {len(df)} samples",
             arg_suffix="combine-step",
             image=DOCKER_IMAGE,
-            cpu=2,
+            cpu=cpu,
             memory="highmem",
             output_dir=os.path.join(output_dir, "combined"),
             depends_on=filter_steps,
@@ -321,6 +330,7 @@ def main():
     parser = bp.get_config_arg_parser()
     parser.add_argument("--only-pure-repeats", action="store_true")
     parser.add_argument("--exclude-homopolymers", action="store_true")
+    parser.add_argument("--skip-combine-steps", action="store_true")
     parser.add_argument("-s", "--sample-id", action="append",
                         help="Process only this sample. Can be specified more than once.")
     parser.add_argument("--output-dir", default="gs://str-truth-set-v2/filter_vcf")
@@ -364,8 +374,9 @@ def main():
         plot_step = create_plot_step(bp, row, suffix, output_dir)
         plot_step.depends_on(annotate_alleles_step)
 
-    create_combine_results_step(bp, df, suffix, filter_steps,
-                                output_dir=os.path.join(args.output_dir, output_dir_suffix))
+    if not args.skip_combine_steps:
+        create_combine_results_step(bp, df, suffix, filter_steps,
+                                    output_dir=os.path.join(args.output_dir, output_dir_suffix))
 
     bp.run()
 
