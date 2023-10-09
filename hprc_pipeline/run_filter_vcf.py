@@ -279,6 +279,7 @@ def create_plot_step(bp, row, suffix, output_dir):
 
 
 def create_combine_results_step(bp, df, suffix, filter_steps, output_dir):
+    combine_steps = []
     for combine_step_type, combine_step_prefix, combine_step_suffix, cpu in [
         ("concat tsvs", "concat", "tsv", 4),
         ("join tsvs", "joined", "tsv", 2),
@@ -329,7 +330,33 @@ def create_combine_results_step(bp, df, suffix, filter_steps, output_dir):
             combine_step.output(combined_bed_output_filename)
             combine_step.output(combined_bed_output_stats_filename)
 
-    return combine_step
+        combine_steps.append(combine_step)
+
+    concat_tsvs_step, join_tsvs_step, combine_beds_step = combine_steps
+
+    combined_variant_catalogs_step = bp.new_step(
+        f"combined variant catalogs: {len(df)} samples",
+        arg_suffix="combined-variant-catalogs-step",
+        cpu=2,
+        memory="highmem",
+        image=DOCKER_IMAGE)
+
+    joined_tsv_input, _ = combined_variant_catalogs_step.use_previous_step_outputs_as_inputs(join_tsvs_step)
+
+    combined_variant_catalogs_step.command(
+        "python3 -u /str-truth-set/tool_comparison/scripts/convert_truth_set_to_variant_catalogs.py "
+        "--expansion-hunter-loci-per-run 10000000 "
+        "--skip-gangstr-catalog "
+        "--skip-hipstr-catalog "
+        f"{joined_tsv_input}")
+
+    combined_variant_catalogs_step.command(
+        f"find . -name '*.json'")
+    combined_variant_catalogs_step.output(
+        f"./tool_comparison/variant_catalogs/expansion_hunter/positive_loci.EHv5.001_of_001.json",
+        os.path.join(output_dir, "combined", f"combined.{len(df)}_samples.positive_loci.json")
+    )
+
 
 
 def main():
@@ -396,7 +423,7 @@ def main():
     # download figures
     for label, file_paths in figures_to_download.items():
         print(f"Downloading {len(file_paths)} figures to figures/{label}")
-        os.system(f"mkdir -p figures/{label} && cd figures/{label} && gsutil -m cp " + " ".join(file_paths) + " .")
+        os.system(f"mkdir -p figures/{label} && cd figures/{label} && gsutil -m cp -n " + " ".join(file_paths) + " .")
 
 
 if __name__ == "__main__":
