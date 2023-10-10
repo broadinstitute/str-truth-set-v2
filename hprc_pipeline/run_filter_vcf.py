@@ -18,7 +18,7 @@ import pandas as pd
 from step_pipeline import pipeline, Backend, Localize
 
 STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:e13cf6e945bf04f1fbfbe1da880f543a7bb223026e995b2682324cebc8c18649"
-DOCKER_IMAGE = "weisburd/hprc-pipeline@sha256:06ca8019fce07e4f7241a2f3f0acf15ad141d478ad68d03614160a0edac0bdcc"
+DOCKER_IMAGE = "weisburd/hprc-pipeline@sha256:fc61491b2747cf03a255379630cc37580ac31bdf5157b1f55d700308e8d55c47"
 
 
 def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False):
@@ -187,7 +187,7 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir):
     return variant_catalogs_step
 
 
-def create_plot_step(bp, row, suffix, output_dir):
+def create_plot_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False):
 
     plot_step = bp.new_step(
         f"plots: {row.sample_id}",
@@ -196,10 +196,11 @@ def create_plot_step(bp, row, suffix, output_dir):
         memory="highmem",
         arg_suffix="plot-step",
         output_dir=output_dir,
+        #localize_by=Localize.GSUTIL_COPY,
     )
 
     plot_step.command("set -exuo pipefail")
-
+    #plot_step.switch_gcloud_auth_to_user_account()
     alleles_tsv_input = plot_step.input(os.path.join(output_dir, f"{row.sample_id}{suffix}.annotated.alleles.tsv.gz"))
     dipcall_vcf_input = plot_step.input(f"gs://str-truth-set-v2/hprc_dipcall/{row.sample_id}/{row.sample_id}.dip.vcf.gz")
     constraint_table_input = plot_step.input(f"gs://str-truth-set/hg38/ref/other/gnomad.v2.1.1.lof_metrics.by_gene.txt.bgz")
@@ -233,14 +234,10 @@ def create_plot_step(bp, row, suffix, output_dir):
     files_to_download = {}
     for filename in [
         "allele_size_distribution_by_number_of_repeats.color_by_interruptions.png",
-        "allele_size_distribution_by_number_of_repeats.1bp_motifs.color_by_interruptions.png",
         "allele_size_distribution_by_number_of_repeats.2-6bp_motifs.color_by_interruptions.png",
         "allele_size_distribution_by_number_of_repeats.7-24bp_motifs.color_by_interruptions.png",
         "allele_size_distribution_by_number_of_repeats.25-50bp_motifs.color_by_interruptions.png",
-        "allele_size_distribution_by_number_of_repeats.x3.only_pure_repeats.including_homopolymers.png",
-        "allele_size_distribution_by_repeat_size_in_base_pairs.x3.only_pure_repeats.including_homopolymers.png",
         "allele_size_distribution_by_number_of_repeats_and_motif_size.only_pure_repeats.color_by_multiallelic.png",
-        "allele_size_distribution_by_number_of_repeats_and_motif_size.only_pure_repeats.1bp_motifs.color_by_multiallelic.png",
         "allele_size_distribution_by_number_of_repeats_and_motif_size.only_pure_repeats.2-6bp_motifs.color_by_multiallelic.png",
         "allele_size_distribution_by_number_of_repeats_and_motif_size.only_pure_repeats.7-24bp_motifs.color_by_multiallelic.png",
         "allele_size_distribution_by_number_of_repeats_and_motif_size.only_pure_repeats.25-50bp_motifs.color_by_multiallelic.png",
@@ -251,11 +248,9 @@ def create_plot_step(bp, row, suffix, output_dir):
         "motif_distribution.pure_repeats.png",
         "motif_distribution.including_homopolymers.pure_repeats.png",
         "motif_distribution_in_hg38_with_atleast_12bp.png",
-        "mutation_rates_by_allele_size.1bp_and_2bp_motifs.png",
         "mutation_rates_by_allele_size.2bp_motifs.png",
         "mutation_rates_by_allele_size.3-6bp_motifs.png",
         "mutation_rates_by_fraction_interrupted_repeats.png",
-        "reference_locus_size_distribution.1bp_motifs.png",
         "reference_locus_size_distribution.2_to_6bp_motifs.png",
         "reference_locus_size_distribution.7_to_24bp_motifs.png",
         "reference_locus_size_distribution.25_to_50bp_motifs.png",
@@ -270,7 +265,17 @@ def create_plot_step(bp, row, suffix, output_dir):
         "truth_set_gene_overlap.only_pure_repeats.all_regions.gencode_v42.png",
         "truth_set_gene_overlap.only_pure_repeats.excluding_introns_and_intergenic.MANE_v1.png",
         "truth_set_gene_overlap.only_pure_repeats.excluding_introns_and_intergenic.gencode_v42.png",
-    ]:
+    ] + ([
+        "allele_size_distribution_by_number_of_repeats.x3.only_pure_repeats.including_homopolymers.png",
+        "allele_size_distribution_by_repeat_size_in_base_pairs.x3.only_pure_repeats.including_homopolymers.png",
+        "allele_size_distribution_by_number_of_repeats.1bp_motifs.color_by_interruptions.png",
+        "allele_size_distribution_by_number_of_repeats_and_motif_size.only_pure_repeats.1bp_motifs.color_by_multiallelic.png",
+        "mutation_rates_by_allele_size.1bp_and_2bp_motifs.png",
+        "reference_locus_size_distribution.1bp_motifs.png",
+    ] if not exclude_homopolymers else [
+        "allele_size_distribution_by_number_of_repeats.x3.only_pure_repeats.png",
+        "allele_size_distribution_by_repeat_size_in_base_pairs.x3.only_pure_repeats.png",
+    ]):
         output_path = os.path.join(output_dir, "figures", f"{row.sample_id}{suffix}.{filename}")
         plot_step.output(filename, output_path)
         files_to_download[filename.replace(".png", "")] = output_path
@@ -409,7 +414,10 @@ def main():
         variant_catalogs_step = create_variant_catalogs_step(bp, row, suffix, output_dir)
         variant_catalogs_step.depends_on(filter_step)
 
-        plot_step, figures_to_download_dict = create_plot_step(bp, row, suffix, output_dir)
+        plot_step, figures_to_download_dict = create_plot_step(bp, row, suffix, output_dir,
+                                                               exclude_homopolymers=args.exclude_homopolymers,
+                                                               only_pure_repeats=args.only_pure_repeats)
+
         plot_step.depends_on(annotate_alleles_step)
         for label, file_path in figures_to_download_dict.items():
             figures_to_download[label].append(file_path)

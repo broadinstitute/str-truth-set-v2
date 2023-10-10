@@ -60,6 +60,10 @@ RUN wget https://github.com/lh3/dipcall/releases/download/v0.3/dipcall-0.3_x64-l
 RUN python3 -m pip install --upgrade cmake pip
 RUN python3 -m pip install str_analysis==0.9.18
 
+# set up "aliases" for MacOSX commands
+RUN apt-get install -y --no-install-recommends bc dvipng texlive-latex-extra texlive-fonts-recommended cm-super
+RUN cp /bin/zcat /bin/gzcat
+
 # install str-truth-set repo
 COPY str-truth-set/requirements.txt /
 RUN python3 -m pip install -r /requirements.txt
@@ -67,8 +71,5 @@ RUN python3 -m pip install -r /requirements.txt
 COPY str-truth-set /str-truth-set
 COPY hprc_pipeline/scripts /hprc_pipeline/scripts
 
-# set up "aliases" for MacOSX commands
-RUN apt-get install -y --no-install-recommends bc dvipng texlive-latex-extra texlive-fonts-recommended cm-super
-RUN cp /bin/zcat /bin/gzcat
 
 ENTRYPOINT ["/bin/bash"]
