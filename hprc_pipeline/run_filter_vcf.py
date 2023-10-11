@@ -187,12 +187,13 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir):
     return variant_catalogs_step
 
 
-def create_plot_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False):
+def create_plot_step(bp, suffix, output_dir, row=None, alleles_tsv_step=None, exclude_homopolymers=False, only_pure_repeats=False):
+    """Must specify either row or alleles_tsv_step"""
 
     plot_step = bp.new_step(
-        f"plots: {row.sample_id}",
+        f"plots: {row.sample_id}" if row is not None else f"plots: combined",
         image=DOCKER_IMAGE,
-        cpu=1,
+        cpu=1 if row is not None else 4,
         memory="highmem",
         arg_suffix="plot-step",
         output_dir=output_dir,
@@ -201,15 +202,23 @@ def create_plot_step(bp, row, suffix, output_dir, exclude_homopolymers=False, on
 
     plot_step.command("set -exuo pipefail")
     #plot_step.switch_gcloud_auth_to_user_account()
-    alleles_tsv_input = plot_step.input(os.path.join(output_dir, f"{row.sample_id}{suffix}.annotated.alleles.tsv.gz"))
-    dipcall_vcf_input = plot_step.input(f"gs://str-truth-set-v2/hprc_dipcall/{row.sample_id}/{row.sample_id}.dip.vcf.gz")
+    if row is not None:
+        alleles_tsv_input = plot_step.input(os.path.join(output_dir, f"{row.sample_id}{suffix}.annotated.alleles.tsv.gz"))
+    elif alleles_tsv_step is not None:
+        alleles_tsv_input = plot_step.use_previous_step_outputs_as_inputs(alleles_tsv_step)
+    else:
+        raise ValueError("Must specify row or alleles_tsv_step")
+
     constraint_table_input = plot_step.input(f"gs://str-truth-set/hg38/ref/other/gnomad.v2.1.1.lof_metrics.by_gene.txt.bgz")
     disease_associated_loci_tsv_input = plot_step.input(f"gs://str-truth-set/hg38/ref/other/known_disease_associated_STR_loci.tsv")
     repeat_spec_for_motif_distribution_plot_input = plot_step.input("gs://str-truth-set/hg38/ref/other/repeat_specs_GRCh38_without_mismatches.sorted.trimmed.at_least_12bp.bed.gz")
     ref_dir_local_path = os.path.dirname(repeat_spec_for_motif_distribution_plot_input.local_dir)
 
     # figure 1 panels
-    plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_syndip_indel_size_distribution.py --width 12 --height 4 --syndip-vcf {dipcall_vcf_input} --image-type png")
+    dipcall_vcf_input = None
+    if row is not None:
+        dipcall_vcf_input = plot_step.input(f"gs://str-truth-set-v2/hprc_dipcall/{row.sample_id}/{row.sample_id}.dip.vcf.gz")
+        plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_syndip_indel_size_distribution.py --width 12 --height 4 --syndip-vcf {dipcall_vcf_input} --image-type png")
 
     # figure 2 panels
     plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_summary_stats.py  --only-plot 2 --width 8 --height 5.5  --truth-set-alleles-table {alleles_tsv_input} --image-type png")
@@ -260,7 +269,6 @@ def create_plot_step(bp, row, suffix, output_dir, exclude_homopolymers=False, on
         "reference_locus_size_distribution.5bp_motifs.png",
         "reference_locus_size_distribution.6bp_motifs.png",
         "reference_locus_size_distribution.png",
-        "syndip_indel_size_distribution.png",
         "truth_set_gene_overlap.only_pure_repeats.all_regions.MANE_v1.png",
         "truth_set_gene_overlap.only_pure_repeats.all_regions.gencode_v42.png",
         "truth_set_gene_overlap.only_pure_repeats.excluding_introns_and_intergenic.MANE_v1.png",
@@ -275,28 +283,38 @@ def create_plot_step(bp, row, suffix, output_dir, exclude_homopolymers=False, on
     ] if not exclude_homopolymers else [
         "allele_size_distribution_by_number_of_repeats.x3.only_pure_repeats.png",
         "allele_size_distribution_by_repeat_size_in_base_pairs.x3.only_pure_repeats.png",
-    ]):
-        output_path = os.path.join(output_dir, "figures", f"{row.sample_id}{suffix}.{filename}")
+    ]) + ([
+        "syndip_indel_size_distribution.png",
+    ] if dipcall_vcf_input is not None else []):
+        if row is not None:
+            output_path = os.path.join(output_dir, "figures", f"{row.sample_id}{suffix}.{filename}")
+        else:
+            output_path = os.path.join(output_dir, "figures", f"combined{suffix}.{filename}")
         plot_step.output(filename, output_path)
         files_to_download[filename.replace(".png", "")] = output_path
 
     return plot_step, files_to_download
 
 
-def create_combine_results_step(bp, df, suffix, filter_steps, output_dir):
+def create_combine_results_step(bp, df, suffix, filter_steps, output_dir, exclude_homopolymers=False, only_pure_repeats=False):
     combine_steps = []
-    for combine_step_type, combine_step_prefix, combine_step_suffix, cpu in [
-        ("concat tsvs", "concat", "tsv", 4),
-        ("join tsvs", "joined", "tsv", 2),
-        ("combine beds", "combined", "bed", 1),
+    combined_output_dir = os.path.join(output_dir, "combined")
+
+    for combine_step_type, combine_step_prefix, variants_or_alleles, combine_step_suffix, cpu in [
+        ("concat tsvs", "concat", "variants", "tsv", 4),
+        ("concat tsvs", "concat", "annotated.variants", "tsv", 4),
+        ("concat tsvs", "concat", "alleles", "tsv", 4),
+        ("concat tsvs", "concat", "annotated.alleles", "tsv", 4),
+        ("join tsvs", "joined", "variants", "tsv", 2),
+        ("combine beds", "combined", "variants", "bed", 1),
     ]:
         combine_step = bp.new_step(
-            f"{combine_step_type}: {len(df)} samples",
+            f"{combine_step_type}: {variants_or_alleles}: {len(df)} samples",
             arg_suffix="combine-step",
             image=DOCKER_IMAGE,
             cpu=cpu,
             memory="highmem",
-            output_dir=os.path.join(output_dir, "combined"),
+            output_dir=combined_output_dir,
             depends_on=filter_steps,
         )
 
@@ -304,12 +322,12 @@ def create_combine_results_step(bp, df, suffix, filter_steps, output_dir):
 
         input_files = [
             combine_step.input(
-                os.path.join(output_dir, f"{row.sample_id}/{row.sample_id}{suffix}.variants.{combine_step_suffix}.gz")
+                os.path.join(output_dir, f"{row.sample_id}/{row.sample_id}{suffix}.{variants_or_alleles}.{combine_step_suffix}.gz")
             ) for _, row in df.iterrows()
         ]
 
         if combine_step_type == "concat tsvs":
-            concat_tsv_output_filename = f"{combine_step_prefix}.{len(df)}_samples.variants.{combine_step_suffix}.gz"
+            concat_tsv_output_filename = f"{combine_step_prefix}.{len(df)}_samples.{variants_or_alleles}.{combine_step_suffix}.gz"
             combine_step.command(
                 f"python3 /hprc_pipeline/scripts/concat_per_sample_tables.py -o {concat_tsv_output_filename} " +
                 " ".join(i.local_path for i in input_files))
@@ -337,8 +355,16 @@ def create_combine_results_step(bp, df, suffix, filter_steps, output_dir):
 
         combine_steps.append(combine_step)
 
-    concat_tsvs_step, join_tsvs_step, combine_beds_step = combine_steps
+    _, concat_annotated_variants_tsv_step, _, concat_annotated_alleles_tsv_step, join_tsvs_step, _ = combine_steps
 
+    # create plots
+    combine_plot_step, figures_to_download_dict = create_plot_step(
+        bp, suffix, combined_output_dir,
+        alleles_tsv_step=concat_annotated_alleles_tsv_step,
+        exclude_homopolymers=exclude_homopolymers,
+        only_pure_repeats=only_pure_repeats)
+
+    # convert to catalogs
     combined_variant_catalogs_step = bp.new_step(
         f"combined variant catalogs: {len(df)} samples",
         arg_suffix="combined-variant-catalogs-step",
@@ -361,6 +387,8 @@ def create_combine_results_step(bp, df, suffix, filter_steps, output_dir):
         f"./tool_comparison/variant_catalogs/expansion_hunter/positive_loci.EHv5.001_of_001.json",
         os.path.join(output_dir, "combined", f"combined.{len(df)}_samples.positive_loci.json")
     )
+
+    return figures_to_download_dict
 
 
 
@@ -414,7 +442,7 @@ def main():
         variant_catalogs_step = create_variant_catalogs_step(bp, row, suffix, output_dir)
         variant_catalogs_step.depends_on(filter_step)
 
-        plot_step, figures_to_download_dict = create_plot_step(bp, row, suffix, output_dir,
+        plot_step, figures_to_download_dict = create_plot_step(bp, suffix, output_dir, row=row,
                                                                exclude_homopolymers=args.exclude_homopolymers,
                                                                only_pure_repeats=args.only_pure_repeats)
 
@@ -423,8 +451,12 @@ def main():
             figures_to_download[label].append(file_path)
 
     if not args.skip_combine_steps:
-        create_combine_results_step(bp, df, suffix, filter_steps,
-                                    output_dir=os.path.join(args.output_dir, output_dir_suffix))
+        figures_to_download_dict = create_combine_results_step(bp, df, suffix, filter_steps,
+                                                               output_dir=os.path.join(args.output_dir, output_dir_suffix),
+                                                               exclude_homopolymers=args.exclude_homopolymers,
+                                                               only_pure_repeats=args.only_pure_repeats)
+        for label, file_path in figures_to_download_dict.items():
+            figures_to_download[label].append(file_path)
 
     bp.run()
 
