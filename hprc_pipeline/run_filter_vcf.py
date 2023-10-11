@@ -18,7 +18,7 @@ import pandas as pd
 from step_pipeline import pipeline, Backend, Localize
 
 STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:e13cf6e945bf04f1fbfbe1da880f543a7bb223026e995b2682324cebc8c18649"
-DOCKER_IMAGE = "weisburd/hprc-pipeline@sha256:fc61491b2747cf03a255379630cc37580ac31bdf5157b1f55d700308e8d55c47"
+HPRC_PIPELINE_DOCKER_IMAGE = "weisburd/hprc-pipeline@sha256:fc61491b2747cf03a255379630cc37580ac31bdf5157b1f55d700308e8d55c47"
 
 
 def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False):
@@ -86,7 +86,7 @@ def create_annotate_steps(bp, row, suffix, output_dir):
 
         annotate_step = bp.new_step(
             f"annotate {table_type}: {row.sample_id}",
-            image=DOCKER_IMAGE,
+            image=HPRC_PIPELINE_DOCKER_IMAGE,
             arg_suffix=f"annotate-{table_type}-step",
             cpu=4,
             memory="highmem",
@@ -150,7 +150,7 @@ def create_annotate_steps(bp, row, suffix, output_dir):
 def create_variant_catalogs_step(bp, row, suffix, output_dir):
     variant_catalogs_step = bp.new_step(
         f"variant catalogs: {row.sample_id}",
-        image=DOCKER_IMAGE,
+        image=HPRC_PIPELINE_DOCKER_IMAGE,
         arg_suffix="variant-catalog-step",
         cpu=1,
         output_dir=output_dir,
@@ -192,7 +192,7 @@ def create_plot_step(bp, suffix, output_dir, row=None, alleles_tsv_step=None, ex
 
     plot_step = bp.new_step(
         f"plots: {row.sample_id}" if row is not None else f"plots: combined",
-        image=DOCKER_IMAGE,
+        image=HPRC_PIPELINE_DOCKER_IMAGE,
         cpu=1 if row is not None else 4,
         memory="highmem",
         arg_suffix="plot-step",
@@ -311,7 +311,7 @@ def create_combine_results_step(bp, df, suffix, filter_steps, output_dir, exclud
         combine_step = bp.new_step(
             f"{combine_step_type}: {variants_or_alleles}: {len(df)} samples",
             arg_suffix="combine-step",
-            image=DOCKER_IMAGE,
+            image=HPRC_PIPELINE_DOCKER_IMAGE,
             cpu=cpu,
             memory="highmem",
             output_dir=combined_output_dir,
@@ -370,7 +370,7 @@ def create_combine_results_step(bp, df, suffix, filter_steps, output_dir, exclud
         arg_suffix="combined-variant-catalogs-step",
         cpu=2,
         memory="highmem",
-        image=DOCKER_IMAGE)
+        image=HPRC_PIPELINE_DOCKER_IMAGE)
 
     joined_tsv_input, _ = combined_variant_catalogs_step.use_previous_step_outputs_as_inputs(join_tsvs_step)
 
@@ -447,8 +447,9 @@ def main():
                                                                only_pure_repeats=args.only_pure_repeats)
 
         plot_step.depends_on(annotate_alleles_step)
-        for label, file_path in figures_to_download_dict.items():
-            figures_to_download[label].append(file_path)
+        if row.sample_id == "CHM1_CHM13":
+            for label, file_path in figures_to_download_dict.items():
+                figures_to_download[label].append(file_path)
 
     if not args.skip_combine_steps:
         figures_to_download_dict = create_combine_results_step(bp, df, suffix, filter_steps,
@@ -462,8 +463,10 @@ def main():
 
     # download figures
     for label, file_paths in figures_to_download.items():
-        print(f"Downloading {len(file_paths)} figures to figures/{label}")
-        os.system(f"mkdir -p figures/{label} && cd figures/{label} && gsutil -m cp -n " + " ".join(file_paths) + " .")
+        local_dir = "results_without_homopolymers" if args.exclude_homopolymers else "results_with_homopolymers"
+        local_dir = f"../{local_dir}/figures/{label}"
+        print(f"Downloading {len(file_paths)} figures to {local_dir}")
+        os.system(f"mkdir -p {local_dir} && cd {local_dir} && gsutil -m cp -n " + " ".join(file_paths) + " .")
 
 
 if __name__ == "__main__":
