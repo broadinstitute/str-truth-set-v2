@@ -18,7 +18,7 @@ import pandas as pd
 from step_pipeline import pipeline, Backend, Localize
 
 STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:e13cf6e945bf04f1fbfbe1da880f543a7bb223026e995b2682324cebc8c18649"
-HPRC_PIPELINE_DOCKER_IMAGE = "weisburd/hprc-pipeline@sha256:fc61491b2747cf03a255379630cc37580ac31bdf5157b1f55d700308e8d55c47"
+HPRC_PIPELINE_DOCKER_IMAGE = "weisburd/hprc-pipeline@sha256:6788fb4f0b8dbcc01aca50591d699fc4020157cd8511e3970500063fda6c2463"
 
 
 def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False):

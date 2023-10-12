@@ -17,7 +17,7 @@ import pandas as pd
 from step_pipeline import pipeline, Backend, Localize
 
 
-DOCKER_IMAGE = "weisburd/hprc-pipeline@sha256:fc61491b2747cf03a255379630cc37580ac31bdf5157b1f55d700308e8d55c47"
+DOCKER_IMAGE = "weisburd/hprc-pipeline@sha256:6788fb4f0b8dbcc01aca50591d699fc4020157cd8511e3970500063fda6c2463"
 
 bp = pipeline("HPRC dipcall pipeline", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline_gnomad")
 
