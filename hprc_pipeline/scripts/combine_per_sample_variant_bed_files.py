@@ -41,9 +41,9 @@ output_stats = []
 for input_i, input_bed in enumerate(args.input_beds):
     sample_id = os.path.basename(input_bed).split(".")[0]
 
-    df = pd.read_table(input_bed, header=None, names=["chrom", "start_0based", "end", "motif", "score"])
+    df = pd.read_table(input_bed, header=None, names=["chrom", "start_0based", "end", "name", "score"])
 
-    df["motif"] = df["motif"].apply(get_motif)
+    df["motif"] = df["name"].apply(get_motif)
     df.set_index(["chrom", "start_0based", "end", "motif", "score"], inplace=True)
 
     if combined_df is None:
@@ -53,6 +53,8 @@ for input_i, input_bed in enumerate(args.input_beds):
         locus_ids_before_join = len(combined_df)
         combined_df = combined_df.join(df, how="outer", rsuffix=f":{sample_id}")
         combined_df = combined_df.copy()  # intended to avoid the "DataFrame is highly fragmented" warning.
+        combined_df["name"] = combined_df["name"].fillna(combined_df[f"name:{sample_id}"])
+        combined_df = combined_df.drop(f"name:{sample_id}", axis=1)
 
     duplicate_locus_id_count = len(combined_df) - len(set(combined_df.index))
     if duplicate_locus_id_count > 0:
@@ -78,6 +80,7 @@ if args.output_stats_tsv:
 
 combined_df = combined_df.reset_index()
 combined_df.sort_values(["chrom", "start_0based", "end"], inplace=True, ascending=True)
+combined_df = combined_df[["chrom", "start_0based", "end", "name", "score"]]
 combined_df.to_csv(args.output_bed, sep="\t", index=False, header=False)
 os.system(f"bgzip -f {args.output_bed}")
 os.system(f"tabix -f {args.output_bed}.gz")
