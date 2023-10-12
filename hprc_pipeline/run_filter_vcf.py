@@ -193,7 +193,7 @@ def create_plot_step(bp, suffix, output_dir, row=None, alleles_tsv_step=None, ex
     plot_step = bp.new_step(
         f"plots: {row.sample_id}" if row is not None else f"plots: combined",
         image=HPRC_PIPELINE_DOCKER_IMAGE,
-        cpu=1 if row is not None else 4,
+        cpu=1 if row is not None else 8,
         memory="highmem",
         arg_suffix="plot-step",
         output_dir=output_dir,
@@ -224,6 +224,7 @@ def create_plot_step(bp, suffix, output_dir, row=None, alleles_tsv_step=None, ex
     plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_summary_stats.py  --only-plot 2 --width 8 --height 5.5  --truth-set-alleles-table {alleles_tsv_input} --image-type png")
     plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_summary_stats.py  --only-plot 3 --width 30 --height 6.5  --truth-set-alleles-table {alleles_tsv_input} --image-type png --only-pure-repeats")
     plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_summary_stats.py  --only-plot 4 --width 16 --height 5.5  --truth-set-alleles-table {alleles_tsv_input} --image-type png --only-pure-repeats")
+    plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_summary_stats.py  --only-plot 8 --width 50 --height 6.5  --truth-set-alleles-table {alleles_tsv_input} --image-type png --only-pure-repeats")
 
     # figure 3 panels
     plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_summary_stats.py --only-plot 6 --width 11 --height 12 --truth-set-alleles-table {alleles_tsv_input} --image-type png")
@@ -276,6 +277,8 @@ def create_plot_step(bp, suffix, output_dir, row=None, alleles_tsv_step=None, ex
     ] + ([
         "allele_size_distribution_by_number_of_repeats.x3.only_pure_repeats.including_homopolymers.png",
         "allele_size_distribution_by_repeat_size_in_base_pairs.x3.only_pure_repeats.including_homopolymers.png",
+        "STR_allele_size_distribution_by_number_of_repeats.x6.only_pure_repeats.including_homopolymers.png",
+        "STR_allele_size_distributions_by_repeat_size_in_base_pairs.x6.only_pure_repeats.including_homopolymers.png",
         "allele_size_distribution_by_number_of_repeats.1bp_motifs.color_by_interruptions.png",
         "allele_size_distribution_by_number_of_repeats_and_motif_size.only_pure_repeats.1bp_motifs.color_by_multiallelic.png",
         "mutation_rates_by_allele_size.1bp_and_2bp_motifs.png",
@@ -283,6 +286,8 @@ def create_plot_step(bp, suffix, output_dir, row=None, alleles_tsv_step=None, ex
     ] if not exclude_homopolymers else [
         "allele_size_distribution_by_number_of_repeats.x3.only_pure_repeats.png",
         "allele_size_distribution_by_repeat_size_in_base_pairs.x3.only_pure_repeats.png",
+        "STR_allele_size_distribution_by_number_of_repeats.x6.only_pure_repeats.png",
+        "STR_allele_size_distributions_by_repeat_size_in_base_pairs.x6.only_pure_repeats.png",
     ]) + ([
         "syndip_indel_size_distribution.png",
     ] if dipcall_vcf_input is not None else []):
@@ -351,6 +356,7 @@ def create_combine_results_step(bp, df, suffix, filter_steps, output_dir, exclud
                 f"-o {combined_bed_output_filename} " +
                 " ".join(i.local_path for i in input_files))
             combine_step.output(combined_bed_output_filename)
+            combine_step.output(combined_bed_output_filename + ".tbi")
             combine_step.output(combined_bed_output_stats_filename)
 
         combine_steps.append(combine_step)
