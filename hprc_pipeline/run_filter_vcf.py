@@ -302,9 +302,9 @@ def create_combine_results_step(bp, df, suffix, filter_steps, output_dir, exclud
 
     for combine_step_type, combine_step_prefix, variants_or_alleles, combine_step_suffix, cpu in [
         ("concat tsvs", "concat", "variants", "tsv", 4),
-        ("concat tsvs", "concat", "annotated.variants", "tsv", 4),
+        ("concat tsvs", "concat", "annotated.variants", "tsv", 8),
         ("concat tsvs", "concat", "alleles", "tsv", 4),
-        ("concat tsvs", "concat", "annotated.alleles", "tsv", 4),
+        ("concat tsvs", "concat", "annotated.alleles", "tsv", 8),
         ("join tsvs", "joined", "variants", "tsv", 2),
         ("combine beds", "combined", "variants", "bed", 1),
     ]:
