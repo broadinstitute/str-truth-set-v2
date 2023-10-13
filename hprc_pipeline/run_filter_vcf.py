@@ -13,6 +13,7 @@ Increased mutation and gene conversion within human segmental duplications by Vo
 
 """
 import collections
+import hailtop.fs as hfs
 import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize
@@ -169,20 +170,29 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir):
     variant_catalogs_step.command(
         "python3 -u /str-truth-set/tool_comparison/scripts/convert_truth_set_to_variant_catalogs.py "
         "--output-negative-loci "
-        "--expansion-hunter-loci-per-run 1000000 "
-        "--skip-gangstr-catalog "
-        "--skip-hipstr-catalog "
-        #"--gangstr-loci-per-run 1000000 "
+        "--expansion-hunter-loci-per-run 10000000 "
+        "--gangstr-loci-per-run 10000000 "
         f"--high-confidence-regions-bed {high_confidence_regions_bed_input} "
         f"--all-hg38-repeats-bed {all_hg38_repeats_bed_input} "
         f"--truth-set-bed {variants_bed_input} "
         f"{variants_tsv_input}")
+
+    variant_catalogs_step.command(
+        f"find . -name '*.json'")
+    variant_catalogs_step.command(
+        f"find . -name '*.bed'")
 
     variant_catalogs_step.command(f"ls -lh ./tool_comparison/variant_catalogs/expansion_hunter/positive_loci.EHv5.001_of_001.json")
     variant_catalogs_step.command(f"ls -lh ./tool_comparison/variant_catalogs/expansion_hunter/negative_loci.EHv5.001_of_001.json")
 
     variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/expansion_hunter/positive_loci.EHv5.001_of_001.json")
     variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/expansion_hunter/negative_loci.EHv5.001_of_001.json")
+
+    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/gangstr/positive_loci.GangSTR.001_of_001.bed")
+    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/gangstr/negative_loci.GangSTR.001_of_001.bed")
+
+    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/hipstr/positive_loci.HipSTR.001_of_001.bed")
+    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/hipstr/negative_loci.HipSTR.001_of_001.bed")
 
     return variant_catalogs_step
 
@@ -193,7 +203,7 @@ def create_plot_step(bp, suffix, output_dir, row=None, alleles_tsv_step=None, ex
     plot_step = bp.new_step(
         f"plots: {row.sample_id}" if row is not None else f"plots: combined",
         image=HPRC_PIPELINE_DOCKER_IMAGE,
-        cpu=1 if row is not None else 8,
+        cpu=1 if row is not None else 16,
         memory="highmem",
         arg_suffix="plot-step",
         output_dir=output_dir,
@@ -373,7 +383,7 @@ def create_combine_results_step(bp, df, suffix, filter_steps, output_dir, exclud
     # convert to catalogs
     combined_variant_catalogs_step = bp.new_step(
         f"combined variant catalogs: {len(df)} samples",
-        arg_suffix="combined-variant-catalogs-step",
+        arg_suffix="combine-variant-catalogs-step",
         cpu=2,
         memory="highmem",
         image=HPRC_PIPELINE_DOCKER_IMAGE)
@@ -383,19 +393,19 @@ def create_combine_results_step(bp, df, suffix, filter_steps, output_dir, exclud
     combined_variant_catalogs_step.command(
         "python3 -u /str-truth-set/tool_comparison/scripts/convert_truth_set_to_variant_catalogs.py "
         "--expansion-hunter-loci-per-run 10000000 "
-        "--skip-gangstr-catalog "
-        "--skip-hipstr-catalog "
+        "--gangstr-loci-per-run 100000 "
         f"{joined_tsv_input}")
 
     combined_variant_catalogs_step.command(
         f"find . -name '*.json'")
+    combined_variant_catalogs_step.command(
+        f"find . -name '*.bed'")
     combined_variant_catalogs_step.output(
         f"./tool_comparison/variant_catalogs/expansion_hunter/positive_loci.EHv5.001_of_001.json",
         os.path.join(output_dir, "combined", f"combined.{len(df)}_samples.positive_loci.json")
     )
 
     return figures_to_download_dict
-
 
 
 def main():
@@ -471,8 +481,16 @@ def main():
     for label, file_paths in figures_to_download.items():
         local_dir = "results_without_homopolymers" if args.exclude_homopolymers else "results_with_homopolymers"
         local_dir = f"../{local_dir}/figures/{label}"
-        print(f"Downloading {len(file_paths)} figures to {local_dir}")
-        os.system(f"mkdir -p {local_dir} && cd {local_dir} && gsutil -m cp -n " + " ".join(file_paths) + " .")
+        if not os.path.exists(local_dir):
+            os.system(f"mkdir -p {local_dir}")
+        for file_path in file_paths:
+            local_path = os.path.join(local_dir, os.path.basename(file_path))
+            if not os.path.exists(local_path):
+                print(f"Downloading {file_path} to {local_dir}")
+                try:
+                    hfs.copy(file_path, local_path)
+                except Exception as e:
+                    print(e)
 
 
 if __name__ == "__main__":
