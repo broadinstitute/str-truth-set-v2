@@ -1,3 +1,18 @@
+*markerInfo.gz
+.idea
+*.iml
+.DS_Store
+*.png
+
+ref
+*.tar.gz
+*.vcf*
+*.bed*
+*.twb
+*.twbr
+*.tsv.gz
+*.tsv
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

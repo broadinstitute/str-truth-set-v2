@@ -52,11 +52,6 @@ RUN wget https://github.com/arq5x/bedtools2/releases/download/v${BED_TOOLS_VERSI
 	&& chmod 777 bedtools.static \
 	&& mv bedtools.static /usr/bin/bedtools
 
-# install dipcall
-RUN wget https://github.com/lh3/dipcall/releases/download/v0.3/dipcall-0.3_x64-linux.tar.bz2 \
- 	&& tar -jxf dipcall-0.3_x64-linux.tar.bz2 \
-	&& rm dipcall-0.3_x64-linux.tar.bz2
-
 RUN python3 -m pip install --upgrade cmake pip
 RUN python3 -m pip install str_analysis==0.9.18
 
@@ -69,7 +64,7 @@ COPY str-truth-set/requirements.txt /
 RUN python3 -m pip install -r /requirements.txt
 
 COPY str-truth-set /str-truth-set
-COPY hprc_pipeline/scripts /hprc_pipeline/scripts
+COPY process_hprc_vcfs/scripts /process_hprc_vcfs/scripts
 
 
 ENTRYPOINT ["/bin/bash"]
