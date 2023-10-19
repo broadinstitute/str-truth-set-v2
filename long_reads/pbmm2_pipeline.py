@@ -4,7 +4,7 @@ import re
 import sys
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
-DOCKER_IMAGE = "weisburd/process-long-reads@sha256:cff73666379fdf0ab122ee66f614d13dfdff97f99297a563eda74a3f5d08266f"
+DOCKER_IMAGE = "weisburd/long-reads@sha256:cff73666379fdf0ab122ee66f614d13dfdff97f99297a563eda74a3f5d08266f"
 GATK_DOCKER_IMAGE = "weisburd/gatk:4.3.0.0"
 
 REFERENCE_FASTA = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
@@ -232,13 +232,12 @@ def main():
 
         s4.command("set -ex")
         s4.command("cd /io")
-        s4.command(f"cat {local_mosdepth_summary} | cut -f 4 | tail -n +2 | head -n 23 | awk '{{s+=$1}}END{{print s/NR}}' > mean_coverage.txt")
 
         s4.command(f"time gatk --java-options '-Xmx11G' DownsampleSam "
                    f"REFERENCE_SEQUENCE={local_fasta} "
                    f"I={local_bam} "
                    f"O={output_bam_filename} "
-                   f"""P=$(echo "15 / $(cat mean_coverage.txt)" | bc -l | awk '{{printf "%.4f", $0}}') """
+                   f"""P=$(echo "{target_coverage} / $(grep total {local_mosdepth_summary} | cut -f 4)" | bc -l | awk '{{printf "%.4f", $0}}') """
                    f"CREATE_INDEX=true")
 
         s4.command(f"mv {output_bam_filename.replace('.bam', '.bai')} {output_bam_filename}.bai")  # rename the .bai file

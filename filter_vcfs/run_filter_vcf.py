@@ -19,7 +19,7 @@ import pandas as pd
 from step_pipeline import pipeline, Backend, Localize
 
 STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:e13cf6e945bf04f1fbfbe1da880f543a7bb223026e995b2682324cebc8c18649"
-PROCESS_HPRC_VCFS_DOCKER_IMAGE = "weisburd/process-hprc-vcfs@sha256:264b0d4ffa2c4466cee1a719cd8e1fb121c538f47df32d1ffde761950cd573ac"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:729c048aebdc1c8ea86aea0028d795db3ba71062f4c59e0494c48ce732e132d5"
 
 
 def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False):
@@ -87,7 +87,7 @@ def create_annotate_steps(bp, row, suffix, output_dir, exclude_homopolymers=Fals
 
         annotate_step = bp.new_step(
             f"annotate {table_type}: {row.sample_id}",
-            image=HPRC_PIPELINE_DOCKER_IMAGE,
+            image=FILTER_VCFS_DOCKER_IMAGE,
             arg_suffix=f"annotate-{table_type}-step",
             cpu=4,
             memory="highmem",
@@ -152,7 +152,7 @@ def create_annotate_steps(bp, row, suffix, output_dir, exclude_homopolymers=Fals
 def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False):
     variant_catalogs_step = bp.new_step(
         f"variant catalogs: {row.sample_id}",
-        image=HPRC_PIPELINE_DOCKER_IMAGE,
+        image=FILTER_VCFS_DOCKER_IMAGE,
         arg_suffix="variant-catalog-step",
         cpu=1,
         output_dir=output_dir,
@@ -203,7 +203,7 @@ def create_plot_step(bp, suffix, output_dir, row=None, alleles_tsv_step=None, ex
 
     plot_step = bp.new_step(
         f"plots: {row.sample_id}" if row is not None else f"plots: combined",
-        image=HPRC_PIPELINE_DOCKER_IMAGE,
+        image=FILTER_VCFS_DOCKER_IMAGE,
         cpu=1 if row is not None else 16,
         memory="highmem",
         arg_suffix="plot-step",
@@ -327,7 +327,7 @@ def create_combine_results_step(bp, df, suffix, filter_steps, output_dir, exclud
         combine_step = bp.new_step(
             f"{combine_step_type}: {variants_or_alleles}: {len(df)} samples",
             arg_suffix="combine-step",
-            image=HPRC_PIPELINE_DOCKER_IMAGE,
+            image=FILTER_VCFS_DOCKER_IMAGE,
             cpu=cpu,
             memory="highmem",
             output_dir=combined_output_dir,
@@ -387,7 +387,7 @@ def create_combine_results_step(bp, df, suffix, filter_steps, output_dir, exclud
         arg_suffix="combine-variant-catalogs-step",
         cpu=2,
         memory="highmem",
-        image=HPRC_PIPELINE_DOCKER_IMAGE)
+        image=FILTER_VCFS_DOCKER_IMAGE)
 
     joined_tsv_input, _ = combined_variant_catalogs_step.use_previous_step_outputs_as_inputs(join_tsvs_step)
 
