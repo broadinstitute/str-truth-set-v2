@@ -1,4 +1,3 @@
-import collections
 import os
 import pandas as pd
 import re
@@ -88,7 +87,7 @@ df = df[df["entity:sample_id"].isin({
 print(f"Processing PacBio data for {len(SAMPLE_METADATA)} HPRC samples")
 
 
-DOCKER_IMAGE = "weisburd/process-long-reads@sha256:9cc49dac607d6aa08147563daccf94726861c5f90809bc7bea44b4d1999aff87"
+DOCKER_IMAGE = "weisburd/process-long-reads@sha256:3bcdeaa5dc4440aa02081aa89b5e1b604236b1b9db6886530125caab741ff79b"
 
 TEMP_DIR = "gs://bw2-delete-after-30-days/long-reads"
 OUTPUT_BASE_DIR = "gs://str-truth-set/hg38/tool_results/hipstr"
@@ -120,7 +119,7 @@ def main():
 
     for sample_id, unaligned_reads_urls in SAMPLE_METADATA.items():
         download_steps = []
-        gs_paths = collections.defaultdict(list)
+        gs_paths = []
         for url in unaligned_reads_urls:
             if url.startswith("gs://"):
                 gs_paths.append(url)
@@ -154,22 +153,41 @@ def main():
             image=DOCKER_IMAGE,
             cpu=8,
             memory="highmem",
-            storage="250Gi",
+            storage="300Gi",
             output_dir=TEMP_DIR,
             delocalize_by=Delocalize.GSUTIL_COPY,
         )
         s2.depends_on(download_steps)
 
         local_fasta = s2.input(REFERENCE_FASTA, localize_by=Localize.COPY)
-        local_read_data_paths = s2.inputs(gs_paths, localize_by=Localize.COPY)
+        local_read_data_paths = s2.inputs(*gs_paths, localize_by=Localize.COPY)
 
+        s2.command("set -ex")
         s2.command("cd /io")
         for local_path in local_read_data_paths:
-            s2.command(f"echo '{local_path}' >> read_data_paths.txt")
+            s2.command(f"echo '{local_path}' >> read_data_paths.fofn")
 
-        s2.command(f"pbmm2 align --sort --preset SUBREAD {local_fasta} read_data_paths.txt {sample_id}.subreads.bam")
+        s2.command(f"pbmm2 align --rg '@RG\tID:{sample_id}\tSM:{sample_id}' -j 8 -J 2 --sort --preset SUBREAD "
+                   f"{local_fasta} read_data_paths.fofn {sample_id}.subreads.bam")
         s2.output(f"/io/{sample_id}.subreads.bam")
         s2.output(f"/io/{sample_id}.subreads.bam.bai")
+
+        s3 = bp.new_step(
+            f"pbmm2: alignment stats {sample_id}",
+            arg_suffix=f"stats",
+            step_number=3,
+            image=DOCKER_IMAGE,
+            cpu=1,
+            memory="standard",
+            storage="50Gi",
+            output_dir=TEMP_DIR,
+            localize_by=Localize.HAIL_BATCH_CLOUDFUSE,
+        )
+        local_bam_path, _ = s3.use_previous_step_outputs_as_inputs(s2)
+        s3.command(f"mosdepth -x {sample_id} {local_bam_path}")
+        s3.command("ls -lh")
+        s3.command(f"cat {sample_id}.mosdepth.summary.txt")
+        s3.output(f"{sample_id}.mosdepth.summary.txt")
 
     bp.run()
 

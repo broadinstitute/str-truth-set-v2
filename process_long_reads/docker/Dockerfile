@@ -10,5 +10,7 @@ RUN wget https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud
 
 ENV PATH=/google-cloud-sdk/bin:$PATH
 
+RUN wget https://github.com/brentp/mosdepth/releases/download/v0.3.5/mosdepth -O /usr/local/bin/mosdepth \
+	&& chmod 777 /usr/local/bin/mosdepth
 
 ENTRYPOINT ["/bin/bash"]
