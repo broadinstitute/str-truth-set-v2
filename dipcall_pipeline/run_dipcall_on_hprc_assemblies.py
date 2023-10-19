@@ -79,22 +79,22 @@ for i, (_, row) in enumerate(df.iterrows()):
     #s1.output(f"{row.sample_id}.pair.vcf.gz")
 
 # combine high-confidence regions  (intersection, union)
-#s2 = bp.new_step(
-#    f"Combine high-confidence regions",
-#    image=DOCKER_IMAGE,
-#    arg_suffix="step2",
-#    cpu=1,
-#    output_dir=args.output_dir)
-#
-#s2.command("set -exuo pipefail")
-#for _, row in df.iterrows():
-#    current_input = s2.input(os.path.join(args.output_dir, f"{row.sample_id}.dip.bed"))
-#    s2.command(f"cat {current_input} >> all.dip.bed")
-#output_bed_filename = f"combined.high_confidence_regions.{len(df)}_samples.union.bed.gz"
-#s2.command(f"bedtools sort -i all.dip.bed | bedtools merge -i - | bgzip > {output_bed_filename}")
-#s2.command(f"tabix {output_bed_filename}")
-#s2.output(output_bed_filename)
-#s2.output(f"{output_bed_filename}.tbi")
+s2 = bp.new_step(
+    f"Combine high-confidence regions",
+    image=DOCKER_IMAGE,
+    arg_suffix="step2",
+    cpu=1,
+    output_dir=args.output_dir)
+
+s2.command("set -exuo pipefail")
+for _, row in df.iterrows():
+    current_input = s2.input(os.path.join(args.output_dir, f"{row.sample_id}.dip.bed"))
+    s2.command(f"cat {current_input} >> all.dip.bed")
+output_bed_filename = f"combined.high_confidence_regions.{len(df)}_samples.union.bed.gz"
+s2.command(f"bedtools sort -i all.dip.bed | bedtools merge -i - | bgzip > {output_bed_filename}")
+s2.command(f"tabix {output_bed_filename}")
+s2.output(output_bed_filename)
+s2.output(f"{output_bed_filename}.tbi")
 
 bp.run()
 
