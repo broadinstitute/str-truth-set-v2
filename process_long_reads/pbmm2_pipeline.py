@@ -1,9 +1,10 @@
 import os
 import pandas as pd
 import re
+import sys
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
-DOCKER_IMAGE = "weisburd/process-long-reads@sha256:184e2932c1cb6906415ae73b6079b6837abf438f1491c0de8943d31d7163e96a"
+DOCKER_IMAGE = "weisburd/process-long-reads@sha256:cff73666379fdf0ab122ee66f614d13dfdff97f99297a563eda74a3f5d08266f"
 GATK_DOCKER_IMAGE = "weisburd/gatk:4.3.0.0"
 
 REFERENCE_FASTA = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
@@ -86,6 +87,10 @@ df = df[df["entity:sample_id"].isin({
 #for _, row in df.iterrows():
 #    sample_id = row["entity:sample_id"]
 #    url_list = eval(row["hifi"])
+#    if any(".ccs.bam" in u for u in url_list) and any(".fastq" in u for u in url_list):
+#        # if a sample has both .ccs.bams and .fastq, only keep the .ccs.bams
+#        url_list = [u for u in url_list if u.endswith(".ccs.bam")]
+#
 #    SAMPLE_METADATA[sample_id] = url_list
 #    if len(url_list) >= 5:
 #        print(f"{sample_id} has {len(SAMPLE_METADATA[sample_id])} PacBio files:")
@@ -93,6 +98,7 @@ df = df[df["entity:sample_id"].isin({
 #            print(f"  {url}")
 
 print(f"Processing PacBio data for {len(SAMPLE_METADATA)} HPRC samples")
+#sys.exit(0)
 
 def main():
     bp = pipeline(backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline")

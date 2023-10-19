@@ -35,6 +35,7 @@ RUN wget https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud
 
 ENV PATH=/google-cloud-sdk/bin:$PATH
 
+# install htslib
 ENV SAMTOOLS_VERSION="1.17"
 RUN wget https://github.com/samtools/htslib/releases/download/${SAMTOOLS_VERSION}/htslib-${SAMTOOLS_VERSION}.tar.bz2 \
     && tar xjf htslib-${SAMTOOLS_VERSION}.tar.bz2 \
@@ -45,6 +46,17 @@ RUN wget https://github.com/samtools/htslib/releases/download/${SAMTOOLS_VERSION
     && make install \
     && make clean
 
+# install samtools
+RUN wget https://github.com/samtools/samtools/releases/download/${SAMTOOLS_VERSION}/samtools-${SAMTOOLS_VERSION}.tar.bz2 \
+	&& tar xjf samtools-${SAMTOOLS_VERSION}.tar.bz2 \
+	&& rm samtools-${SAMTOOLS_VERSION}.tar.bz2 \
+	&& cd samtools-${SAMTOOLS_VERSION} \
+	&& ./configure \
+	&& make \
+	&& make install \
+	&& make clean
+
+# install mosdepth
 RUN wget https://github.com/brentp/mosdepth/releases/download/v0.3.5/mosdepth -O /usr/local/bin/mosdepth \
 	&& chmod 777 /usr/local/bin/mosdepth
 
