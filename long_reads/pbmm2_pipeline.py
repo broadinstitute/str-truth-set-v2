@@ -256,11 +256,11 @@ def main():
         arg_suffix=f"merge",
         step_number=5,
         image=DOCKER_IMAGE,
-        cpu=1,
+        cpu=2,
         memory="highmem",
         storage="200Gi",
         output_dir=TEMP_DIR,
-        localize_by=Localize.HAIL_BATCH_CLOUDFUSE,
+        localize_by=Localize.COPY,
     )
     for s in align_bam_files_for_CHM1_CHM13_steps:
         s5.depends_on(s)
@@ -273,7 +273,7 @@ def main():
     s5.command("cd /io")
 
     merged_bam_filename = f"{merged_sample_id}.subreads.bam"
-    s5.command(f"samtools merge -f {merged_bam_filename} {' '.join(map(str, local_bam_paths))}")
+    s5.command(f"samtools merge -t 2 -f {merged_bam_filename} {' '.join(map(str, local_bam_paths))}")
     s5.command(f"samtools index {merged_bam_filename}")
 
     s5.output(merged_bam_filename)
