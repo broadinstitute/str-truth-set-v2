@@ -3,6 +3,14 @@ import pandas as pd
 import re
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
+DOCKER_IMAGE = "weisburd/process-long-reads@sha256:184e2932c1cb6906415ae73b6079b6837abf438f1491c0de8943d31d7163e96a"
+GATK_DOCKER_IMAGE = "weisburd/gatk:4.3.0.0"
+
+REFERENCE_FASTA = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
+
+TEMP_DIR = "gs://bw2-delete-after-30-days/long-reads"
+
+
 SAMPLE_METADATA = {
     "CHM13": [
         # from [Vollger 2023]: https://www.ncbi.nlm.nih.gov/sra/SRX5633451[accn]
@@ -86,15 +94,6 @@ df = df[df["entity:sample_id"].isin({
 
 print(f"Processing PacBio data for {len(SAMPLE_METADATA)} HPRC samples")
 
-
-DOCKER_IMAGE = "weisburd/process-long-reads@sha256:3bcdeaa5dc4440aa02081aa89b5e1b604236b1b9db6886530125caab741ff79b"
-
-TEMP_DIR = "gs://bw2-delete-after-30-days/long-reads"
-OUTPUT_BASE_DIR = "gs://str-truth-set/hg38/tool_results/hipstr"
-
-REFERENCE_FASTA = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
-
-
 def main():
     bp = pipeline(backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline")
 
@@ -116,8 +115,11 @@ def main():
     s0.output("Homo_sapiens_assembly38.mmi")
     s0.output(f"{local_fasta}")
 
-
+    aligned_bam_files_for_CHM1_CHM13 = []
+    align_bam_files_for_CHM1_CHM13_steps = []
     for sample_id, unaligned_reads_urls in SAMPLE_METADATA.items():
+
+        # if the data is @ SRA / EBI, download it to a gs:// bucket
         download_steps = []
         gs_paths = []
         for url in unaligned_reads_urls:
@@ -138,6 +140,7 @@ def main():
 
             local_filename = re.sub("[.]1$", "", os.path.basename(url))
             print(f"{sample_id}: Downloading {local_filename}")
+            s1.command("set -ex")
             s1.command("cd /io")
             s1.command(f"wget {url} -O {local_filename}")
             s1.output(f"/io/{local_filename}")
@@ -145,13 +148,13 @@ def main():
             download_steps.append(s1)
             gs_paths.append(os.path.join(TEMP_DIR, local_filename))
 
-        # align gs_paths
+        # align reads
         s2 = bp.new_step(
             f"pbmm2: align {sample_id}",
             arg_suffix=f"align",
             step_number=2,
             image=DOCKER_IMAGE,
-            cpu=8,
+            cpu=16,
             memory="highmem",
             storage="300Gi",
             output_dir=TEMP_DIR,
@@ -167,19 +170,18 @@ def main():
         for local_path in local_read_data_paths:
             s2.command(f"echo '{local_path}' >> read_data_paths.fofn")
 
-        s2.command(f"pbmm2 align --rg '@RG\tID:{sample_id}\tSM:{sample_id}' -j 8 -J 2 --sort --preset SUBREAD "
-                   f"{local_fasta} read_data_paths.fofn {sample_id}.subreads.bam")
+        s2.command(f"pbmm2 align --sort --preset SUBREAD {local_fasta} read_data_paths.fofn {sample_id}.subreads.bam")
         s2.output(f"/io/{sample_id}.subreads.bam")
         s2.output(f"/io/{sample_id}.subreads.bam.bai")
 
+        # compute depth and other stats
         s3 = bp.new_step(
-            f"pbmm2: alignment stats {sample_id}",
+            f"pbmm2: depth of coverage {sample_id}",
             arg_suffix=f"stats",
             step_number=3,
             image=DOCKER_IMAGE,
             cpu=1,
             memory="standard",
-            storage="50Gi",
             output_dir=TEMP_DIR,
             localize_by=Localize.HAIL_BATCH_CLOUDFUSE,
         )
@@ -187,7 +189,108 @@ def main():
         s3.command(f"mosdepth -x {sample_id} {local_bam_path}")
         s3.command("ls -lh")
         s3.command(f"cat {sample_id}.mosdepth.summary.txt")
+
         s3.output(f"{sample_id}.mosdepth.summary.txt")
+        s3.output(f"{sample_id}.mosdepth.global.dist.txt")
+
+        # downsample to 30x
+        s4 = bp.new_step(
+            f"pbmm2: downsample {sample_id}",
+            arg_suffix=f"downsample",
+            step_number=4,
+            image=GATK_DOCKER_IMAGE,
+            cpu=2,
+            memory="highmem",
+            storage="200Gi",
+            output_dir=TEMP_DIR,
+            localize_by=Localize.HAIL_BATCH_CLOUDFUSE,
+        )
+        s4.depends_on(s3)
+
+        local_fasta =  s4.input(REFERENCE_FASTA)
+        local_bam, _ = s4.inputs(os.path.join(TEMP_DIR, f"{sample_id}.subreads.bam"),
+                                 os.path.join(TEMP_DIR, f"{sample_id}.subreads.bam.bai"))
+
+        local_mosdepth_summary = s4.input(os.path.join(TEMP_DIR, f"{sample_id}.mosdepth.summary.txt"))
+
+        if sample_id in ("CHM1", "CHM13"):
+            target_coverage = 15
+        else:
+            target_coverage = 30
+
+        output_bam_filename = f"{sample_id}.downsampled_to_{target_coverage}x.bam"
+        if sample_id in ("CHM1", "CHM13"):
+            aligned_bam_files_for_CHM1_CHM13.append(output_bam_filename)
+            align_bam_files_for_CHM1_CHM13_steps.append(s4)
+
+        s4.command("set -ex")
+        s4.command("cd /io")
+        s4.command(f"cat {local_mosdepth_summary} | cut -f 4 | tail -n +2 | head -n 23 | awk '{{s+=$1}}END{{print s/NR}}' > mean_coverage.txt")
+
+        s4.command(f"time gatk --java-options '-Xmx11G' DownsampleSam "
+                   f"REFERENCE_SEQUENCE={local_fasta} "
+                   f"I={local_bam} "
+                   f"O={output_bam_filename} "
+                   f"""P=$(echo "15 / $(cat mean_coverage.txt)" | bc -l | awk '{{printf "%.4f", $0}}') """
+                   f"CREATE_INDEX=true")
+
+        s4.command(f"mv {output_bam_filename.replace('.bam', '.bai')} {output_bam_filename}.bai")  # rename the .bai file
+        s4.command("ls -lh")
+
+        #s4.command(f"gatk CollectWgsMetrics STOP_AFTER={5*10**7} I={output_bam_filename} O=metrics.txt R={local_fasta}")
+        #s4.command(f"cat metrics.txt | head -n 8 | tail -n 2")
+
+        s4.output(f"/io/{output_bam_filename}")
+        s4.output(f"/io/{output_bam_filename}.bai")
+
+    # use samtools to merge bam files in aligned_bam_files_for_CHM1_CHM13
+    merged_sample_id = "CHM1_CHM13"
+    s5 = bp.new_step(
+        f"pbmm2: merge {merged_sample_id}",
+        arg_suffix=f"merge",
+        step_number=5,
+        image=DOCKER_IMAGE,
+        cpu=1,
+        memory="highmem",
+        storage="200Gi",
+        output_dir=TEMP_DIR,
+        localize_by=Localize.HAIL_BATCH_CLOUDFUSE,
+    )
+    for s in align_bam_files_for_CHM1_CHM13_steps:
+        s5.depends_on(s)
+
+    local_bam_paths = [
+        s5.input(os.path.join(TEMP_DIR, bam_file))
+        for bam_file in aligned_bam_files_for_CHM1_CHM13
+    ]
+    s5.command("set -ex")
+    s5.command("cd /io")
+
+    merged_bam_filename = f"{merged_sample_id}.subreads.bam"
+    s5.command(f"samtools merge -f {merged_bam_filename} {' '.join(map(str, local_bam_paths))}")
+    s5.command(f"samtools index {merged_bam_filename}")
+
+    s5.output(merged_bam_filename)
+    s5.output(f"{merged_bam_filename}.bai")
+
+    # compute depth and other stats
+    s6 = bp.new_step(
+        f"pbmm2: depth of coverage {sample_id}",
+        arg_suffix=f"stats3",
+        step_number=6,
+        image=DOCKER_IMAGE,
+        cpu=1,
+        memory="standard",
+        output_dir=TEMP_DIR,
+        localize_by=Localize.HAIL_BATCH_CLOUDFUSE,
+    )
+    local_bam_path, _ = s6.use_previous_step_outputs_as_inputs(s5)
+    s6.command(f"mosdepth -x {merged_sample_id} {local_bam_path}")
+    s6.command("ls -lh")
+    s6.command(f"cat {merged_sample_id}.mosdepth.summary.txt")
+
+    s6.output(f"{merged_sample_id}.mosdepth.summary.txt")
+    s6.output(f"{merged_sample_id}.mosdepth.global.dist.txt")
 
     bp.run()
 
