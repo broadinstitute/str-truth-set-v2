@@ -192,6 +192,7 @@ def main():
             localize_by=Localize.HAIL_BATCH_CLOUDFUSE,
         )
         local_bam_path, _ = s3.use_previous_step_outputs_as_inputs(s2)
+        s3.command("set -ex")
         s3.command(f"mosdepth -x {sample_id} {local_bam_path}")
         s3.command("ls -lh")
         s3.command(f"cat {sample_id}.mosdepth.summary.txt")
@@ -260,7 +261,7 @@ def main():
         memory="highmem",
         storage="200Gi",
         output_dir=TEMP_DIR,
-        localize_by=Localize.COPY,
+        localize_by=Localize.HAIL_BATCH_CLOUDFUSE,
     )
     for s in align_bam_files_for_CHM1_CHM13_steps:
         s5.depends_on(s)
@@ -291,6 +292,7 @@ def main():
         localize_by=Localize.HAIL_BATCH_CLOUDFUSE,
     )
     local_bam_path, _ = s6.use_previous_step_outputs_as_inputs(s5)
+    s6.command("set -ex")
     s6.command(f"mosdepth -x {merged_sample_id} {local_bam_path}")
     s6.command("ls -lh")
     s6.command(f"cat {merged_sample_id}.mosdepth.summary.txt")
