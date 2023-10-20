@@ -177,7 +177,7 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
     variant_catalogs_step.command(
         f"python3 -u /str-truth-set/tool_comparison/scripts/convert_truth_set_to_variant_catalogs.py "
         f"--ref-fasta {hg38_fasta_input} "
-        f"--output-negative-loci "
+        #f"--output-negative-loci "
         f"--expansion-hunter-loci-per-run {expansion_hunter_loci_per_run} "
         f"--gangstr-loci-per-run 1000000 "
         f"--high-confidence-regions-bed {high_confidence_regions_bed_input} "
@@ -193,20 +193,20 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
     n = 1 if exclude_homopolymers else (600000 // expansion_hunter_loci_per_run)
     for i in range(1, n + 1):
         variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/expansion_hunter/positive_loci.EHv5.00{i}_of_00{n}.json")
-        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/expansion_hunter/negative_loci.EHv5.00{i}_of_00{n}.json")
+        #variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/expansion_hunter/negative_loci.EHv5.00{i}_of_00{n}.json")
 
     variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/gangstr/positive_loci.GangSTR.001_of_001.bed")
-    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/gangstr/negative_loci.GangSTR.001_of_001.bed")
+    #variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/gangstr/negative_loci.GangSTR.001_of_001.bed")
 
     variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/hipstr/positive_loci.HipSTR.001_of_001.bed")
-    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/hipstr/negative_loci.HipSTR.001_of_001.bed")
+    #variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/hipstr/negative_loci.HipSTR.001_of_001.bed")
 
     for chrom in [*range(1, 23), "X"]:
         variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/popstr/positive_loci.popSTR.chr{chrom}.markerInfo.gz")
-        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/popstr/negative_loci.popSTR.chr{chrom}.markerInfo.gz")
+        #variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/popstr/negative_loci.popSTR.chr{chrom}.markerInfo.gz")
 
     variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/trgt/positive_loci.TRGT_repeat_catalog.bed")
-    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/trgt/negative_loci.TRGT_repeat_catalog.bed")
+    #variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/trgt/negative_loci.TRGT_repeat_catalog.bed")
 
     return variant_catalogs_step
 
@@ -358,14 +358,14 @@ def create_combine_results_step(bp, df, suffix, filter_steps, output_dir, exclud
         if combine_step_type == "concat tsvs":
             concat_tsv_output_filename = f"{combine_step_prefix}.{len(df)}_samples.{variants_or_alleles}.{combine_step_suffix}.gz"
             combine_step.command(
-                f"python3 /hprc_pipeline/scripts/concat_per_sample_tables.py -o {concat_tsv_output_filename} " +
+                f"python3 /filter_vcfs/scripts/concat_per_sample_tables.py -o {concat_tsv_output_filename} " +
                 " ".join(i.local_path for i in input_files))
             combine_step.output(concat_tsv_output_filename)
         elif combine_step_type == "join tsvs":
             joined_tsv_output_filename = f"joined.{len(df)}_samples.variants.tsv.gz"
             joined_tsv_output_stats_filename = f"joined.{len(df)}_samples.variants.stats.tsv.gz"
             combine_step.command(
-                f"python3 /hprc_pipeline/scripts/join_per_sample_variant_tables.py "
+                f"python3 /filter_vcfs/scripts/join_per_sample_variant_tables.py "
                 f"--output-stats-tsv {joined_tsv_output_stats_filename} "
                 f"-o {joined_tsv_output_filename} " +
                 " ".join(i.local_path for i in input_files))
@@ -375,7 +375,7 @@ def create_combine_results_step(bp, df, suffix, filter_steps, output_dir, exclud
             combined_bed_output_filename = f"combined.{len(df)}_samples.variants.bed.gz"
             combined_bed_output_stats_filename = f"combined.{len(df)}_bed_files.variants.stats.tsv.gz"
             combine_step.command(
-                f"python3 /hprc_pipeline/scripts/combine_per_sample_variant_bed_files.py "
+                f"python3 /filter_vcfs/scripts/combine_per_sample_variant_bed_files.py "
                 f"--output-stats-tsv {combined_bed_output_stats_filename} "
                 f"-o {combined_bed_output_filename} " +
                 " ".join(i.local_path for i in input_files))
