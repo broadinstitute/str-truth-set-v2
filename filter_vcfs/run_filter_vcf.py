@@ -19,7 +19,7 @@ import pandas as pd
 from step_pipeline import pipeline, Backend, Localize
 
 STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:e13cf6e945bf04f1fbfbe1da880f543a7bb223026e995b2682324cebc8c18649"
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:8e9250858a51fb8d15c668bd7f7f3987175a2df1d85b3a00cd18be53e5ec65d6"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:a065d1b12ae50b01dc72645968247e1a838142285bf28883070e053dd063b29a"
 
 
 def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False):
@@ -37,8 +37,8 @@ def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, 
         localize_by=Localize.COPY)
 
     dipcall_vcf_input, dipcall_high_confidence_regions_bed_input = filter_step.inputs(
-        f"gs://str-truth-set-v2/hprc_dipcall/{row.sample_id}/{row.sample_id}.dip.vcf.gz",
-        f"gs://str-truth-set-v2/hprc_dipcall/{row.sample_id}/{row.sample_id}.dip.bed.gz",
+        f"gs://str-truth-set-v2/dipcall_pipeline/{row.sample_id}/{row.sample_id}.dip.vcf.gz",
+        f"gs://str-truth-set-v2/dipcall_pipeline/{row.sample_id}/{row.sample_id}.dip.bed.gz",
     )
 
     filter_step.command("set -exuo pipefail")
@@ -103,6 +103,8 @@ def create_annotate_steps(bp, row, suffix, output_dir, exclude_homopolymers=Fals
             "gs://str-truth-set/hg38/ref/other/hg38.hipstr_reference.adjusted.bed.gz",
             "gs://str-truth-set/hg38/ref/other/known_disease_associated_STR_loci.GRCh38.bed.gz",
             "gs://str-truth-set/hg38/ref/other/GRCh38GenomicSuperDup.without_decoys.sorted.bed.gz",
+            "gs://str-truth-set/hg38/ref/other/popstr_catalog_v2.bed.gz",
+            "gs://str-truth-set/hg38/ref/other/trgt_repeat_catalog.hg38.bed.gz",
         ]:
             input_catalog, _ = annotate_step.inputs(input_bed_path, f"{input_bed_path}.tbi")
 
@@ -164,7 +166,7 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
         localize_by=Localize.COPY)
 
     high_confidence_regions_bed_input = variant_catalogs_step.input(
-        os.path.join("gs://str-truth-set-v2/hprc_dipcall", row.sample_id, f"{row.sample_id}.dip.bed.gz"))
+        os.path.join("gs://str-truth-set-v2/dipcall_pipeline", row.sample_id, f"{row.sample_id}.dip.bed.gz"))
     variants_tsv_input = variant_catalogs_step.input(
         os.path.join(output_dir, f"{row.sample_id}{suffix}.variants.tsv.gz"))
     variants_bed_input = variant_catalogs_step.input(
@@ -241,7 +243,7 @@ def create_plot_step(bp, suffix, output_dir, row=None, alleles_tsv_step=None, ex
     # figure 1 panels
     dipcall_vcf_input = None
     if row is not None:
-        dipcall_vcf_input = plot_step.input(f"gs://str-truth-set-v2/hprc_dipcall/{row.sample_id}/{row.sample_id}.dip.vcf.gz")
+        dipcall_vcf_input = plot_step.input(f"gs://str-truth-set-v2/dipcall_pipeline/{row.sample_id}/{row.sample_id}.dip.vcf.gz")
         plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_syndip_indel_size_distribution.py --width 12 --height 4 --syndip-vcf {dipcall_vcf_input} --image-type png")
 
     # figure 2 panels
