@@ -19,7 +19,7 @@ import pandas as pd
 from step_pipeline import pipeline, Backend, Localize
 
 STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:e13cf6e945bf04f1fbfbe1da880f543a7bb223026e995b2682324cebc8c18649"
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:729c048aebdc1c8ea86aea0028d795db3ba71062f4c59e0494c48ce732e132d5"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:8e9250858a51fb8d15c668bd7f7f3987175a2df1d85b3a00cd18be53e5ec65d6"
 
 
 def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False):
@@ -158,6 +158,11 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
         output_dir=output_dir,
     )
 
+    hg38_fasta_input, _ = variant_catalogs_step.inputs(
+        "gs://str-truth-set/hg38/ref/hg38.fa",
+        "gs://str-truth-set/hg38/ref/hg38.fa.fai",
+        localize_by=Localize.COPY)
+
     high_confidence_regions_bed_input = variant_catalogs_step.input(
         os.path.join("gs://str-truth-set-v2/hprc_dipcall", row.sample_id, f"{row.sample_id}.dip.bed.gz"))
     variants_tsv_input = variant_catalogs_step.input(
@@ -171,6 +176,7 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
     expansion_hunter_loci_per_run = 1000000 # if exclude_homopolymers else 100000
     variant_catalogs_step.command(
         f"python3 -u /str-truth-set/tool_comparison/scripts/convert_truth_set_to_variant_catalogs.py "
+        f"--ref-fasta {hg38_fasta_input} "
         f"--output-negative-loci "
         f"--expansion-hunter-loci-per-run {expansion_hunter_loci_per_run} "
         f"--gangstr-loci-per-run 1000000 "
@@ -194,6 +200,13 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
 
     variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/hipstr/positive_loci.HipSTR.001_of_001.bed")
     variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/hipstr/negative_loci.HipSTR.001_of_001.bed")
+
+    for chrom in [*range(1, 23), "X"]:
+        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/popstr/positive_loci.popSTR.chr{chrom}.markerInfo.gz")
+        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/popstr/negative_loci.popSTR.chr{chrom}.markerInfo.gz")
+
+    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/trgt/positive_loci.TRGT_repeat_catalog.bed")
+    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/trgt/negative_loci.TRGT_repeat_catalog.bed")
 
     return variant_catalogs_step
 
@@ -423,7 +436,7 @@ def main():
 
     bp.precache_file_paths("gs://str-truth-set-v2/filter_vcf/**/*.*")
 
-    df = pd.read_table("hprc_assemblies.tsv")
+    df = pd.read_table("../dipcall_pipeline/hprc_assemblies.tsv")
     if args.sample_id:
         df = df[df.sample_id.isin(args.sample_id)]
 
