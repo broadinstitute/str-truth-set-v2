@@ -64,7 +64,7 @@ COPY str-truth-set/requirements.txt /
 RUN python3 -m pip install -r /requirements.txt
 
 COPY str-truth-set /str-truth-set
-COPY filter_vcfs/scripts /process_hprc_vcfs/scripts
+COPY filter_vcfs/scripts /filter_vcfs/scripts
 
 
 ENTRYPOINT ["/bin/bash"]
