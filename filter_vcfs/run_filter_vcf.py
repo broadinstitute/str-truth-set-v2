@@ -19,7 +19,7 @@ import pandas as pd
 from step_pipeline import pipeline, Backend, Localize
 
 STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:e13cf6e945bf04f1fbfbe1da880f543a7bb223026e995b2682324cebc8c18649"
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:a065d1b12ae50b01dc72645968247e1a838142285bf28883070e053dd063b29a"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:c5bdc7420f6b459f3b08830c787f29e3279c2f8fd507c0e4a6dd0be6169be7a6"
 
 
 def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False):
@@ -209,6 +209,9 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
 
     variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/trgt/positive_loci.TRGT_repeat_catalog.bed")
     #variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/trgt/negative_loci.TRGT_repeat_catalog.bed")
+
+    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/straglr/positive_loci.straglr_catalog.bed")
+    #variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/straglr/negative_loci.straglr_catalog.bed")
 
     return variant_catalogs_step
 
@@ -404,10 +407,15 @@ def create_combine_results_step(bp, df, suffix, filter_steps, output_dir, exclud
         memory="highmem",
         image=FILTER_VCFS_DOCKER_IMAGE)
 
+    hg38_fasta_input, _ = combined_variant_catalogs_step.inputs(
+        "gs://str-truth-set/hg38/ref/hg38.fa",
+        "gs://str-truth-set/hg38/ref/hg38.fa.fai",
+        localize_by=Localize.COPY)
     joined_tsv_input, _ = combined_variant_catalogs_step.use_previous_step_outputs_as_inputs(join_tsvs_step)
 
     combined_variant_catalogs_step.command(
         "python3 -u /str-truth-set/tool_comparison/scripts/convert_truth_set_to_variant_catalogs.py "
+        f"--ref-fasta {hg38_fasta_input} "
         "--expansion-hunter-loci-per-run 10000000 "
         "--gangstr-loci-per-run 10000000 "
         f"{joined_tsv_input}")
