@@ -18,8 +18,8 @@ import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize
 
-STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:e13cf6e945bf04f1fbfbe1da880f543a7bb223026e995b2682324cebc8c18649"
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:12c4b920951fc0222b6137a1b46f94421152d67a2d90891836b1768cee080828"
+STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:3e93e77cad0727971db3ef66a64325c93c5063904b0dad386d0492064d694711"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:bf4cbc48c864171eed8e4a744857d27fa37bfc40b38ec6397285a64a58a2077e"
 
 
 def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False):
@@ -34,7 +34,7 @@ def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, 
     hg38_fasta_input, _ = filter_step.inputs(
         "gs://str-truth-set/hg38/ref/hg38.fa",
         "gs://str-truth-set/hg38/ref/hg38.fa.fai",
-        localize_by=Localize.COPY)
+        localize_by=Localize.HAIL_BATCH_CLOUDFUSE)
 
     dipcall_vcf_input, dipcall_high_confidence_regions_bed_input = filter_step.inputs(
         f"gs://str-truth-set-v2/dipcall_pipeline/{row.sample_id}/{row.sample_id}.dip.vcf.gz",
@@ -80,7 +80,7 @@ def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, 
     return filter_step
 
 
-def create_annotate_steps(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False):
+def create_annotate_steps(bp, row, suffix, output_dir, exclude_homopolymers=False):
 
     annotate_steps = []
     for table_type in "variants", "alleles":
@@ -155,7 +155,7 @@ def create_annotate_steps(bp, row, suffix, output_dir, exclude_homopolymers=Fals
     return annotate_steps
 
 
-def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False):
+def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolymers=False, output_negative_loci=False):
     variant_catalogs_step = bp.new_step(
         f"variant catalogs: {row.sample_id}",
         image=FILTER_VCFS_DOCKER_IMAGE,
@@ -167,7 +167,7 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
     hg38_fasta_input, _ = variant_catalogs_step.inputs(
         "gs://str-truth-set/hg38/ref/hg38.fa",
         "gs://str-truth-set/hg38/ref/hg38.fa.fai",
-        localize_by=Localize.COPY)
+        localize_by=Localize.HAIL_BATCH_CLOUDFUSE)
 
     high_confidence_regions_bed_input = variant_catalogs_step.input(
         os.path.join("gs://str-truth-set-v2/dipcall_pipeline", row.sample_id, f"{row.sample_id}.dip.bed.gz"))
@@ -182,8 +182,10 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
     expansion_hunter_loci_per_run = 1000000 # if exclude_homopolymers else 100000
     variant_catalogs_step.command(
         f"python3 -u /str-truth-set/tool_comparison/scripts/convert_truth_set_to_variant_catalogs.py "
-        f"--ref-fasta {hg38_fasta_input} "
-        #f"--output-negative-loci "
+        f"--ref-fasta {hg38_fasta_input} " +
+        (f"--output-negative-loci " if output_negative_loci else "") +
+        f"--skip-popstr "
+        f"--skip-straglr "
         f"--expansion-hunter-loci-per-run {expansion_hunter_loci_per_run} "
         f"--gangstr-loci-per-run 1000000 "
         f"--high-confidence-regions-bed {high_confidence_regions_bed_input} "
@@ -199,28 +201,34 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
     n = 1 if exclude_homopolymers else (600000 // expansion_hunter_loci_per_run)
     for i in range(1, n + 1):
         variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/expansion_hunter/positive_loci.EHv5.00{i}_of_00{n}.json")
-        #variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/expansion_hunter/negative_loci.EHv5.00{i}_of_00{n}.json")
+        if output_negative_loci:
+            variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/expansion_hunter/negative_loci.EHv5.00{i}_of_00{n}.json")
 
     variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/gangstr/positive_loci.GangSTR.001_of_001.bed")
-    #variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/gangstr/negative_loci.GangSTR.001_of_001.bed")
+    if output_negative_loci:
+        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/gangstr/negative_loci.GangSTR.001_of_001.bed")
 
     variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/hipstr/positive_loci.HipSTR.001_of_001.bed")
-    #variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/hipstr/negative_loci.HipSTR.001_of_001.bed")
+    if output_negative_loci:
+        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/hipstr/negative_loci.HipSTR.001_of_001.bed")
 
-    for chrom in [*range(1, 23), "X"]:
-        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/popstr/positive_loci.popSTR.chr{chrom}.markerInfo.gz")
-        #variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/popstr/negative_loci.popSTR.chr{chrom}.markerInfo.gz")
+    #for chrom in [*range(1, 23), "X"]:
+    #    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/popstr/positive_loci.popSTR.chr{chrom}.markerInfo.gz")
+    #    if output_negative_loci:
+    #        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/popstr/negative_loci.popSTR.chr{chrom}.markerInfo.gz")
 
     variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/trgt/positive_loci.TRGT_repeat_catalog.bed")
-    #variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/trgt/negative_loci.TRGT_repeat_catalog.bed")
+    if output_negative_loci:
+        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/trgt/negative_loci.TRGT_repeat_catalog.bed")
 
-    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/straglr/positive_loci.straglr_catalog.bed")
-    #variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/straglr/negative_loci.straglr_catalog.bed")
+    #variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/straglr/positive_loci.straglr_catalog.bed")
+    #if output_negative_loci:
+    #    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/straglr/negative_loci.straglr_catalog.bed")
 
     return variant_catalogs_step
 
 
-def create_plot_step(bp, suffix, output_dir, row=None, alleles_tsv_step=None, exclude_homopolymers=False, only_pure_repeats=False):
+def create_plot_step(bp, suffix, output_dir, row=None, alleles_tsv_step=None, exclude_homopolymers=False):
     """Must specify either row or alleles_tsv_step"""
 
     plot_step = bp.new_step(
@@ -415,7 +423,7 @@ def create_combine_results_step(bp, df, suffix, filter_steps, output_dir, exclud
     hg38_fasta_input, _ = combined_variant_catalogs_step.inputs(
         "gs://str-truth-set/hg38/ref/hg38.fa",
         "gs://str-truth-set/hg38/ref/hg38.fa.fai",
-        localize_by=Localize.COPY)
+        localize_by=Localize.HAIL_BATCH_CLOUDFUSE)
     joined_tsv_input, _ = combined_variant_catalogs_step.use_previous_step_outputs_as_inputs(join_tsvs_step)
 
     combined_variant_catalogs_step.command("set -exuo pipefail")
@@ -443,6 +451,7 @@ def main():
     parser = bp.get_config_arg_parser()
     parser.add_argument("--only-pure-repeats", action="store_true")
     parser.add_argument("--exclude-homopolymers", action="store_true")
+    parser.add_argument("--output-negative-loci", action="store_true")
     parser.add_argument("--skip-combine-steps", action="store_true")
     parser.add_argument("-s", "--sample-id", action="append",
                         help="Process only this sample. Can be specified more than once.")
@@ -481,19 +490,17 @@ def main():
         filter_steps.append(filter_step)
 
         annotate_variants_step, annotate_alleles_step = create_annotate_steps(bp, row, suffix, output_dir,
-                                                                              exclude_homopolymers=args.exclude_homopolymers,
-                                                                              only_pure_repeats=args.only_pure_repeats)
+                                                                              exclude_homopolymers=args.exclude_homopolymers)
         annotate_variants_step.depends_on(filter_step)
         annotate_alleles_step.depends_on(filter_step)
 
         variant_catalogs_step = create_variant_catalogs_step(bp, row, suffix, output_dir,
                                                              exclude_homopolymers=args.exclude_homopolymers,
-                                                             only_pure_repeats=args.only_pure_repeats)
+                                                             output_negative_loci=args.output_negative_loci)
         variant_catalogs_step.depends_on(filter_step)
 
         plot_step, figures_to_download_dict = create_plot_step(bp, suffix, output_dir, row=row,
-                                                               exclude_homopolymers=args.exclude_homopolymers,
-                                                               only_pure_repeats=args.only_pure_repeats)
+                                                               exclude_homopolymers=args.exclude_homopolymers)
 
         plot_step.depends_on(annotate_alleles_step)
         if row.sample_id == "CHM1_CHM13":
