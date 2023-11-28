@@ -408,8 +408,7 @@ def create_combine_results_step(bp, df, suffix, filter_steps, output_dir, exclud
     combine_plot_step, figures_to_download_dict = create_plot_step(
         bp, suffix, combined_output_dir,
         alleles_tsv_step=concat_annotated_alleles_tsv_step,
-        exclude_homopolymers=exclude_homopolymers,
-        only_pure_repeats=only_pure_repeats)
+        exclude_homopolymers=exclude_homopolymers)
 
     # convert to catalogs
     combined_variant_catalogs_step = bp.new_step(
