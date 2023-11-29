@@ -19,7 +19,7 @@ import pandas as pd
 from step_pipeline import pipeline, Backend, Localize
 
 STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:3e93e77cad0727971db3ef66a64325c93c5063904b0dad386d0492064d694711"
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:bf4cbc48c864171eed8e4a744857d27fa37bfc40b38ec6397285a64a58a2077e"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:074a520be0cd030b5dec0d2ac4411363ae3307d726a9b5fdb3a03b2716ffbe94"
 
 
 def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False):
@@ -91,8 +91,7 @@ def create_annotate_steps(bp, row, suffix, output_dir, exclude_homopolymers=Fals
             arg_suffix=f"annotate-{table_type}-step",
             cpu=4,
             memory="highmem",
-            output_dir=output_dir,
-        )
+            output_dir=output_dir)
         bed_input = annotate_step.input(
             os.path.join(output_dir, f"{row.sample_id}{suffix}.variants.bed.gz"))
 
@@ -342,7 +341,9 @@ def create_plot_step(bp, suffix, output_dir, row=None, alleles_tsv_step=None, ex
     return plot_step, files_to_download
 
 
-def create_combine_results_step(bp, df, suffix, filter_steps, output_dir, exclude_homopolymers=False, only_pure_repeats=False):
+def create_combine_results_step(
+        bp, df, suffix, filter_steps,
+        annotate_variants_steps, annotate_alleles_steps, output_dir, exclude_homopolymers=False):
     combine_steps = []
     combined_output_dir = os.path.join(output_dir, "combined")
 
@@ -361,8 +362,14 @@ def create_combine_results_step(bp, df, suffix, filter_steps, output_dir, exclud
             cpu=cpu,
             memory="highmem",
             output_dir=combined_output_dir,
-            depends_on=filter_steps,
         )
+
+        if variants_or_alleles == "annotated.variants":
+            combine_step.depends_on(annotate_variants_steps)
+        elif variants_or_alleles == "annotated.alleles":
+            combine_step.depends_on(annotate_alleles_steps)
+        else:
+            combine_step.depends_on(filter_steps)
 
         combine_step.command("set -exuo pipefail")
 
@@ -479,6 +486,8 @@ def main():
         output_dir_suffix = "all_repeats_including_homopolymers"
 
     filter_steps = []
+    annotate_alleles_steps = []
+    annotate_variants_steps = []
     figures_to_download = collections.defaultdict(list)
     for row_i, (_, row) in enumerate(df.iterrows()):
         output_dir = os.path.join(args.output_dir, output_dir_suffix, row.sample_id)
@@ -492,6 +501,8 @@ def main():
                                                                               exclude_homopolymers=args.exclude_homopolymers)
         annotate_variants_step.depends_on(filter_step)
         annotate_alleles_step.depends_on(filter_step)
+        annotate_variants_steps.append(annotate_variants_step)
+        annotate_alleles_steps.append(annotate_alleles_step)
 
         variant_catalogs_step = create_variant_catalogs_step(bp, row, suffix, output_dir,
                                                              exclude_homopolymers=args.exclude_homopolymers,
@@ -507,10 +518,11 @@ def main():
                 figures_to_download[label].append(file_path)
 
     if not args.skip_combine_steps:
-        figures_to_download_dict = create_combine_results_step(bp, df, suffix, filter_steps,
-                                                               output_dir=os.path.join(args.output_dir, output_dir_suffix),
-                                                               exclude_homopolymers=args.exclude_homopolymers,
-                                                               only_pure_repeats=args.only_pure_repeats)
+        figures_to_download_dict = create_combine_results_step(
+            bp, df, suffix,
+            filter_steps, annotate_variants_steps, annotate_alleles_steps,
+            output_dir=os.path.join(args.output_dir, output_dir_suffix),
+            exclude_homopolymers=args.exclude_homopolymers)
         for label, file_path in figures_to_download_dict.items():
             figures_to_download[label].append(file_path)
 
