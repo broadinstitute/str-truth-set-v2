@@ -53,7 +53,7 @@ RUN wget https://github.com/arq5x/bedtools2/releases/download/v${BED_TOOLS_VERSI
 	&& mv bedtools.static /usr/bin/bedtools
 
 RUN python3 -m pip install --upgrade cmake pip
-RUN python3 -m pip install str_analysis==0.9.18
+RUN python3 -m pip install str_analysis==1.2.5
 
 # set up "aliases" for MacOSX commands
 RUN apt-get install -y --no-install-recommends bc dvipng texlive-latex-extra texlive-fonts-recommended cm-super
