@@ -18,8 +18,8 @@ import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize
 
-STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:3e93e77cad0727971db3ef66a64325c93c5063904b0dad386d0492064d694711"
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:074a520be0cd030b5dec0d2ac4411363ae3307d726a9b5fdb3a03b2716ffbe94"
+STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:074a520be0cd030b5dec0d2ac4411363ae3307d726a9b5fdb3a03b2716ffbe94"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:bf4cbc48c864171eed8e4a744857d27fa37bfc40b38ec6397285a64a58a2077e"
 
 
 def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False):
@@ -381,6 +381,8 @@ def create_combine_results_step(
 
         if combine_step_type == "concat tsvs":
             concat_tsv_output_filename = f"{combine_step_prefix}.{len(df)}_samples.{variants_or_alleles}.{combine_step_suffix}.gz"
+            if not exclude_homopolymers:
+                combine_step.storage("20G")
             combine_step.command(
                 f"python3 /filter_vcfs/scripts/concat_per_sample_tables.py -o {concat_tsv_output_filename} " +
                 " ".join(i.local_path for i in input_files))
