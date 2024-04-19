@@ -9,7 +9,7 @@ GATK_DOCKER_IMAGE = "weisburd/gatk:4.3.0.0"
 
 REFERENCE_FASTA = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
 
-TEMP_DIR = "gs://bw2-delete-after-30-days/long-reads"
+TEMP_DIR = "gs://bw2-delete-after-60-days/long-reads"
 
 
 SAMPLE_METADATA = {
@@ -84,18 +84,18 @@ df = df[df["entity:sample_id"].isin({
     "NA12878",
 })]
 
-#for _, row in df.iterrows():
-#    sample_id = row["entity:sample_id"]
-#    url_list = eval(row["hifi"])
-#    if any(".ccs.bam" in u for u in url_list) and any(".fastq" in u for u in url_list):
-#        # if a sample has both .ccs.bams and .fastq, only keep the .ccs.bams
-#        url_list = [u for u in url_list if u.endswith(".ccs.bam")]
-#
-#    SAMPLE_METADATA[sample_id] = url_list
-#    if len(url_list) >= 5:
-#        print(f"{sample_id} has {len(SAMPLE_METADATA[sample_id])} PacBio files:")
-#        for url in url_list:
-#            print(f"  {url}")
+for _, row in df.iterrows():
+    sample_id = row["entity:sample_id"]
+    url_list = eval(row["hifi"])
+    if any(".ccs.bam" in u for u in url_list) and any(".fastq" in u for u in url_list):
+        # if a sample has both .ccs.bams and .fastq, only keep the .ccs.bams
+        url_list = [u for u in url_list if u.endswith(".ccs.bam")]
+
+    SAMPLE_METADATA[sample_id] = url_list
+    if len(url_list) >= 3:
+        print(f"{sample_id} has {len(SAMPLE_METADATA[sample_id])} PacBio files:")
+        for url in url_list:
+            print(f"  {url}")
 
 print(f"Processing PacBio data for {len(SAMPLE_METADATA)} HPRC samples")
 #sys.exit(0)
@@ -103,8 +103,9 @@ print(f"Processing PacBio data for {len(SAMPLE_METADATA)} HPRC samples")
 def main():
     bp = pipeline(backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline")
 
-    #parser = bp.get_config_arg_parser()
-    #args = bp.parse_known_args()
+    parser = bp.get_config_arg_parser()
+    parser.add_argument("-s", "--sample-id", action="append", help="only process the given sample id(s)", choices=SAMPLE_METADATA.keys())
+    args = bp.parse_known_args()
 
     s0 = bp.new_step(f"pbmm2: index hg38",
                      arg_suffix=f"index",
@@ -124,7 +125,9 @@ def main():
     aligned_bam_files_for_CHM1_CHM13 = []
     align_bam_files_for_CHM1_CHM13_steps = []
     for sample_id, unaligned_reads_urls in SAMPLE_METADATA.items():
-
+        if args.sample_id and sample_id not in args.sample_id:
+            continue
+        
         # if the data is @ SRA / EBI, download it to a gs:// bucket
         download_steps = []
         gs_paths = []
@@ -162,9 +165,9 @@ def main():
             image=DOCKER_IMAGE,
             cpu=16,
             memory="highmem",
-            storage="300Gi",
+            storage="500Gi",
             output_dir=TEMP_DIR,
-            delocalize_by=Delocalize.GSUTIL_COPY,
+            #delocalize_by=Delocalize.GSUTIL_COPY,
         )
         s2.depends_on(download_steps)
 
@@ -176,9 +179,16 @@ def main():
         for local_path in local_read_data_paths:
             s2.command(f"echo '{local_path}' >> read_data_paths.fofn")
 
-        s2.command(f"pbmm2 align --sort --preset SUBREAD {local_fasta} read_data_paths.fofn {sample_id}.subreads.bam")
-        s2.output(f"/io/{sample_id}.subreads.bam")
-        s2.output(f"/io/{sample_id}.subreads.bam.bai")
+        if all(".ccs.bam" in path for path in gs_paths):
+            preset = "HIFI"
+        elif all(".ccs.bam" not in path for path in gs_paths):
+            preset = "SUBREAD"
+        else:
+            raise ValueError(f"{sample_id} has a mix of .ccs.bam and .fastq files. Expecting one or the other")
+
+        s2.command(f"pbmm2 align --sort --strip --preset {preset} {local_fasta} read_data_paths.fofn {sample_id}.aligned.bam")
+        s2.output(f"/io/{sample_id}.aligned.bam")
+        s2.output(f"/io/{sample_id}.aligned.bam.bai")
 
         # compute depth and other stats
         s3 = bp.new_step(
@@ -215,8 +225,8 @@ def main():
         s4.depends_on(s3)
 
         local_fasta =  s4.input(REFERENCE_FASTA)
-        local_bam, _ = s4.inputs(os.path.join(TEMP_DIR, f"{sample_id}.subreads.bam"),
-                                 os.path.join(TEMP_DIR, f"{sample_id}.subreads.bam.bai"))
+        local_bam, _ = s4.inputs(os.path.join(TEMP_DIR, f"{sample_id}.aligned.bam"),
+                                 os.path.join(TEMP_DIR, f"{sample_id}.aligned.bam.bai"))
 
         local_mosdepth_summary = s4.input(os.path.join(TEMP_DIR, f"{sample_id}.mosdepth.summary.txt"))
 
@@ -249,6 +259,10 @@ def main():
         s4.output(f"/io/{output_bam_filename}")
         s4.output(f"/io/{output_bam_filename}.bai")
 
+    if args.sample_id:
+        bp.run()        
+        return
+    
     # use samtools to merge bam files in aligned_bam_files_for_CHM1_CHM13
     merged_sample_id = "CHM1_CHM13"
     s5 = bp.new_step(
@@ -272,7 +286,7 @@ def main():
     s5.command("set -ex")
     s5.command("cd /io")
 
-    merged_bam_filename = f"{merged_sample_id}.subreads.bam"
+    merged_bam_filename = f"{merged_sample_id}.aligned.bam"
     s5.command(f"samtools merge -t 2 -f {merged_bam_filename} {' '.join(map(str, local_bam_paths))}")
     s5.command(f"samtools index {merged_bam_filename}")
 
