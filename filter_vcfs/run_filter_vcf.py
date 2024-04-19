@@ -220,6 +220,10 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
     if output_negative_loci:
         variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/trgt/negative_loci.TRGT_repeat_catalog.bed")
 
+    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/longtr/positive_loci.LongTR.001_of_001.bed")
+    if output_negative_loci:
+        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/longtr/negative_loci.LongTR.001_of_001.bed")
+
     #variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/straglr/positive_loci.straglr_catalog.bed")
     #if output_negative_loci:
     #    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/straglr/negative_loci.straglr_catalog.bed")
@@ -456,6 +460,7 @@ def create_combine_results_step(
 
 def main():
     bp = pipeline("filter_vcf_to_STRs", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline_gnomad")
+
     parser = bp.get_config_arg_parser()
     parser.add_argument("--only-pure-repeats", action="store_true")
     parser.add_argument("--exclude-homopolymers", action="store_true")
