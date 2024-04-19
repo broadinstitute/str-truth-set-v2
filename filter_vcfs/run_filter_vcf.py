@@ -18,8 +18,8 @@ import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize
 
-STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:074a520be0cd030b5dec0d2ac4411363ae3307d726a9b5fdb3a03b2716ffbe94"
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:bf4cbc48c864171eed8e4a744857d27fa37bfc40b38ec6397285a64a58a2077e"
+STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:3dbcd066a85d987ddd6a1f7f6c0fdba589975423eff3cd7d95680f2e5bb34a08"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:f96d325b720c1348e2bf4bd21806499a4b7c0d8d0f602ba4a43f079ce8fee160"
 
 
 def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False):
