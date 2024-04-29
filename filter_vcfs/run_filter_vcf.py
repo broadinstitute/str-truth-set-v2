@@ -18,13 +18,13 @@ import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize
 
-STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:fe707d6869a35ca83b59b523b2c725eea313e6c82b9579fd403470255d2749d8"
+STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:6e3128a78fe2125e5c12a999a64479084bdec2ed69ee95072c87a846d2a550ff"
 FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:9ea4e1e648e15bb370efbe59f096d54791c9b6dcb75f1ec3e957a3c897014bac"
 
 
-def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False):
+def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False, keep_loci_that_have_overlapping_variants=False):
     filter_step = bp.new_step(
-        f"filter_vcf: {row.sample_id}",
+        f"filter_vcf: {row.sample_id}" + (" (keep loci that have overlapping variants)" if keep_loci_that_have_overlapping_variants else ""),
         image=STR_ANALYSIS_DOCKER_IMAGE,
         arg_suffix="filter-step",
         cpu=1,
@@ -53,6 +53,7 @@ def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, 
 
     min_repeat_unit_length = 2 if exclude_homopolymers else 1
     allow_interruptions = "no" if only_pure_repeats else "only-if-pure-repeats-not-found"
+    keep_loci_that_have_overlapping_variants_arg = "--keep-loci-that-have-overlapping-variants " if keep_loci_that_have_overlapping_variants else ""
     filter_step.command(f"python3 -u -m str_analysis.filter_vcf_to_STR_variants \
             -R {hg38_fasta_input} \
             --allow-interruptions {allow_interruptions} \
@@ -61,7 +62,7 @@ def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, 
             --min-str-repeats 3 \
             --min-repeat-unit-length {min_repeat_unit_length} \
             --max-repeat-unit-length 50 \
-            --output-prefix {row.sample_id}{suffix} \
+            {keep_loci_that_have_overlapping_variants_arg} --output-prefix {row.sample_id}{suffix} \
             --verbose \
             {row.sample_id}.high_confidence_regions.vcf.gz |& tee {row.sample_id}{suffix}.filter_vcf.log")
 
@@ -347,7 +348,7 @@ def create_plot_step(bp, suffix, output_dir, row=None, alleles_tsv_step=None, ex
 
 def create_combine_results_step(
         bp, df, suffix, filter_steps,
-        annotate_variants_steps, annotate_alleles_steps, output_dir, exclude_homopolymers=False):
+        annotate_variants_steps, annotate_alleles_steps, output_dir, exclude_homopolymers=False, keep_loci_that_have_overlapping_variants=False):
     combine_steps = []
     combined_output_dir = os.path.join(output_dir, "combined")
 
@@ -359,6 +360,13 @@ def create_combine_results_step(
         ("join tsvs", "joined", "variants", "tsv", 2),
         ("combine beds", "combined", "variants", "bed", 1),
     ]:
+        if variants_or_alleles == "annotated.variants" and annotate_variants_steps is None:
+            combine_steps.append(None)
+            continue
+        if variants_or_alleles == "annotated.alleles" and annotate_alleles_steps is None:
+            combine_steps.append(None)
+            continue
+
         combine_step = bp.new_step(
             f"{combine_step_type}: {variants_or_alleles}: {len(df)} samples",
             arg_suffix="combine-step",
@@ -418,10 +426,12 @@ def create_combine_results_step(
     _, concat_annotated_variants_tsv_step, _, concat_annotated_alleles_tsv_step, join_tsvs_step, _ = combine_steps
 
     # create plots
-    combine_plot_step, figures_to_download_dict = create_plot_step(
-        bp, suffix, combined_output_dir,
-        alleles_tsv_step=concat_annotated_alleles_tsv_step,
-        exclude_homopolymers=exclude_homopolymers)
+    figures_to_download_dict = {}
+    if concat_annotated_alleles_tsv_step is not None:
+        combine_plot_step, figures_to_download_dict = create_plot_step(
+            bp, suffix, combined_output_dir,
+            alleles_tsv_step=concat_annotated_alleles_tsv_step,
+            exclude_homopolymers=exclude_homopolymers)
 
     # convert to catalogs
     combined_variant_catalogs_step = bp.new_step(
@@ -492,6 +502,7 @@ def main():
     else:
         output_dir_suffix = "all_repeats_including_homopolymers"
 
+    filter_steps_keeping_all_loci = []
     filter_steps = []
     annotate_alleles_steps = []
     annotate_variants_steps = []
@@ -499,9 +510,25 @@ def main():
     for row_i, (_, row) in enumerate(df.iterrows()):
         output_dir = os.path.join(args.output_dir, output_dir_suffix, row.sample_id)
 
+        # The default filter options discard detected STR variants if they overlap any other variant in the input VCF
+        # (ie. SNVs or non-STR indels). This is because overlapping variants make the true STR genotype ambiguous,
+        # and so are not suitable for inclusion in an STR truth set. However, they are still polymorphic STR loci, and
+        # so can be included in a set of all polymorphic STRs in the genome.
+        # The steps below first compute the set of all STRs without this post-filter (for use as a polymorphic STR catalog)
+        # and then compute the post-filtered set of STRs without any overlapping variants (for use as an STR truth set).
+        filter_step_keeping_all_loci = create_filter_step(bp, row, f"{suffix}.keeping_loci_that_have_overlapping_variants",
+                                         os.path.join(args.output_dir, f"{output_dir_suffix}_keeping_loci_that_have_overlapping_variants", row.sample_id),
+                                         exclude_homopolymers=args.exclude_homopolymers,
+                                         only_pure_repeats=args.only_pure_repeats,
+                                         keep_loci_that_have_overlapping_variants=True)
+
+        filter_steps_keeping_all_loci.append(filter_step_keeping_all_loci)
+
+
         filter_step = create_filter_step(bp, row, suffix, output_dir,
                                          exclude_homopolymers=args.exclude_homopolymers,
                                          only_pure_repeats=args.only_pure_repeats)
+
         filter_steps.append(filter_step)
 
         annotate_variants_step, annotate_alleles_step = create_annotate_steps(bp, row, suffix, output_dir,
@@ -524,14 +551,22 @@ def main():
             for label, file_path in figures_to_download_dict.items():
                 figures_to_download[label].append(file_path)
 
+
     if not args.skip_combine_steps:
         figures_to_download_dict = create_combine_results_step(
             bp, df, suffix,
             filter_steps, annotate_variants_steps, annotate_alleles_steps,
             output_dir=os.path.join(args.output_dir, output_dir_suffix),
             exclude_homopolymers=args.exclude_homopolymers)
+
         for label, file_path in figures_to_download_dict.items():
             figures_to_download[label].append(file_path)
+
+        create_combine_results_step(
+            bp, df, f"{suffix}.keeping_loci_that_have_overlapping_variants",
+            filter_steps_keeping_all_loci, None, None,
+            output_dir=os.path.join(args.output_dir, f"{output_dir_suffix}_keeping_loci_that_have_overlapping_variants"),
+            exclude_homopolymers=args.exclude_homopolymers)
 
     bp.run()
 
