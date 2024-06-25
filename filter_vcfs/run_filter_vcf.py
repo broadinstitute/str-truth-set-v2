@@ -19,7 +19,7 @@ import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
 STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:6e3128a78fe2125e5c12a999a64479084bdec2ed69ee95072c87a846d2a550ff"
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:7e805a77fe83641d78df0fbe638819a29b51ea2a36059c07e11719a54da95796"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:bce1d8d478808ced1bacebfe20ad3226e581c698f3ae8a8f4f72597f9414c5ca"
 
 
 def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False, keep_loci_that_have_overlapping_variants=False):
@@ -187,7 +187,7 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
     variant_catalogs_step.command(
         f"python3 -u /str-truth-set/tool_comparison/scripts/convert_truth_set_to_variant_catalogs.py "
         f"--ref-fasta {hg38_fasta_input} " +
-        (f"--output-negative-loci " if output_negative_loci else "") +
+        (f" " if output_negative_loci else "--skip-negative-loci") +
         f"--skip-popstr "
         f"--expansion-hunter-loci-per-run {expansion_hunter_loci_per_run} "
         f"--gangstr-loci-per-run {gangstr_loci_per_run} "
