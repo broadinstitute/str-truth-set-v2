@@ -16,7 +16,7 @@ import collections
 import hailtop.fs as hfs
 import os
 import pandas as pd
-from step_pipeline import pipeline, Backend, Localize
+from step_pipeline import pipeline, Backend, Localize, Delocalize
 
 STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:6e3128a78fe2125e5c12a999a64479084bdec2ed69ee95072c87a846d2a550ff"
 FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:9ea4e1e648e15bb370efbe59f096d54791c9b6dcb75f1ec3e957a3c897014bac"
@@ -162,6 +162,7 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
         arg_suffix="variant-catalog-step",
         cpu=1,
         output_dir=output_dir,
+        delocalize_by=Delocalize.GSUTIL_COPY,
     )
 
     hg38_fasta_input, _ = variant_catalogs_step.inputs(
@@ -179,17 +180,20 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
         "gs://str-truth-set/hg38/ref/other/repeat_specs_GRCh38_without_mismatches.including_homopolymers.sorted.at_least_9bp.bed.gz",
         "gs://str-truth-set/hg38/ref/other/repeat_specs_GRCh38_without_mismatches.including_homopolymers.sorted.at_least_9bp.bed.gz.tbi")
 
-    expansion_hunter_loci_per_run = 1000000 # if exclude_homopolymers else 100000
+    expansion_hunter_loci_per_run = 10000 # if exclude_homopolymers else 100000
+    gangstr_loci_per_run = 1000000
+    straglr_loci_per_run = 10000
     variant_catalogs_step.command(
         f"python3 -u /str-truth-set/tool_comparison/scripts/convert_truth_set_to_variant_catalogs.py "
         f"--ref-fasta {hg38_fasta_input} " +
         (f"--output-negative-loci " if output_negative_loci else "") +
         f"--skip-popstr "
-        f"--skip-straglr "
         f"--expansion-hunter-loci-per-run {expansion_hunter_loci_per_run} "
-        f"--gangstr-loci-per-run 1000000 "
+        f"--gangstr-loci-per-run {gangstr_loci_per_run} "
+        f"--straglr-loci-per-run {straglr_loci_per_run} "
         f"--high-confidence-regions-bed {high_confidence_regions_bed_input} "
         f"--all-hg38-repeats-bed {all_hg38_repeats_bed_input} "
+        f"--output-filename-prefix {row.sample_id}{suffix}"
         f"--truth-set-bed {variants_bed_input} "
         f"{variants_tsv_input}")
 
@@ -198,36 +202,36 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
     variant_catalogs_step.command(
         f"find tool_comparison -name '*.bed'")
 
-    n = 1 if exclude_homopolymers else (600000 // expansion_hunter_loci_per_run)
-    for i in range(1, n + 1):
-        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/expansion_hunter/positive_loci.EHv5.00{i}_of_00{n}.json")
-        if output_negative_loci:
-            variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/expansion_hunter/negative_loci.EHv5.00{i}_of_00{n}.json")
-
-    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/gangstr/positive_loci.GangSTR.001_of_001.bed")
+    #n = 1 if exclude_homopolymers else (600000 // expansion_hunter_loci_per_run)
+    #for i in range(1, n + 1):
+    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/expansion_hunter/{row.sample_id}{suffix}.positive_loci.EHv5.*.json")
     if output_negative_loci:
-        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/gangstr/negative_loci.GangSTR.001_of_001.bed")
+        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/expansion_hunter/{row.sample_id}{suffix}.negative_loci.EHv5.*.json")
 
-    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/hipstr/positive_loci.HipSTR.001_of_001.bed")
+    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/gangstr/{row.sample_id}{suffix}.positive_loci.GangSTR.*.bed")
     if output_negative_loci:
-        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/hipstr/negative_loci.HipSTR.001_of_001.bed")
+        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/gangstr/{row.sample_id}{suffix}.negative_loci.GangSTR.*.bed")
+
+    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/hipstr/{row.sample_id}{suffix}.positive_loci.HipSTR.*.bed")
+    if output_negative_loci:
+        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/hipstr/{row.sample_id}{suffix}.negative_loci.HipSTR.*.bed")
 
     #for chrom in [*range(1, 23), "X"]:
-    #    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/popstr/positive_loci.popSTR.chr{chrom}.markerInfo.gz")
+    #    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/popstr/{row.sample_id}{suffix}.positive_loci.popSTR.chr{chrom}.markerInfo.gz")
     #    if output_negative_loci:
-    #        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/popstr/negative_loci.popSTR.chr{chrom}.markerInfo.gz")
+    #        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/popstr/{row.sample_id}{suffix}.negative_loci.popSTR.chr{chrom}.markerInfo.gz")
 
-    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/trgt/positive_loci.TRGT_repeat_catalog.bed")
+    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/trgt/{row.sample_id}{suffix}.positive_loci.TRGT_repeat_catalog.bed")
     if output_negative_loci:
-        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/trgt/negative_loci.TRGT_repeat_catalog.bed")
+        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/trgt/{row.sample_id}{suffix}.negative_loci.TRGT_repeat_catalog.bed")
 
-    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/longtr/positive_loci.LongTR.001_of_001.bed")
+    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/longtr/{row.sample_id}{suffix}.positive_loci.LongTR.*.bed")
     if output_negative_loci:
-        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/longtr/negative_loci.LongTR.001_of_001.bed")
+        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/longtr/{row.sample_id}{suffix}.negative_loci.LongTR.*.bed")
 
-    #variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/straglr/positive_loci.straglr_catalog.bed")
-    #if output_negative_loci:
-    #    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/straglr/negative_loci.straglr_catalog.bed")
+    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/straglr/{row.sample_id}{suffix}.positive_loci.straglr_catalog.*.bed")
+    if output_negative_loci:
+        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/straglr/{row.sample_id}{suffix}.negative_loci.straglr_catalog.*.bed")
 
     return variant_catalogs_step
 
