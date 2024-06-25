@@ -19,7 +19,7 @@ import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
 STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:6e3128a78fe2125e5c12a999a64479084bdec2ed69ee95072c87a846d2a550ff"
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:9ea4e1e648e15bb370efbe59f096d54791c9b6dcb75f1ec3e957a3c897014bac"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:866d1678d865391e44f5f773725cd0621c279cf81aac39561239ff94ab1f1f54"
 
 
 def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False, keep_loci_that_have_overlapping_variants=False):
@@ -183,6 +183,7 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
     expansion_hunter_loci_per_run = 10000 # if exclude_homopolymers else 100000
     gangstr_loci_per_run = 1000000
     straglr_loci_per_run = 10000
+    variant_catalogs_step.command("set -exuo pipefail")
     variant_catalogs_step.command(
         f"python3 -u /str-truth-set/tool_comparison/scripts/convert_truth_set_to_variant_catalogs.py "
         f"--ref-fasta {hg38_fasta_input} " +
@@ -193,7 +194,7 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
         f"--straglr-loci-per-run {straglr_loci_per_run} "
         f"--high-confidence-regions-bed {high_confidence_regions_bed_input} "
         f"--all-hg38-repeats-bed {all_hg38_repeats_bed_input} "
-        f"--output-filename-prefix {row.sample_id}{suffix}"
+        f"--output-filename-prefix {row.sample_id}{suffix} "
         f"--truth-set-bed {variants_bed_input} "
         f"{variants_tsv_input}")
 

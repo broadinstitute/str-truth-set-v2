@@ -20,8 +20,8 @@ df.rename(columns={
 df = df.append([{
 	"sample_id": "HG002",  # aka. NA24385  (https://www.coriell.org/1/NIGMS/Collections/NIST-Reference-Materials)
 	"sequencing_data_type": "illumina",
-	"read_data_path": "gs://str-truth-set-v2/raw_data/HG002/illumina/HG002.pcr_free.cram"
-	"read_data_index_path": "gs://str-truth-set-v2/raw_data/HG002/illumina/HG002.pcr_free.cram.crai"
+	"read_data_path": "gs://str-truth-set-v2/raw_data/HG002/illumina/HG002.pcr_free.cram",
+	"read_data_index_path": "gs://str-truth-set-v2/raw_data/HG002/illumina/HG002.pcr_free.cram.crai",
 }, {
 	"sample_id": "HG002",
 	"sequencing_data_type": "element",
