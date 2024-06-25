@@ -273,7 +273,8 @@ def main():
         s4.command("cd /io")
 
         s4.command(f"""
-DOWNSAMPLE_FRACTION=$(echo "{target_coverage} / $(grep total {local_mosdepth_summary} | cut -f 4)" | bc -l | awk '{{printf "%.4f", $0}}')
+CURRENT_COVERAGE=$(grep total {local_mosdepth_summary} | cut -f 4)
+DOWNSAMPLE_FRACTION=$(echo "{target_coverage} / $CURRENT_COVERAGE " | bc -l | awk '{{printf "%.4f", $0}}')
 if [ $(echo "$DOWNSAMPLE_FRACTION < 1" | bc) -eq 1 ];
 then
     echo Downsampling to $DOWNSAMPLE_FRACTION
@@ -285,7 +286,7 @@ then
         CREATE_INDEX=true
     mv {output_bam_filename.replace('.bam', '.bai')} {output_bam_filename}.bai
 else
-    echo "Coverage is $DOWNSAMPLE_FRACTION which is already less than the target coverage of {target_coverage}x. Skipping downsampling."
+    echo "Coverage is $CURRENT_COVERAGE which is already less than the target coverage of {target_coverage}x. Skipping downsampling."
 fi    
 """)
         s4.command("ls -lh")
