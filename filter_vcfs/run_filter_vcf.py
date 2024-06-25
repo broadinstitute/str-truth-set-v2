@@ -19,7 +19,7 @@ import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
 STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:6e3128a78fe2125e5c12a999a64479084bdec2ed69ee95072c87a846d2a550ff"
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:866d1678d865391e44f5f773725cd0621c279cf81aac39561239ff94ab1f1f54"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:7e805a77fe83641d78df0fbe638819a29b51ea2a36059c07e11719a54da95796"
 
 
 def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False, keep_loci_that_have_overlapping_variants=False):
