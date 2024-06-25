@@ -2,23 +2,32 @@ import os
 import pandas as pd
 import re
 import sys
-from step_pipeline import pipeline, Backend, Localize, Delocalize
+
+from step_pipeline import pipeline, Backend, Localize, Delocalize, files_exist
 
 DOCKER_IMAGE = "weisburd/long-reads@sha256:cff73666379fdf0ab122ee66f614d13dfdff97f99297a563eda74a3f5d08266f"
 GATK_DOCKER_IMAGE = "weisburd/gatk:4.3.0.0"
 
 REFERENCE_FASTA = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
 
-TEMP_DIR = "gs://bw2-delete-after-60-days/long-reads"
+#TEMP_DIR = "gs://bw2-delete-after-60-days/long-reads"
+TEMP_DIR = "gs://bw2-delete-after-60-days/raw_data/pacbio"
 
+OUTPUT_DIR = "gs://str-truth-set-v2/raw_data/pacbio"
 
 SAMPLE_METADATA = {
     "CHM13": [
-        # from [Vollger 2023]: https://www.ncbi.nlm.nih.gov/sra/SRX5633451[accn]
-        "https://sra-pub-src-1.s3.amazonaws.com/SRR9087600/m64011_190228_190319.Q20.fastq.1",
-        "https://sra-pub-src-1.s3.amazonaws.com/SRR9087599/m64015_190225_155953.Q20.fastq.1",
-        "https://sra-pub-src-1.s3.amazonaws.com/SRR9087598/m64015_190221_025712.Q20.fastq.1",
-        "https://sra-pub-src-1.s3.amazonaws.com/SRR9087597/m64015_190224_013150.Q20.fastq.1",
+        # from [Vollger 2023]: https://www.ncbi.nlm.nih.gov/sra/SRX5633451[accn]  sequenced in 2019
+        #"https://sra-pub-src-1.s3.amazonaws.com/SRR9087600/m64011_190228_190319.Q20.fastq.1",
+        #"https://sra-pub-src-1.s3.amazonaws.com/SRR9087599/m64015_190225_155953.Q20.fastq.1",
+        #"https://sra-pub-src-1.s3.amazonaws.com/SRR9087598/m64015_190221_025712.Q20.fastq.1",
+        #"https://sra-pub-src-1.s3.amazonaws.com/SRR9087597/m64015_190224_013150.Q20.fastq.1",
+
+        # from https://trace.ncbi.nlm.nih.gov/Traces/?view=study&acc=SRP190633   sequenced in 2020
+        "https://sra-pub-src-2.s3.amazonaws.com/SRR11292121/m64062_190803_042216.fastq.1",
+        "https://sra-pub-src-2.s3.amazonaws.com/SRR11292123/m64062_190804_172951.fastq.1",
+        "https://sra-pub-src-2.s3.amazonaws.com/SRR11292120/m64062_190806_063919.fastq.1",
+        "https://sra-pub-src-2.s3.amazonaws.com/SRR11292122/m64062_190807_194840.fastq.1",
     ],
     "CHM1": [
         # from [Vollger 2023]: https://trace.ncbi.nlm.nih.gov/Traces/?view=run_browser&acc=SRR14407676&display=data-access
@@ -102,10 +111,14 @@ print(f"Processing PacBio data for {len(SAMPLE_METADATA)} HPRC samples")
 
 def main():
     bp = pipeline(backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline")
-
     parser = bp.get_config_arg_parser()
     parser.add_argument("-s", "--sample-id", action="append", help="only process the given sample id(s)", choices=SAMPLE_METADATA.keys())
     args = bp.parse_known_args()
+
+    if args.sample_id:
+        bp.set_name(f"PacBio align pipeline: {len(args.sample_id)} samples")
+    else:
+        bp.set_name(f"PacBio align pipeline: all {len(SAMPLE_METADATA)} samples")
 
     s0 = bp.new_step(f"pbmm2: index hg38",
                      arg_suffix=f"index",
@@ -127,8 +140,19 @@ def main():
     for sample_id, unaligned_reads_urls in SAMPLE_METADATA.items():
         if args.sample_id and sample_id not in args.sample_id:
             continue
+
+        if sample_id in ("CHM1", "CHM13"):
+            output_dir = TEMP_DIR
+        else:
+            output_dir = os.path.join(OUTPUT_DIR, sample_id, "pacbio")
+
+        if files_exist([
+            os.path.join(output_dir, f"{sample_id}.aligned.bam"),
+            os.path.join(output_dir, f"{sample_id}.aligned.bam.bai"),
+        ]):
+            continue
         
-        # if the data is @ SRA / EBI, download it to a gs:// bucket
+        # if the data is in SRA or EBI, download it to a gs:// bucket
         download_steps = []
         gs_paths = []
         for url in unaligned_reads_urls:
@@ -142,7 +166,7 @@ def main():
                 step_number=1,
                 image=DOCKER_IMAGE,
                 cpu=0.5,
-                storage="50Gi",
+                storage="200Gi",
                 output_dir=TEMP_DIR,
                 delocalize_by=Delocalize.GSUTIL_COPY,
             )
@@ -166,7 +190,7 @@ def main():
             cpu=16,
             memory="highmem",
             storage="500Gi",
-            output_dir=TEMP_DIR,
+            output_dir=output_dir,
             #delocalize_by=Delocalize.GSUTIL_COPY,
         )
         s2.depends_on(download_steps)
@@ -198,7 +222,7 @@ def main():
             image=DOCKER_IMAGE,
             cpu=1,
             memory="standard",
-            output_dir=TEMP_DIR,
+            output_dir=output_dir,
             localize_by=Localize.HAIL_BATCH_CLOUDFUSE,
         )
         local_bam_path, _ = s3.use_previous_step_outputs_as_inputs(s2)
@@ -208,7 +232,12 @@ def main():
         s3.command(f"cat {sample_id}.mosdepth.summary.txt")
 
         s3.output(f"{sample_id}.mosdepth.summary.txt")
-        s3.output(f"{sample_id}.mosdepth.global.dist.txt")
+        #s3.output(f"{sample_id}.mosdepth.global.dist.txt")
+
+        s3.command(f"cat {sample_id}.mosdepth.summary.txt | cut -f 4 | tail -n +2 | head -n 23")
+        s3.command(f"grep total {sample_id}.mosdepth.summary.txt > {sample_id}.total_coverage.txt")
+        s3.command(f"cat {sample_id}.total_coverage.txt")
+        s3.output(f"{sample_id}.total_coverage.txt")
 
         # downsample to 30x
         s4 = bp.new_step(
@@ -219,16 +248,16 @@ def main():
             cpu=2,
             memory="highmem",
             storage="200Gi",
-            output_dir=TEMP_DIR,
+            output_dir=output_dir,
             localize_by=Localize.HAIL_BATCH_CLOUDFUSE,
         )
         s4.depends_on(s3)
 
         local_fasta =  s4.input(REFERENCE_FASTA)
-        local_bam, _ = s4.inputs(os.path.join(TEMP_DIR, f"{sample_id}.aligned.bam"),
-                                 os.path.join(TEMP_DIR, f"{sample_id}.aligned.bam.bai"))
+        local_bam, _ = s4.inputs(os.path.join(output_dir, f"{sample_id}.aligned.bam"),
+                                 os.path.join(output_dir, f"{sample_id}.aligned.bam.bai"))
 
-        local_mosdepth_summary = s4.input(os.path.join(TEMP_DIR, f"{sample_id}.mosdepth.summary.txt"))
+        local_mosdepth_summary = s4.input(os.path.join(output_dir, f"{sample_id}.mosdepth.summary.txt"))
 
         if sample_id in ("CHM1", "CHM13"):
             target_coverage = 15
@@ -243,14 +272,22 @@ def main():
         s4.command("set -ex")
         s4.command("cd /io")
 
-        s4.command(f"time gatk --java-options '-Xmx11G' DownsampleSam "
-                   f"REFERENCE_SEQUENCE={local_fasta} "
-                   f"I={local_bam} "
-                   f"O={output_bam_filename} "
-                   f"""P=$(echo "{target_coverage} / $(grep total {local_mosdepth_summary} | cut -f 4)" | bc -l | awk '{{printf "%.4f", $0}}') """
-                   f"CREATE_INDEX=true")
-
-        s4.command(f"mv {output_bam_filename.replace('.bam', '.bai')} {output_bam_filename}.bai")  # rename the .bai file
+        s4.command(f"""
+DOWNSAMPLE_FRACTION=$(echo "{target_coverage} / $(grep total {local_mosdepth_summary} | cut -f 4)" | bc -l | awk '{{printf "%.4f", $0}}')
+if [ $(echo "$DOWNSAMPLE_FRACTION < 1" | bc) -eq 1 ];
+then
+    echo Downsampling to $DOWNSAMPLE_FRACTION
+    time gatk --java-options '-Xmx11G' DownsampleSam \ 
+        REFERENCE_SEQUENCE={local_fasta} \
+        I={local_bam} \
+        O={output_bam_filename} \
+        P=$DOWNSAMPLE_FRACTION \
+        CREATE_INDEX=true
+    mv {output_bam_filename.replace('.bam', '.bai')} {output_bam_filename}.bai
+else
+    echo "Coverage is $DOWNSAMPLE_FRACTION which is already less than the target coverage of {target_coverage}x. Skipping downsampling."
+fi    
+""")
         s4.command("ls -lh")
 
         #s4.command(f"gatk CollectWgsMetrics STOP_AFTER={5*10**7} I={output_bam_filename} O=metrics.txt R={local_fasta}")
@@ -259,12 +296,14 @@ def main():
         s4.output(f"/io/{output_bam_filename}")
         s4.output(f"/io/{output_bam_filename}.bai")
 
-    if args.sample_id:
+    if len(align_bam_files_for_CHM1_CHM13_steps) != 2:
         bp.run()        
         return
     
     # use samtools to merge bam files in aligned_bam_files_for_CHM1_CHM13
     merged_sample_id = "CHM1_CHM13"
+    final_output_dir = os.path.join(OUTPUT_DIR, merged_sample_id, "pacbio")
+
     s5 = bp.new_step(
         f"pbmm2: merge {merged_sample_id}",
         arg_suffix=f"merge",
@@ -273,7 +312,7 @@ def main():
         cpu=2,
         memory="highmem",
         storage="200Gi",
-        output_dir=TEMP_DIR,
+        output_dir=final_output_dir,
         localize_by=Localize.HAIL_BATCH_CLOUDFUSE,
     )
     for s in align_bam_files_for_CHM1_CHM13_steps:
@@ -301,7 +340,7 @@ def main():
         image=DOCKER_IMAGE,
         cpu=1,
         memory="standard",
-        output_dir=TEMP_DIR,
+        output_dir=final_output_dir,
         localize_by=Localize.HAIL_BATCH_CLOUDFUSE,
     )
     local_bam_path, _ = s6.use_previous_step_outputs_as_inputs(s5)
@@ -310,8 +349,14 @@ def main():
     s6.command("ls -lh")
     s6.command(f"cat {merged_sample_id}.mosdepth.summary.txt")
 
-    s6.output(f"{merged_sample_id}.mosdepth.summary.txt")
-    s6.output(f"{merged_sample_id}.mosdepth.global.dist.txt")
+    #s6.output(f"{merged_sample_id}.mosdepth.summary.txt")
+    #s6.output(f"{merged_sample_id}.mosdepth.global.dist.txt")
+
+    s6.command(f"cat {merged_sample_id}.mosdepth.summary.txt | cut -f 4 | tail -n +2 | head -n 23")
+    s6.command(f"grep total {merged_sample_id}.mosdepth.summary.txt > {merged_sample_id}.total_coverage.txt")
+    s6.command(f"cat {merged_sample_id}.total_coverage.txt")
+
+    s6.output(f"{merged_sample_id}.total_coverage.txt")
 
     bp.run()
 

@@ -26,7 +26,7 @@ RUN apt update && apt-get install --no-install-recommends -y \
     time
 
 # install gcloud
-ENV GCLOUD_SDK_VERISON="441.0.0"
+ENV GCLOUD_SDK_VERISON="481.0.0"
 RUN wget https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-${GCLOUD_SDK_VERISON}-linux-x86_64.tar.gz \
     && tar xzf google-cloud-sdk-${GCLOUD_SDK_VERISON}-linux-x86_64.tar.gz \
     && /google-cloud-sdk/install.sh -q \
@@ -36,7 +36,7 @@ RUN wget https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud
 ENV PATH=/google-cloud-sdk/bin:$PATH
 
 # install htslib
-ENV SAMTOOLS_VERSION="1.17"
+ENV SAMTOOLS_VERSION="1.20"
 RUN wget https://github.com/samtools/htslib/releases/download/${SAMTOOLS_VERSION}/htslib-${SAMTOOLS_VERSION}.tar.bz2 \
     && tar xjf htslib-${SAMTOOLS_VERSION}.tar.bz2 \
     && rm htslib-${SAMTOOLS_VERSION}.tar.bz2 \
