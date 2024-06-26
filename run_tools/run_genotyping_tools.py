@@ -221,3 +221,240 @@ python3 ../../str-truth-set/figures_and_tables/plot_tool_accuracy_by_allele_size
     --genotype all \
     --show-title
 """
+
+
+"""
+# Run tool pipelines using Hail Batch
+
+
+force=""
+#force="--force"
+
+debug=""
+#debug="echo"
+if [ -z "$debug" ]; then
+  set -ex
+fi
+
+function run_pipelines {
+    input_bam=$1
+    input_bai=$2
+    output_dir=$3
+    local_dir=$4
+    run_illumina_expansion_hunter=$5
+    min_locus_coverage_arg=$6
+
+    # ExpansionHunter
+    $debug python3 ./tool_comparison/hail_batch_pipelines/expansion_hunter_pipeline.py  --positive-loci --input-bam ${input_bam} --input-bai ${input_bai} --output-dir ${output_dir}/expansion_hunter ${min_locus_coverage_arg} ${force} &
+    $debug python3 ./tool_comparison/hail_batch_pipelines/expansion_hunter_pipeline.py  --negative-loci --input-bam ${input_bam} --input-bai ${input_bai} --output-dir ${output_dir}/expansion_hunter ${min_locus_coverage_arg} ${force} &
+
+    if [ "$run_illumina_expansion_hunter" == "yes" ]; then
+	      $debug python3 ./tool_comparison/hail_batch_pipelines/expansion_hunter_pipeline.py  --use-illumina-expansion-hunter --loci-to-exclude ./tool_comparison/hail_batch_pipelines/truth_set_loci_that_cause_illumina_expansion_hunter_error.txt \
+            --positive-loci --input-bam ${input_bam} --input-bai ${input_bai} --output-dir ${output_dir}/expansion_hunter ${min_locus_coverage_arg}  ${force} &
+	      $debug python3 ./tool_comparison/hail_batch_pipelines/expansion_hunter_pipeline.py  --use-illumina-expansion-hunter --loci-to-exclude ./tool_comparison/hail_batch_pipelines/negative_loci_that_cause_illumina_expansion_hunter_error.txt \
+	          --negative-loci --input-bam ${input_bam} --input-bai ${input_bai} --output-dir ${output_dir}/expansion_hunter ${min_locus_coverage_arg}  ${force} &
+    fi
+
+    # GangSTR
+    $debug python3 ./tool_comparison/hail_batch_pipelines/gangstr_pipeline.py  --positive-loci --input-bam ${input_bam} --input-bai ${input_bai} --output-dir ${output_dir}/gangstr ${force} &
+    $debug python3 ./tool_comparison/hail_batch_pipelines/gangstr_pipeline.py  --negative-loci --input-bam ${input_bam} --input-bai ${input_bai} --output-dir ${output_dir}/gangstr ${force} &
+
+    # HipSTR
+    $debug python3 ./tool_comparison/hail_batch_pipelines/hipstr_pipeline.py  --positive-loci --input-bam ${input_bam} --input-bai ${input_bai} --output-dir ${output_dir}/hipstr ${force} &
+    $debug python3 ./tool_comparison/hail_batch_pipelines/hipstr_pipeline.py  --negative-loci --input-bam ${input_bam} --input-bai ${input_bai} --output-dir ${output_dir}/hipstr ${force} &
+
+    # wait for all pipelines except ExpansionHunterDenovo because that one takes a long time and uses few jobs, so it
+    # can just run in the background
+    wait_for_pids="$(jobs -p)"
+
+    # ExpansionHunterDenovo
+    $debug python3 ./tool_comparison/hail_batch_pipelines/expansion_hunter_denovo_pipeline.py --input-bam ${input_bam} --input-bai ${input_bai} --output-dir ${output_dir}/expansion_hunter_denovo &
+
+    wait < <(echo ${wait_for_pids})
+
+    # download results
+    $debug mkdir -p ${local_dir}/expansion_hunter_denovo
+    $debug gsutil -m cp ${output_dir}/expansion_hunter_denovo/CHM*.locus.tsv ${local_dir}/expansion_hunter_denovo/
+
+    $debug mkdir -p ${local_dir}/expansion_hunter/positive_loci/      ${local_dir}/expansion_hunter/negative_loci/
+    $debug gsutil -m cp ${output_dir}/expansion_hunter/positive_loci/combined.positive_loci.*_json_files.*.tsv.gz ${local_dir}/expansion_hunter/positive_loci/
+    $debug gsutil -m cp ${output_dir}/expansion_hunter/negative_loci/combined.negative_loci.*_json_files.*.tsv.gz ${local_dir}/expansion_hunter/negative_loci/
+
+    $debug mkdir -p ${local_dir}/gangstr/positive_loci/      ${local_dir}/gangstr/negative_loci/
+    $debug gsutil -m cp ${output_dir}/gangstr/positive_loci/combined.positive_loci.*_json_files.*.tsv.gz ${local_dir}/gangstr/positive_loci/
+    $debug gsutil -m cp ${output_dir}/gangstr/negative_loci/combined.negative_loci.*_json_files.*.tsv.gz ${local_dir}/gangstr/negative_loci/
+
+    $debug mkdir -p ${local_dir}/hipstr/positive_loci/      ${local_dir}/hipstr/negative_loci/
+    $debug gsutil -m cp ${output_dir}/hipstr/positive_loci/combined.positive_loci.*_json_files.*.tsv.gz ${local_dir}/hipstr/positive_loci/
+    $debug gsutil -m cp ${output_dir}/hipstr/negative_loci/combined.negative_loci.*_json_files.*.tsv.gz ${local_dir}/hipstr/negative_loci/
+}
+
+# Downsample coverage
+for coverage in 30 20 10 5; do
+    $debug python3 ./tool_comparison/hail_batch_pipelines/downsample_bam_pipeline.py --verbose --target-coverage ${coverage} \
+	--output-dir gs://bw2-delete-after-30-days/ --input-bam gs://broad-public-datasets/CHM1_CHM13_WGS2/CHM1_CHM13_WGS2.cram &
+done
+
+
+# Run pipelines on original bam
+run_pipelines \
+  "gs://broad-public-datasets/CHM1_CHM13_WGS2/CHM1_CHM13_WGS2.cram" \
+  "gs://broad-public-datasets/CHM1_CHM13_WGS2/CHM1_CHM13_WGS2.cram.crai" \
+  "gs://str-truth-set/hg38/tool_results" \
+  "./tool_comparison/results" \
+  "yes" \
+  ""
+
+
+# Run pipelines on exome data
+run_pipelines \
+  "gs://broad-public-datasets/CHM1_CHM13_WES/CHMI_CHMI3_Nex1.cram" \
+  "gs://broad-public-datasets/CHM1_CHM13_WES/CHMI_CHMI3_Nex1.cram.crai" \
+  "gs://str-truth-set/hg38/tool_results_for_exome" \
+  "./tool_comparison/results_for_exome" \
+  "no" \
+  ""
+
+wait   # wait for downsampling to finish
+
+# Process other coverage levels
+for coverage in 30 20 10 5; do
+    if [ "$coverage" == "10" ] || [ "$coverage" == "5" ]; then
+	      min_locus_coverage="--min-locus-coverage 3"
+    else
+	      min_locus_coverage=""
+    fi
+
+    # Rerun pipelines on downsampled bam
+    run_pipelines \
+      "gs://bw2-delete-after-30-days/CHM1_CHM13_WGS2.downsampled_to_${coverage}x.bam" \
+      "gs://bw2-delete-after-30-days/CHM1_CHM13_WGS2.downsampled_to_${coverage}x.bam.bai" \
+      "gs://str-truth-set/hg38/tool_results_for_downsampled_${coverage}x_bam" \
+      "./tool_comparison/results_for_downsampled_${coverage}x_bam" \
+      "no" \
+      "${min_locus_coverage}"
+done
+
+# Run REViewer
+python3 ./tool_comparison/hail_batch_pipelines/expansion_hunter_pipeline.py  --positive-loci --run-reviewer \
+	--input-bam gs://broad-public-datasets/CHM1_CHM13_WGS2/CHM1_CHM13_WGS2.cram --input-bai gs://broad-public-datasets/CHM1_CHM13_WGS2/CHM1_CHM13_WGS2.cram.crai \
+	--output-dir gs://str-truth-set/hg38/tool_results/expansion_hunter &
+python3 ./tool_comparison/hail_batch_pipelines/expansion_hunter_pipeline.py  --negative-loci --run-reviewer \
+	--input-bam gs://broad-public-datasets/CHM1_CHM13_WGS2/CHM1_CHM13_WGS2.cram --input-bai gs://broad-public-datasets/CHM1_CHM13_WGS2/CHM1_CHM13_WGS2.cram.crai \
+	--output-dir gs://str-truth-set/hg38/tool_results/expansion_hunter &
+
+python3 ./tool_comparison/scripts/add_reviewer_image_url_to_bed.py -i ./STR_truth_set.v1.variants.bed.gz
+python3 ./tool_comparison/scripts/add_reviewer_image_url_to_bed.py -i ./tool_comparison/variant_catalogs/negative_loci.bed.gz
+
+gsutil -m cp ./STR_truth_set.v1.variants.with_reviewer_image_urls.bed.gz* gs://str-truth-set/hg38/
+gsutil -m cp ./tool_comparison/variant_catalogs/negative_loci.with_reviewer_image_urls.bed.gz* gs://str-truth-set/hg38/tool_comparison/variant_catalogs/
+
+wait  # wait for any remaining jobs to finish
+
+echo Done with step C
+
+"""
+
+
+
+# ===============================
+"""
+set -x
+set -e
+set -u
+
+# ExpansionHunter, GangSTR, HipSTR
+for results_folder in \
+  results_for_exome \
+  results \
+  results_for_downsampled_30x_bam \
+  results_for_downsampled_20x_bam \
+  results_for_downsampled_10x_bam \
+  results_for_downsampled_5x_bam
+do
+  # compute STR_truth_set.v1.variants.for_comparison.tsv.gz
+  python3 -u tool_comparison/scripts/compute_truth_set_tsv_for_comparisons.py \
+      --output-dir ./tool_comparison/${results_folder}/  \
+      STR_truth_set.v1.variants.tsv.gz \
+      ./tool_comparison/variant_catalogs/negative_loci.tsv.gz
+
+  mv ./tool_comparison/${results_folder}/STR_truth_set.v1.variants.for_comparison.tsv.gz \
+     ./tool_comparison/${results_folder}/STR_truth_set.v1.for_comparison.tsv.gz
+
+  for i in 1 2 3;
+  do
+      if [ $i == 1 ]; then
+        tool=ExpansionHunter
+        subfolder=expansion_hunter
+      elif [ $i == 2 ]; then
+        tool=GangSTR
+        subfolder=gangstr
+      elif [ $i == 3 ]; then
+        tool=HipSTR
+        subfolder=hipstr
+      else
+        echo ERROR: unexpected i == $i
+        exit 1;
+      fi
+
+
+      set +x
+      echo ============================================
+      echo Processing $results_folder $tool results
+      set -x
+
+      python3 -u tool_comparison/scripts/add_tool_results_columns.py \
+	      --tool $tool \
+	      ./tool_comparison/${results_folder}/${subfolder}/positive_loci/combined.positive_loci.*_json_files.variants.tsv.gz \
+	      ./tool_comparison/${results_folder}/STR_truth_set.v1.for_comparison.tsv.gz
+
+      python3 -u tool_comparison/scripts/add_tool_results_columns.py \
+	      --tool $tool \
+	      ./tool_comparison/${results_folder}/${subfolder}/negative_loci/combined.negative_loci.*_json_files.variants.tsv.gz \
+	      ./tool_comparison/${results_folder}/negative_loci.for_comparison.tsv.gz
+
+      mv ./tool_comparison/${results_folder}/STR_truth_set.v1.for_comparison.with_${tool}_results.tsv.gz \
+         ./tool_comparison/${results_folder}/STR_truth_set.v1.for_comparison.tsv.gz
+      mv ./tool_comparison/${results_folder}/negative_loci.for_comparison.with_${tool}_results.tsv.gz \
+         ./tool_comparison/${results_folder}/negative_loci.for_comparison.tsv.gz
+  done
+
+  # add tool vs. truth set concordance columns
+  python3 -u tool_comparison/scripts/add_concordance_columns.py \
+    ./tool_comparison/${results_folder}/STR_truth_set.v1.for_comparison.tsv.gz
+
+  python3 -u tool_comparison/scripts/add_concordance_columns.py \
+    ./tool_comparison/${results_folder}/negative_loci.for_comparison.tsv.gz
+
+  # rename files
+  mv ./tool_comparison/${results_folder}/STR_truth_set.v1.for_comparison.with_concordance.tsv.gz \
+     ./tool_comparison/${results_folder}/STR_truth_set.v1.for_comparison.variants.tsv.gz
+  mv ./tool_comparison/${results_folder}/STR_truth_set.v1.for_comparison.with_concordance.alleles.tsv.gz \
+     ./tool_comparison/${results_folder}/STR_truth_set.v1.for_comparison.alleles.tsv.gz
+  mv ./tool_comparison/${results_folder}/negative_loci.for_comparison.with_concordance.tsv.gz \
+     ./tool_comparison/${results_folder}/negative_loci.for_comparison.variants.tsv.gz
+  mv ./tool_comparison/${results_folder}/negative_loci.for_comparison.with_concordance.alleles.tsv.gz \
+     ./tool_comparison/${results_folder}/negative_loci.for_comparison.alleles.tsv.gz
+
+  gunzip -f ./tool_comparison/${results_folder}/STR_truth_set.v1.for_comparison.variants.tsv.gz
+  gunzip -f ./tool_comparison/${results_folder}/negative_loci.for_comparison.variants.tsv.gz
+  gunzip -f ./tool_comparison/${results_folder}/STR_truth_set.v1.for_comparison.alleles.tsv.gz
+  gunzip -f ./tool_comparison/${results_folder}/negative_loci.for_comparison.alleles.tsv.gz
+
+  # clean up intermediate files
+  rm ./tool_comparison/${results_folder}/STR_truth_set.v1.for_comparison.tsv.gz
+  rm ./tool_comparison/${results_folder}/negative_loci.for_comparison.tsv.gz
+done
+
+# generate EHdn comparison tables for each depth-of-coverage
+python3 -u ./tool_comparison/scripts/intersect_expansion_hunter_denovo_results_with_truth_set.py \
+  --window-size 600 --truth-set-variants-tsv ./STR_truth_set.v1.variants.tsv.gz  \
+  ./tool_comparison/results*/expansion_hunter_denovo/CHM1_CHM13_WGS2.*locus.tsv
+
+# combine all
+python3 -u ./tool_comparison/scripts/combine_all_results_tables.py
+
+gsutil -m cp ./tool_comparison/combined.results.*.tsv.gz  gs://str-truth-set/hg38/
+
+echo Done with step D
+"""

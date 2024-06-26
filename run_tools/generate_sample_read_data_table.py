@@ -6,6 +6,7 @@ read_data_path
 read_data_index_path
 """
 
+import hailtop.fs as hfs
 import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, files_exist
@@ -68,7 +69,9 @@ for _, row in df.iterrows():
 		print(f"{row.sample_id} read data file {row.read_data_path} not found. Skipping...")
 		continue
 
-	s1 = bp.new_step(f"depth: {row.sample_id}", image=FILTER_VCFS_DOCKER_IMAGE, arg_suffix="depth", cpu=1, storage="100Gi")
+	stats = hfs.ls(row.read_data_path)
+	read_data_size = max(50, int(stats[0].size/10**9))  # at least 50 Gb
+	s1 = bp.new_step(f"depth: {row.sample_id}", image=FILTER_VCFS_DOCKER_IMAGE, arg_suffix="depth", cpu=1, storage=f"{read_data_size + 20}Gi")
 	s1.switch_gcloud_auth_to_user_account()
 	local_fasta, _ = s1.inputs(REFERENCE_FASTA_PATH, REFERENCE_FASTA_INDEX_PATH, localize_by=Localize.COPY)
 	local_bam, _ = s1.inputs(row.read_data_path, row.read_data_index_path, localize_by=Localize.COPY)
