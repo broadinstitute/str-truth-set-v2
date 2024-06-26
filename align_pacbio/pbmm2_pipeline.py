@@ -297,7 +297,7 @@ fi
         s4.output(f"/io/{output_bam_filename}")
         s4.output(f"/io/{output_bam_filename}.bai")
 
-    if len(align_bam_files_for_CHM1_CHM13_steps) != 2:
+    if not ("CHM1" in SAMPLE_METADATA and "CHM13" in SAMPLE_METADATA):
         bp.run()        
         return
     
