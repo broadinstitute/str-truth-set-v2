@@ -25,6 +25,7 @@ def main():
     p = batch_pipeline.get_config_arg_parser()
     p.add_argument("-o", "--output-cram", required=True, help="gs:// path of output CRAM")
     p.add_argument("-g", "--reference", choices={"37", "38", "t2t"}, default="38", help="Reference genome fasta.")
+    p.add_argument("--use-non-preemptibles", action="store_true", help="Run jobs on non-preemptible VMs")
     p.add_argument("fastq_r1", help="Input FASTQ file _R1")
     p.add_argument("fastq_r2", help="Input FASTQ file _R2")
     args, _ = p.parse_known_args()
@@ -41,6 +42,10 @@ def main():
     cpus = 8
     s1 = batch_pipeline.new_step(f"bwa mem: {cram_filename}", step_number=1, arg_suffix="bwa",
         image=DOCKER_IMAGE, cpu=cpus, memory="standard", storage="300G")
+
+    if args.use_non_preemptibles:
+        s1.preemptible(False)
+
     #s1.switch_gcloud_auth_to_user_account()
 
     local_r1_fastq, local_r2_fastq = s1.inputs(args.fastq_r1, args.fastq_r2, localize_by=Localize.COPY)
