@@ -80,13 +80,15 @@ for _, row in df.iterrows():
 	s1.command("curl -L https://github.com/brentp/mosdepth/releases/download/v0.3.5/mosdepth -o /usr/local/bin/mosdepth")
 	s1.command("chmod 777 /usr/local/bin/mosdepth")
 
+	s1.command("cd /io/")
 	s1.command(f"mosdepth -f {local_fasta} -x {row.sample_id}.coverage {local_bam}")
 	#s1.output(f"{row.sample_id}.coverage.mosdepth.summary.txt")
 
 	s1.command(f"cat {row.sample_id}.coverage.mosdepth.summary.txt | cut -f 4 | tail -n +2 | head -n 23")
 	s1.command(f"grep total {row.sample_id}.coverage.mosdepth.summary.txt > {row.sample_id}.total_coverage.txt")
 	s1.command(f"cat {row.sample_id}.total_coverage.txt")
-	s1.output(f"{row.sample_id}.total_coverage.txt", row.depth_stats_path)
+
+	s1.output(f"/io/{row.sample_id}.total_coverage.txt", row.depth_stats_path)
 
 bp.run()
 

@@ -142,13 +142,16 @@ def main():
             continue
 
         if sample_id in ("CHM1", "CHM13"):
+            target_coverage = 15
             output_dir = TEMP_DIR
         else:
+            target_coverage = 30
             output_dir = os.path.join(OUTPUT_DIR, sample_id, "pacbio")
 
+        output_bam_filename = f"{sample_id}.downsampled_to_{target_coverage}x.bam"
         if files_exist([
-            os.path.join(output_dir, f"{sample_id}.aligned.bam"),
-            os.path.join(output_dir, f"{sample_id}.aligned.bam.bai"),
+            os.path.join(output_dir, output_bam_filename),
+            os.path.join(output_dir, f"{output_bam_filename}.bai"),
         ]):
             continue
         
@@ -260,12 +263,6 @@ def main():
         local_mosdepth_summary = s4.input(os.path.join(output_dir, f"{sample_id}.mosdepth.summary.txt"))
 
         if sample_id in ("CHM1", "CHM13"):
-            target_coverage = 15
-        else:
-            target_coverage = 30
-
-        output_bam_filename = f"{sample_id}.downsampled_to_{target_coverage}x.bam"
-        if sample_id in ("CHM1", "CHM13"):
             aligned_bam_files_for_CHM1_CHM13.append(output_bam_filename)
             align_bam_files_for_CHM1_CHM13_steps.append(s4)
 
@@ -275,15 +272,15 @@ def main():
         s4.command(f"""
 CURRENT_COVERAGE=$(grep total {local_mosdepth_summary} | cut -f 4)
 DOWNSAMPLE_FRACTION=$(echo "{target_coverage} / $CURRENT_COVERAGE " | bc -l | awk '{{printf "%.4f", $0}}')
-if [ $(echo "$DOWNSAMPLE_FRACTION < 1" | bc) -eq 1 ];
+if [ $(echo "$DOWNSAMPLE_FRACTION < 0.95" | bc) -eq 1 ];
 then
     echo Downsampling to $DOWNSAMPLE_FRACTION
-    time gatk --java-options '-Xmx11G' DownsampleSam \ 
-        REFERENCE_SEQUENCE={local_fasta} \
-        I={local_bam} \
-        O={output_bam_filename} \
-        P=$DOWNSAMPLE_FRACTION \
-        CREATE_INDEX=true
+    time gatk --java-options '-Xmx11G' DownsampleSam \
+        --REFERENCE_SEQUENCE {local_fasta} \
+        -I {local_bam} \
+        -O {output_bam_filename} \
+        -P $DOWNSAMPLE_FRACTION \
+        --CREATE_INDEX true
     mv {output_bam_filename.replace('.bam', '.bai')} {output_bam_filename}.bai
 else
     echo "Coverage is $CURRENT_COVERAGE which is already less than the target coverage of {target_coverage}x. Skipping downsampling."
