@@ -13,7 +13,7 @@ REFERENCE_FASTA = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_a
 #TEMP_DIR = "gs://bw2-delete-after-60-days/long-reads"
 TEMP_DIR = "gs://bw2-delete-after-60-days/raw_data/pacbio"
 
-OUTPUT_DIR = "gs://str-truth-set-v2/raw_data/pacbio"
+OUTPUT_DIR = "gs://str-truth-set-v2/raw_data"
 
 SAMPLE_METADATA = {
     "CHM13": [
@@ -149,6 +149,9 @@ def main():
             output_dir = os.path.join(OUTPUT_DIR, sample_id, "pacbio")
 
         output_bam_filename = f"{sample_id}.downsampled_to_{target_coverage}x.bam"
+        if sample_id in ("CHM1", "CHM13"):
+            aligned_bam_files_for_CHM1_CHM13.append(output_bam_filename)
+
         if files_exist([
             os.path.join(output_dir, output_bam_filename),
             os.path.join(output_dir, f"{output_bam_filename}.bai"),
@@ -238,9 +241,9 @@ def main():
         #s3.output(f"{sample_id}.mosdepth.global.dist.txt")
 
         s3.command(f"cat {sample_id}.mosdepth.summary.txt | cut -f 4 | tail -n +2 | head -n 23")
-        s3.command(f"grep total {sample_id}.mosdepth.summary.txt > {sample_id}.total_coverage.txt")
-        s3.command(f"cat {sample_id}.total_coverage.txt")
-        s3.output(f"{sample_id}.total_coverage.txt")
+        s3.command(f"grep total {sample_id}.mosdepth.summary.txt > {sample_id}.total_depth.txt")
+        s3.command(f"cat {sample_id}.total_depth.txt")
+        s3.output(f"{sample_id}.total_depth.txt")
 
         # downsample to 30x
         s4 = bp.new_step(
@@ -250,7 +253,7 @@ def main():
             image=GATK_DOCKER_IMAGE,
             cpu=2,
             memory="highmem",
-            storage="200Gi",
+            storage="300Gi",
             output_dir=output_dir,
             localize_by=Localize.HAIL_BATCH_CLOUDFUSE,
         )
@@ -263,7 +266,6 @@ def main():
         local_mosdepth_summary = s4.input(os.path.join(output_dir, f"{sample_id}.mosdepth.summary.txt"))
 
         if sample_id in ("CHM1", "CHM13"):
-            aligned_bam_files_for_CHM1_CHM13.append(output_bam_filename)
             align_bam_files_for_CHM1_CHM13_steps.append(s4)
 
         s4.command("set -ex")
@@ -351,10 +353,10 @@ fi
     #s6.output(f"{merged_sample_id}.mosdepth.global.dist.txt")
 
     s6.command(f"cat {merged_sample_id}.mosdepth.summary.txt | cut -f 4 | tail -n +2 | head -n 23")
-    s6.command(f"grep total {merged_sample_id}.mosdepth.summary.txt > {merged_sample_id}.total_coverage.txt")
-    s6.command(f"cat {merged_sample_id}.total_coverage.txt")
+    s6.command(f"grep total {merged_sample_id}.mosdepth.summary.txt > {merged_sample_id}.total_depth.txt")
+    s6.command(f"cat {merged_sample_id}.total_depth.txt")
 
-    s6.output(f"{merged_sample_id}.total_coverage.txt")
+    s6.output(f"{merged_sample_id}.total_depth.txt")
 
     bp.run()
 

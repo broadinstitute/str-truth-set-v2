@@ -41,7 +41,7 @@ def main():
 
     cpus = 8
     s1 = batch_pipeline.new_step(f"bwa mem: {cram_filename}", step_number=1, arg_suffix="bwa",
-        image=DOCKER_IMAGE, cpu=cpus, memory="standard", storage="300G")
+        image=DOCKER_IMAGE, cpu=cpus, memory="standard", storage="600G")
 
     if args.use_non_preemptibles:
         s1.preemptible(False)
@@ -93,10 +93,10 @@ def main():
     #s2.output(f"{bam_or_cram_prefix}.coverage.mosdepth.summary.txt")
 
     s2.command(f"cat {cram_prefix}.coverage.mosdepth.summary.txt | cut -f 4 | tail -n +2 | head -n 23")
-    s2.command(f"grep total {cram_prefix}.coverage.mosdepth.summary.txt > {cram_prefix}.total_coverage.txt")
-    s2.command(f"cat {cram_prefix}.total_coverage.txt")
+    s2.command(f"grep total {cram_prefix}.coverage.mosdepth.summary.txt > {cram_prefix}.total_depth.txt")
+    s2.command(f"cat {cram_prefix}.total_depth.txt")
 
-    s2.output(f"{cram_prefix}.total_coverage.txt")
+    s2.output(f"{cram_prefix}.total_depth.txt")
 
     batch_pipeline.run()
 

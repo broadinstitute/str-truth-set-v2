@@ -10,6 +10,8 @@ import hailtop.fs as hfs
 import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, files_exist
+from str_analysis.utils.file_utils import open_file
+
 
 FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:bce1d8d478808ced1bacebfe20ad3226e581c698f3ae8a8f4f72597f9414c5ca"
 
@@ -61,17 +63,35 @@ df = pd.concat([df, pd.DataFrame([{
 	# gs://fc-703b4766-6342-4eec-b16f-d9299617a380/gnomad_Misc__wgs_Aug2019/G100862/WGS/NA12878/v3/NA12878.cram
 	# gs://fc-703b4766-6342-4eec-b16f-d9299617a380/gnomad_Misc__wgs_Aug2019/G100862/WGS/NA12878/v3/NA12878.cram.crai
 
+}, {
+	"sample_id": "CHM1_CHM13",
+	"sequencing_data_type": "pacbio",
+	"read_data_path": "gs://str-truth-set-v2/raw_data/pacbio/CHM1_CHM13/pacbio/CHM1_CHM13.aligned.bam",
+	"read_data_index_path": "gs://str-truth-set-v2/raw_data/pacbio/CHM1_CHM13/pacbio/CHM1_CHM13.aligned.bam.bai",
+	"depth_stats_path": "gs://str-truth-set-v2/raw_data/pacbio/CHM1_CHM13/pacbio/CHM1_CHM13.total_depth.txt",
+}, {
+	"sample_id": "HG002",
+	"sequencing_data_type": "pacbio",
+	"read_data_path":       "gs://str-truth-set-v2/raw_data/HG002/pacbio/HG002.bam",
+	"read_data_index_path": "gs://str-truth-set-v2/raw_data/HG002/pacbio/HG002.bam.bai",
+	"depth_stats_path":     "gs://str-truth-set-v2/raw_data/HG002/pacbio/HG002.total_depth.txt",
+}, {
+	"sample_id": "HG005",
+	"sequencing_data_type": "pacbio",
+	"read_data_path":       "gs://str-truth-set-v2/raw_data/HG005/pacbio/HG005.downsampled_to_30x.bam",
+	"read_data_index_path": "gs://str-truth-set-v2/raw_data/HG005/pacbio/HG005.downsampled_to_30x.bam.bai",
+	"depth_stats_path":     "gs://str-truth-set-v2/raw_data/HG005/pacbio/HG005.downsampled_to_30x.total_depth.txt",
 }])], ignore_index=True)
 
 bp = pipeline("coverage", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline")
-for _, row in df.iterrows():
+for _, row in df[~df["depth_stats_path"].apply(lambda p: files_exist([p]))].iterrows():
 	if not files_exist([row.read_data_path]):
 		print(f"{row.sample_id} read data file {row.read_data_path} not found. Skipping...")
 		continue
 
 	stats = hfs.ls(row.read_data_path)
 	read_data_size = max(50, int(stats[0].size/10**9))  # at least 50 Gb
-	s1 = bp.new_step(f"depth: {row.sample_id}", image=FILTER_VCFS_DOCKER_IMAGE, arg_suffix="depth", cpu=1, storage=f"{read_data_size + 20}Gi")
+	s1 = bp.new_step(f"depth: {row.sample_id} {row.sequencing_data_type}", image=FILTER_VCFS_DOCKER_IMAGE, arg_suffix="depth", cpu=1, storage=f"{read_data_size + 20}Gi")
 	s1.switch_gcloud_auth_to_user_account()
 	local_fasta, _ = s1.inputs(REFERENCE_FASTA_PATH, REFERENCE_FASTA_INDEX_PATH, localize_by=Localize.COPY)
 	local_bam, _ = s1.inputs(row.read_data_path, row.read_data_index_path, localize_by=Localize.COPY)
@@ -85,21 +105,35 @@ for _, row in df.iterrows():
 	#s1.output(f"{row.sample_id}.coverage.mosdepth.summary.txt")
 
 	s1.command(f"cat {row.sample_id}.coverage.mosdepth.summary.txt | cut -f 4 | tail -n +2 | head -n 23")
-	s1.command(f"grep total {row.sample_id}.coverage.mosdepth.summary.txt > {row.sample_id}.total_coverage.txt")
-	s1.command(f"cat {row.sample_id}.total_coverage.txt")
+	s1.command(f"grep total {row.sample_id}.coverage.mosdepth.summary.txt > {row.sample_id}.total_depth.txt")
+	s1.command(f"cat {row.sample_id}.total_depth.txt")
 
-	s1.output(f"/io/{row.sample_id}.total_coverage.txt", row.depth_stats_path)
+	s1.output(f"/io/{row.sample_id}.total_depth.txt", row.depth_stats_path)
 
 bp.run()
 
 # download depth stats and add them to the table
-df["depth_of_coverage"] = df["depth_stats_path"].apply(
-	lambda path: pd.read_table(path, names=["1", "2", "3", "coverage", "5", "6"])["coverage"].iloc[0] if files_exist([path]) else None)
+def read_depth_stats(path):
+	if not files_exist([path]):
+		return None
 
+	with open_file(path, "r") as f:
+		print("Reading", path)
+		df = pd.read_table(f, names=["1", "2", "3", "coverage", "5", "6"])
+		value = df["coverage"].iloc[0]
+		return float(value)
 
-# launch mosdepth
+df["depth_of_coverage"] = df["depth_stats_path"].apply(read_depth_stats)
+
+output_table_path = "HPRC_all_aligned_short_read_and_long_read_samples.tsv"
+df.to_csv(output_table_path, sep="\t", index=False)
+
+print(f"Wrote {len(df):,d} rows to {output_table_path}")
+for data_type in set(df["sequencing_data_type"]):
+	print(f"   {len(df[df['sequencing_data_type'] == data_type]):,d} {data_type} samples")
+
 # missing: "HG002", "HG005, HG01123, HG02109,  HG02486, HG02559, NA12878, NA21309
-set(df.sample_id)
+#set(df.sample_id)
 
 # gs://fc-47de7dae-e8e6-429c-b760-b4ba49136eee/long_read/winnowmap_alignments/HG005vGRCh38_wm_ONT.sort.bam
 # gs://fc-47de7dae-e8e6-429c-b760-b4ba49136eee/long_read/winnowmap_alignments/HG002vGRCh38_wm_ONT.sort.bam
