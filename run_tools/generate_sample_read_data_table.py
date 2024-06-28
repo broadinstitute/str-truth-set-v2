@@ -35,14 +35,14 @@ df = pd.concat([df, pd.DataFrame([{
 	"read_data_index_path": "gs://str-truth-set-v2/raw_data/HG002/illumina/HG002.pcr_free.cram.crai",
 	"depth_stats_path":     "gs://str-truth-set-v2/raw_data/HG002/illumina/HG002.pcr_free.total_depth.txt",
 }, {
-	"sample_id": "HG002",
+	"sample_id": "HG002",  # aka. NA24385
 	"sequencing_data_type": "element",
 	"read_data_path":       "gs://str-truth-set-v2/raw_data/HG002/element/HG002.element.cram",
 	"read_data_index_path": "gs://str-truth-set-v2/raw_data/HG002/element/HG002.element.cram.crai",
 	"depth_stats_path":     "gs://str-truth-set-v2/raw_data/HG002/element/HG002.element.total_depth.txt",
 }, {
 	# Ultima HG002 downloaded from "https://ultima-ashg-2023-reference-set.s3.amazonaws.com/crams/030945-NA24385-Z0114-CAACATACATCAGAT.cram"
-	"sample_id": "HG002",
+	"sample_id": "HG002",  # aka. NA24385
 	"sequencing_data_type": "ultima",
 	"read_data_path":       "gs://str-truth-set-v2/raw_data/HG002/ultima/HG002.ultima.cram",      #"https://ultima-ashg-2023-reference-set.s3.amazonaws.com/crams/030945-NA24385-Z0114-CAACATACATCAGAT.cram",
 	"read_data_index_path": "gs://str-truth-set-v2/raw_data/HG002/ultima/HG002.ultima.cram.crai", #"https://ultima-ashg-2023-reference-set.s3.amazonaws.com/crams/030945-NA24385-Z0114-CAACATACATCAGAT.cram.crai",
@@ -70,17 +70,25 @@ df = pd.concat([df, pd.DataFrame([{
 	"read_data_index_path": "gs://str-truth-set-v2/raw_data/pacbio/CHM1_CHM13/pacbio/CHM1_CHM13.aligned.bam.bai",
 	"depth_stats_path": "gs://str-truth-set-v2/raw_data/pacbio/CHM1_CHM13/pacbio/CHM1_CHM13.total_depth.txt",
 }, {
-	"sample_id": "HG002",
+	"sample_id": "HG002",   # aka. NA24385
 	"sequencing_data_type": "pacbio",
-	"read_data_path":       "gs://str-truth-set-v2/raw_data/HG002/pacbio/HG002.bam",
-	"read_data_index_path": "gs://str-truth-set-v2/raw_data/HG002/pacbio/HG002.bam.bai",
-	"depth_stats_path":     "gs://str-truth-set-v2/raw_data/HG002/pacbio/HG002.total_depth.txt",
+	#"read_data_path":       "gs://str-truth-set-v2/raw_data/HG002/pacbio/HG002.bam",
+	#"read_data_index_path": "gs://str-truth-set-v2/raw_data/HG002/pacbio/HG002.bam.bai",
+	"read_data_path":		"gs://fc-7891e5cf-0a7a-4c2f-8a18-0d05b27c53ab/GRCh38/PBCCSWholeGenome/NA24385/alignments/NA24385.bam",
+	"read_data_index_path": "gs://fc-7891e5cf-0a7a-4c2f-8a18-0d05b27c53ab/GRCh38/PBCCSWholeGenome/NA24385/alignments/NA24385.bam.bai",
+	"depth_stats_path":     "gs://str-truth-set-v2/raw_data/HG002/pacbio/NA24385.total_depth.txt",
 }, {
 	"sample_id": "HG005",
 	"sequencing_data_type": "pacbio",
 	"read_data_path":       "gs://str-truth-set-v2/raw_data/HG005/pacbio/HG005.downsampled_to_30x.bam",
 	"read_data_index_path": "gs://str-truth-set-v2/raw_data/HG005/pacbio/HG005.downsampled_to_30x.bam.bai",
 	"depth_stats_path":     "gs://str-truth-set-v2/raw_data/HG005/pacbio/HG005.downsampled_to_30x.total_depth.txt",
+}, {
+	"sample_id": "HG002",   # aka. NA24385
+	"sequencing_data_type": "ONT",
+	"read_data_path":       "gs://fc-7891e5cf-0a7a-4c2f-8a18-0d05b27c53ab/GRCh38/ONTWholeGenome/NA24385/alignments/NA24385.bam",
+	"read_data_index_path": "gs://fc-7891e5cf-0a7a-4c2f-8a18-0d05b27c53ab/GRCh38/ONTWholeGenome/NA24385/alignments/NA24385.bam.bai",
+	"depth_stats_path":     "gs://str-truth-set-v2/raw_data/HG002/ONT/NA24385.total_depth.txt",
 }])], ignore_index=True)
 
 bp = pipeline("coverage", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline")
