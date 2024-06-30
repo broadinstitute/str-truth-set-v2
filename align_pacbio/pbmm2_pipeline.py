@@ -216,9 +216,9 @@ def main():
         else:
             raise ValueError(f"{sample_id} has a mix of .ccs.bam and .fastq files. Expecting one or the other")
 
-        s2.command(f"pbmm2 align --sort --strip --preset {preset} {local_fasta} read_data_paths.fofn {sample_id}.aligned.bam")
-        s2.output(f"/io/{sample_id}.aligned.bam")
-        s2.output(f"/io/{sample_id}.aligned.bam.bai")
+        s2.command(f"pbmm2 align --sort --strip --preset {preset} {local_fasta} read_data_paths.fofn {sample_id}.bam")
+        s2.output(f"/io/{sample_id}.bam")
+        s2.output(f"/io/{sample_id}.bam.bai")
 
         # compute depth and other stats
         s3 = bp.new_step(
@@ -260,8 +260,8 @@ def main():
         s4.depends_on(s3)
 
         local_fasta =  s4.input(REFERENCE_FASTA)
-        local_bam, _ = s4.inputs(os.path.join(output_dir, f"{sample_id}.aligned.bam"),
-                                 os.path.join(output_dir, f"{sample_id}.aligned.bam.bai"))
+        local_bam, _ = s4.inputs(os.path.join(output_dir, f"{sample_id}.bam"),
+                                 os.path.join(output_dir, f"{sample_id}.bam.bai"))
 
         local_mosdepth_summary = s4.input(os.path.join(output_dir, f"{sample_id}.mosdepth.summary.txt"))
 
@@ -325,7 +325,7 @@ fi
     s5.command("set -ex")
     s5.command("cd /io")
 
-    merged_bam_filename = f"{merged_sample_id}.aligned.bam"
+    merged_bam_filename = f"{merged_sample_id}.bam"
     s5.command(f"samtools merge -t 2 -f {merged_bam_filename} {' '.join(map(str, local_bam_paths))}")
     s5.command(f"samtools index {merged_bam_filename}")
 
