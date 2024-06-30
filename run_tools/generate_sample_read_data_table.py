@@ -48,12 +48,12 @@ df = pd.concat([df, pd.DataFrame([{
 	"read_data_index_path": "gs://str-truth-set-v2/raw_data/HG002/ultima/HG002.ultima.cram.crai", #"https://ultima-ashg-2023-reference-set.s3.amazonaws.com/crams/030945-NA24385-Z0114-CAACATACATCAGAT.cram.crai",
 	"depth_stats_path":     "gs://str-truth-set-v2/raw_data/HG002/ultima/HG002.ultima.total_depth.txt",
 }, {
-	"sample_id": "HG005",  # aka. NA24631  (https://www.coriell.org/1/NIGMS/Collections/NIST-Reference-Materials)
-	"sequencing_data_type": "illumina",
-	"read_data_path":       "gs://str-truth-set-v2/raw_data/HG005/illumina/HG005.pcr_free.cram",
-	"read_data_index_path": "gs://str-truth-set-v2/raw_data/HG005/illumina/HG005.pcr_free.cram.crai",
-	"depth_stats_path":     "gs://str-truth-set-v2/raw_data/HG005/illumina/HG005.pcr_free.total_depth.txt",
-}, {
+	#"sample_id": "HG005",  # aka. NA24631  (https://www.coriell.org/1/NIGMS/Collections/NIST-Reference-Materials)
+	#"sequencing_data_type": "illumina",
+	#"read_data_path":       "gs://str-truth-set-v2/raw_data/HG005/illumina/HG005.pcr_free.cram",
+	#"read_data_index_path": "gs://str-truth-set-v2/raw_data/HG005/illumina/HG005.pcr_free.cram.crai",
+	#"depth_stats_path":     "gs://str-truth-set-v2/raw_data/HG005/illumina/HG005.pcr_free.total_depth.txt",
+#}, {
 	"sample_id": "NA12878",
 	"sequencing_data_type": "illumina",
 	"read_data_path":       "gs://fc-56ac46ea-efc4-4683-b6d5-6d95bed41c5e/CCDG_13607/Project_CCDG_13607_B01_GRM_WGS.cram.2019-02-06/Sample_NA12878/analysis/NA12878.final.cram",
@@ -66,17 +66,9 @@ df = pd.concat([df, pd.DataFrame([{
 }, {
 	"sample_id": "CHM1_CHM13",
 	"sequencing_data_type": "pacbio",
-	"read_data_path": "gs://str-truth-set-v2/raw_data/pacbio/CHM1_CHM13/pacbio/CHM1_CHM13.aligned.bam",
-	"read_data_index_path": "gs://str-truth-set-v2/raw_data/pacbio/CHM1_CHM13/pacbio/CHM1_CHM13.aligned.bam.bai",
-	"depth_stats_path": "gs://str-truth-set-v2/raw_data/pacbio/CHM1_CHM13/pacbio/CHM1_CHM13.total_depth.txt",
-}, {
-	"sample_id": "HG002",   # aka. NA24385
-	"sequencing_data_type": "pacbio",
-	#"read_data_path":       "gs://str-truth-set-v2/raw_data/HG002/pacbio/HG002.bam",
-	#"read_data_index_path": "gs://str-truth-set-v2/raw_data/HG002/pacbio/HG002.bam.bai",
-	"read_data_path":		"gs://fc-7891e5cf-0a7a-4c2f-8a18-0d05b27c53ab/GRCh38/PBCCSWholeGenome/NA24385/alignments/NA24385.bam",
-	"read_data_index_path": "gs://fc-7891e5cf-0a7a-4c2f-8a18-0d05b27c53ab/GRCh38/PBCCSWholeGenome/NA24385/alignments/NA24385.bam.bai",
-	"depth_stats_path":     "gs://str-truth-set-v2/raw_data/HG002/pacbio/NA24385.total_depth.txt",
+	"read_data_path": "gs://str-truth-set-v2/raw_data/CHM1_CHM13/pacbio/CHM1_CHM13.aligned.bam",
+	"read_data_index_path": "gs://str-truth-set-v2/raw_data/CHM1_CHM13/pacbio/CHM1_CHM13.aligned.bam.bai",
+	"depth_stats_path": "gs://str-truth-set-v2/raw_data/CHM1_CHM13/pacbio/CHM1_CHM13.total_depth.txt",
 }, {
 	"sample_id": "HG005",
 	"sequencing_data_type": "pacbio",
@@ -85,9 +77,21 @@ df = pd.concat([df, pd.DataFrame([{
 	"depth_stats_path":     "gs://str-truth-set-v2/raw_data/HG005/pacbio/HG005.downsampled_to_30x.total_depth.txt",
 }, {
 	"sample_id": "HG002",   # aka. NA24385
+	"sequencing_data_type": "pacbio",
+	#"read_data_path":       "gs://str-truth-set-v2/raw_data/HG002/pacbio/HG002.bam",
+	#"read_data_index_path": "gs://str-truth-set-v2/raw_data/HG002/pacbio/HG002.bam.bai",
+	#"read_data_path":		"gs://fc-7891e5cf-0a7a-4c2f-8a18-0d05b27c53ab/GRCh38/PBCCSWholeGenome/NA24385/alignments/NA24385.bam",
+	#"read_data_index_path": "gs://fc-7891e5cf-0a7a-4c2f-8a18-0d05b27c53ab/GRCh38/PBCCSWholeGenome/NA24385/alignments/NA24385.bam.bai",
+	"read_data_path":       "gs://str-truth-set-v2/raw_data/HG002/pacbio/NA24385.bam",
+	"read_data_index_path": "gs://str-truth-set-v2/raw_data/HG002/pacbio/NA24385.bam.bai",
+	"depth_stats_path":     "gs://str-truth-set-v2/raw_data/HG002/pacbio/NA24385.total_depth.txt",
+}, {
+	"sample_id": "HG002",   # aka. NA24385
 	"sequencing_data_type": "ONT",
-	"read_data_path":       "gs://fc-7891e5cf-0a7a-4c2f-8a18-0d05b27c53ab/GRCh38/ONTWholeGenome/NA24385/alignments/NA24385.bam",
-	"read_data_index_path": "gs://fc-7891e5cf-0a7a-4c2f-8a18-0d05b27c53ab/GRCh38/ONTWholeGenome/NA24385/alignments/NA24385.bam.bai",
+	#"read_data_path":       "gs://fc-7891e5cf-0a7a-4c2f-8a18-0d05b27c53ab/GRCh38/ONTWholeGenome/NA24385/alignments/NA24385.bam",
+	#"read_data_index_path": "gs://fc-7891e5cf-0a7a-4c2f-8a18-0d05b27c53ab/GRCh38/ONTWholeGenome/NA24385/alignments/NA24385.bam.bai",
+	"read_data_path":       "gs://str-truth-set-v2/raw_data/HG002/ONT/NA24385.bam",
+	"read_data_index_path": "gs://str-truth-set-v2/raw_data/HG002/ONT/NA24385.bam.bai",
 	"depth_stats_path":     "gs://str-truth-set-v2/raw_data/HG002/ONT/NA24385.total_depth.txt",
 }])], ignore_index=True)
 
@@ -102,7 +106,7 @@ for _, row in df[~df["depth_stats_path"].apply(lambda p: files_exist([p]))].iter
 	s1 = bp.new_step(f"depth: {row.sample_id} {row.sequencing_data_type}", image=FILTER_VCFS_DOCKER_IMAGE, arg_suffix="depth", cpu=1, storage=f"{read_data_size + 20}Gi")
 	s1.switch_gcloud_auth_to_user_account()
 	local_fasta, _ = s1.inputs(REFERENCE_FASTA_PATH, REFERENCE_FASTA_INDEX_PATH, localize_by=Localize.COPY)
-	local_bam, _ = s1.inputs(row.read_data_path, row.read_data_index_path, localize_by=Localize.COPY)
+	local_bam, _ = s1.inputs(row.read_data_path, row.read_data_index_path, localize_by=Localize.GSUTIL_COPY)
 
 	s1.command("set -ex")
 	s1.command("curl -L https://github.com/brentp/mosdepth/releases/download/v0.3.5/mosdepth -o /usr/local/bin/mosdepth")
@@ -125,28 +129,28 @@ def read_depth_stats(path):
 	if not files_exist([path]):
 		return None
 
-	with open_file(path, "r") as f:
-		print("Reading", path)
-		df = pd.read_table(f, names=["1", "2", "3", "coverage", "5", "6"])
-		value = df["coverage"].iloc[0]
-		return float(value)
+	with open_file(path) as f:
+		df = pd.read_table(f, names=["label", "2", "3", "coverage", "5", "6"])
+		assert df["label"].iloc[0] == "total"
+		depth_of_coverage = df["coverage"].iloc[0]
+		return float(depth_of_coverage)
 
 df["depth_of_coverage"] = df["depth_stats_path"].apply(read_depth_stats)
 
-output_table_path = "HPRC_all_aligned_short_read_and_long_read_samples.tsv"
-df.to_csv(output_table_path, sep="\t", index=False)
+df.sort_values(["sample_id", "sequencing_data_type"], ascending=[False, True], inplace=True)
+for _, row in df.iterrows():
+	print(f"{float(row.depth_of_coverage):5.1f}x coverage {row.sample_id:<15s} {row.sequencing_data_type:10s} sample: {row.read_data_path} ")
+
+output_table_path = "gs://str-truth-set-v2/HPRC_all_aligned_short_read_and_long_read_samples.tsv"
+df.to_csv(os.path.basename(output_table_path), sep="\t", index=False)
+os.system(f"gsutil -m cp {os.path.basename(output_table_path)} {output_table_path}")
 
 print(f"Wrote {len(df):,d} rows to {output_table_path}")
 for data_type in set(df["sequencing_data_type"]):
 	print(f"   {len(df[df['sequencing_data_type'] == data_type]):,d} {data_type} samples")
 
-# missing: "HG002", "HG005, HG01123, HG02109,  HG02486, HG02559, NA12878, NA21309
+
+# missing short read data: HG01123, HG02109,  HG02486, HG02559, NA12878, NA21309
 #set(df.sample_id)
-
-# gs://fc-47de7dae-e8e6-429c-b760-b4ba49136eee/long_read/winnowmap_alignments/HG005vGRCh38_wm_ONT.sort.bam
-# gs://fc-47de7dae-e8e6-429c-b760-b4ba49136eee/long_read/winnowmap_alignments/HG002vGRCh38_wm_ONT.sort.bam
-
-# Revio data - from https://github.com/marbl/HG002/blob/main/Sequencing_data.md
-# "https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/HG002/assemblies/polishing/HG002/v1.0/mapping/hifi_revio_pbmay24/hg002v1.0.1_hifi_revio_pbmay24.bam"
 
 #%%

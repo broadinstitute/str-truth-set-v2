@@ -12,20 +12,33 @@ import hailtop.fs as hfs
 import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize
+import sys
 
-SHORT_READ_TOOLS = [
-    "eh",
-    "gangstr",
-    "hipstr",
-]
+sys.path.append("../str-truth-set/tool_comparison/hail_batch_pipelines")
+from trgt_pipeline import create_trgt_step
 
-PACBIO_TOOLS = [
-    "trgt",
-    "longtr",
-]
+SHORT_READ_TOOLS = {
+    "EHv5",
+    "GangSTR",
+    "HipSTR",
+}
+
+PACBIO_TOOLS = {
+    "TRGT",
+    "LongTR",
+    "straglr",
+}
+
+
+
+REFERENCE_FASTA_PATH = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
+REFERENCE_FASTA_FAI_PATH = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta.fai"
 
 def main():
-    bp = pipeline("filter_vcf_to_STRs", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline_gnomad")
+
+    df = pd.read_table("HPRC_all_aligned_short_read_and_long_read_samples.tsv")
+
+    bp = pipeline("run_genotyping_tools", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline_gnomad")
 
     parser = bp.get_config_arg_parser()
     parser.add_argument("--only-pure-repeats", action="store_true")
@@ -33,14 +46,20 @@ def main():
     parser.add_argument("--skip-combine-steps", action="store_true")
     parser.add_argument("-s", "--sample-id", action="append",
                         help="Process only this sample. Can be specified more than once.")
-    parser.add_argument("--output-dir", default="gs://str-truth-set-v2/filter_vcf")
+    parser.add_argument("-t", "--tool", action="append", choices=SHORT_READ_TOOLS|PACBIO_TOOLS, help="The tool to run.")
+    parser.add_argument("--data-type", action="append", choices=set(df.sequencing_data_type), help="Which data type(s) to process")
+    parser.add_argument("--output-dir", default="gs://str-truth-set-v2/tool_results")
     args = bp.parse_known_args()
 
-    bp.precache_file_paths("gs://str-truth-set-v2/filter_vcf/**/*.*")
+    if not args.tool:
+        args.tool = ["TRGT"]
 
-    df = pd.read_table("../run_tools/broad_short_read_cram_paths_for_HPRC_samples.txt")
     if args.sample_id:
         df = df[df.sample_id.isin(args.sample_id)]
+    if args.data_type:
+        df = df[df.sequencing_data_type.isin(args.data_type)]
+
+    bp.precache_file_paths(os.path.join(args.output_dir, "**/*.*"))
 
     suffix = ".STRs"
     if args.only_pure_repeats:
@@ -60,12 +79,35 @@ def main():
     filter_steps = []
     figures_to_download = collections.defaultdict(list)
     for row_i, (_, row) in enumerate(df.iterrows()):
-        output_dir = os.path.join(args.output_dir, output_dir_suffix, row.sample_id)
+        coverage = int(round(float(row.depth_of_coverage)))
+        for tool in args.tool:
+            repeat_catalog_paths = f"gs://str-truth-set-v2/filter_vcf/{output_dir_suffix}/{row.sample_id}/{row.sample_id}.STRs.positive_loci.{tool}*"
+            output_dir = os.path.join(args.output_dir, output_dir_suffix, row.sample_id, tool, f"{coverage}x_coverage")
+            for repeat_catalog_path in [x.path for x in hfs.ls(repeat_catalog_paths)]:
+                if tool == "EHv5":
+                    pass
+                elif tool == "GangSTR":
+                    pass
+                elif tool == "HipSTR":
+                    pass
+                elif tool == "TRGT":
+                    trgt_step = create_trgt_step(
+                        bp,
+                        reference_fasta=REFERENCE_FASTA_PATH,
+                        input_bam=row.read_data_path,
+                        input_bai=row.read_data_index_path,
+                        trgt_catalog_bed_path=repeat_catalog_path,
+                        output_dir=output_dir,
+                        output_prefix= f"{row.sample_id}.STRs.positive_loci.{tool}")
+                elif tool == "LongTR":
+                    pass
+                elif tool == "straglr":
+                    pass
+                else:
+                    raise ValueError(f"Unknown tool: {tool}")
 
-        filter_step = create_filter_step(bp, row, suffix, output_dir,
-                                         exclude_homopolymers=args.exclude_homopolymers,
-                                         only_pure_repeats=args.only_pure_repeats)
-        filter_steps.append(filter_step)
+
+    bp.run()
 
 
 if __name__ == "__main__":
