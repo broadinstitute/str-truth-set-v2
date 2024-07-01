@@ -16,6 +16,7 @@ import sys
 
 sys.path.append("../str-truth-set/tool_comparison/hail_batch_pipelines")
 from trgt_pipeline import create_trgt_step
+from longtr_pipeline import create_longtr_steps
 
 SHORT_READ_TOOLS = {
     "EHv5",
@@ -23,20 +24,29 @@ SHORT_READ_TOOLS = {
     "HipSTR",
 }
 
-PACBIO_TOOLS = {
+LONG_READ_TOOLS = {
     "TRGT",
     "LongTR",
     "straglr",
 }
 
+SHORT_READ_DATA_TYPES = {
+    "illumina",
+    "element",
+    "ultima",
+}
 
+LONG_READ_DATA_TYPES = {
+    "pacbio",
+    "ONT",
+}
 
 REFERENCE_FASTA_PATH = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
 REFERENCE_FASTA_FAI_PATH = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta.fai"
 
 def main():
-
-    df = pd.read_table("HPRC_all_aligned_short_read_and_long_read_samples.tsv")
+    sample_table_path = "HPRC_all_aligned_short_read_and_long_read_samples.tsv"
+    df = pd.read_table(sample_table_path)
 
     bp = pipeline("run_genotyping_tools", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline_gnomad")
 
@@ -46,13 +56,16 @@ def main():
     parser.add_argument("--skip-combine-steps", action="store_true")
     parser.add_argument("-s", "--sample-id", action="append",
                         help="Process only this sample. Can be specified more than once.")
-    parser.add_argument("-t", "--tool", action="append", choices=SHORT_READ_TOOLS|PACBIO_TOOLS, help="The tool to run.")
-    parser.add_argument("--data-type", action="append", choices=set(df.sequencing_data_type), help="Which data type(s) to process")
+    parser.add_argument("-t", "--tool", action="append", choices=SHORT_READ_TOOLS|LONG_READ_TOOLS, help="The tool to run.")
+    parser.add_argument("--data-type", action="append", choices=SHORT_READ_DATA_TYPES|LONG_READ_DATA_TYPES, help="Which data type(s) to process")
     parser.add_argument("--output-dir", default="gs://str-truth-set-v2/tool_results")
     args = bp.parse_known_args()
 
     if not args.tool:
         args.tool = ["TRGT"]
+    unknown_data_types = set(df.sequencing_data_type) - (SHORT_READ_DATA_TYPES | LONG_READ_DATA_TYPES)
+    if unknown_data_types:
+        raise ValueError(f"Unknown value(s) in the sequencing_data_type column of {sample_table_path}: {unknown_data_types}")
 
     if args.sample_id:
         df = df[df.sample_id.isin(args.sample_id)]
@@ -82,29 +95,45 @@ def main():
         coverage = int(round(float(row.depth_of_coverage)))
         for tool in args.tool:
             repeat_catalog_paths = f"gs://str-truth-set-v2/filter_vcf/{output_dir_suffix}/{row.sample_id}/{row.sample_id}.STRs.positive_loci.{tool}*"
+            repeat_catalog_paths = [x.path for x in hfs.ls(repeat_catalog_paths)]
             output_dir = os.path.join(args.output_dir, output_dir_suffix, row.sample_id, tool, f"{coverage}x_coverage")
-            for repeat_catalog_path in [x.path for x in hfs.ls(repeat_catalog_paths)]:
-                if tool == "EHv5":
-                    pass
-                elif tool == "GangSTR":
-                    pass
-                elif tool == "HipSTR":
-                    pass
-                elif tool == "TRGT":
-                    trgt_step = create_trgt_step(
-                        bp,
-                        reference_fasta=REFERENCE_FASTA_PATH,
-                        input_bam=row.read_data_path,
-                        input_bai=row.read_data_index_path,
-                        trgt_catalog_bed_path=repeat_catalog_path,
-                        output_dir=output_dir,
-                        output_prefix= f"{row.sample_id}.STRs.positive_loci.{tool}")
-                elif tool == "LongTR":
-                    pass
-                elif tool == "straglr":
-                    pass
-                else:
-                    raise ValueError(f"Unknown tool: {tool}")
+            if tool == "EHv5":
+                pass
+            elif tool == "GangSTR":
+                pass
+            elif tool == "HipSTR":
+                pass
+            elif tool == "TRGT":
+                if row.sequencing_data_type != "pacbio":
+                    print(f"WARNING: Skipping TRGT for {row.sample_id} {row.sequencing_data_type} since TRGT only supports pacbio data")
+                    continue
+
+                trgt_step = create_trgt_step(
+                    bp,
+                    reference_fasta=REFERENCE_FASTA_PATH,
+                    input_bam=row.read_data_path,
+                    input_bai=row.read_data_index_path,
+                    trgt_catalog_bed_paths=repeat_catalog_paths,
+                    output_dir=output_dir,
+                    output_prefix= f"{row.sample_id}.STRs.positive_loci.{tool}")
+            elif tool == "LongTR":
+                if row.sequencing_data_type not in LONG_READ_DATA_TYPES:
+                    print(f"WARNING: Skipping LongTR for {row.sample_id} {row.sequencing_data_type} since LongTR only supports pacbio data")
+                    continue
+
+                longtr_step = create_longtr_steps(
+                    bp,
+                    reference_fasta=REFERENCE_FASTA_PATH,
+                    input_bam=row.read_data_path,
+                    input_bai=row.read_data_index_path,
+                    regions_bed_paths=repeat_catalog_paths,
+                    output_dir=output_dir,
+                    output_prefix=f"{row.sample_id}.STRs.positive_loci.{tool}")
+
+            elif tool == "straglr":
+                pass
+            else:
+                raise ValueError(f"Unknown tool: {tool}")
 
 
     bp.run()
