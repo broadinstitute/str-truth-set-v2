@@ -19,7 +19,7 @@ import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
 STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:6e3128a78fe2125e5c12a999a64479084bdec2ed69ee95072c87a846d2a550ff"
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:67c330786948e5179790b7d31ca13453418de45a707aa3ce14789e47bdaa468e"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:a05ec272d2dd64612600f92c83f074965030eac59ce5c77565ec5af1fa165eea"
 
 
 def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False, keep_loci_that_have_overlapping_variants=False):
@@ -180,9 +180,9 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
         "gs://str-truth-set/hg38/ref/other/repeat_specs_GRCh38_without_mismatches.including_homopolymers.sorted.at_least_9bp.bed.gz",
         "gs://str-truth-set/hg38/ref/other/repeat_specs_GRCh38_without_mismatches.including_homopolymers.sorted.at_least_9bp.bed.gz.tbi")
 
-    expansion_hunter_loci_per_run = 10000 # if exclude_homopolymers else 100000
-    gangstr_loci_per_run = 1000000
-    straglr_loci_per_run = 10000
+    expansion_hunter_loci_per_run = 10_000 # if exclude_homopolymers else 100000
+    gangstr_loci_per_run = 1_000_000
+    straglr_loci_per_run = 200_000
     variant_catalogs_step.command("set -exuo pipefail")
     variant_catalogs_step.command(
         f"python3 -u /str-truth-set/tool_comparison/scripts/convert_truth_set_to_variant_catalogs.py "

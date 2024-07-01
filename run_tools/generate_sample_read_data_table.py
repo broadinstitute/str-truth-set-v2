@@ -95,6 +95,25 @@ df = pd.concat([df, pd.DataFrame([{
 	"depth_stats_path":     "gs://str-truth-set-v2/raw_data/HG002/ONT/HG002.total_depth.txt",
 }])], ignore_index=True)
 
+for sequencing_data_type, downsampled_bam in [
+	("pacbio", "gs://str-truth-set-v2/raw_data/HG005/pacbio/HG005.downsampled_to_30x.bam"),
+	("illumina", "gs://str-truth-set-v2/raw_data/HG002/illumina/HG002.pcr_free.downsampled_to_20x.bam"),
+	("illumina", "gs://str-truth-set-v2/raw_data/HG002/illumina/HG002.pcr_free.downsampled_to_10x.bam"),
+	("element", "gs://str-truth-set-v2/raw_data/HG002/element/HG002.element.downsampled_to_30x.bam"),
+	("pacbio", "gs://str-truth-set-v2/raw_data/HG002/pacbio/HG002.downsampled_to_30x.bam"),
+	("pacbio", "gs://str-truth-set-v2/raw_data/HG002/pacbio/HG002.downsampled_to_20x.bam"),
+	("pacbio", "gs://str-truth-set-v2/raw_data/HG002/pacbio/HG002.downsampled_to_8x.bam"),
+	("ONT", "gs://str-truth-set-v2/raw_data/HG002/ONT/HG002.downsampled_to_20x.bam"),
+	("ONT", "gs://str-truth-set-v2/raw_data/HG002/ONT/HG002.downsampled_to_8x.bam"),
+]:
+	df = pd.concat([df, pd.DataFrame([{
+		"sample_id": "HG002",
+		"sequencing_data_type": sequencing_data_type,
+		"read_data_path":       downsampled_bam,
+		"read_data_index_path": f"{downsampled_bam}.bai",
+		"depth_stats_path":     downsampled_bam.replace(".bam", ".total_depth.txt"),
+	}])], ignore_index=True)
+
 bp = pipeline("coverage", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline")
 for _, row in df[~df["depth_stats_path"].apply(lambda p: files_exist([p]))].iterrows():
 	if not files_exist([row.read_data_path]):

@@ -17,6 +17,7 @@ import sys
 sys.path.append("../str-truth-set/tool_comparison/hail_batch_pipelines")
 from trgt_pipeline import create_trgt_step
 from longtr_pipeline import create_longtr_steps
+from straglr_pipeline import create_straglr_steps
 
 SHORT_READ_TOOLS = {
     "EHv5",
@@ -143,7 +144,7 @@ def main():
                     reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
                     input_bam=row.read_data_path,
                     input_bai=row.read_data_index_path,
-                    regions_bed_paths=repeat_catalog_paths,
+                    straglr_catalog_bed_paths=repeat_catalog_paths,
                     output_dir=output_dir,
                     output_prefix=f"{row.sample_id}.STRs.positive_loci.{tool}")
             else:
