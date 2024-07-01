@@ -111,6 +111,7 @@ def main():
                 trgt_step = create_trgt_step(
                     bp,
                     reference_fasta=REFERENCE_FASTA_PATH,
+                    reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
                     input_bam=row.read_data_path,
                     input_bai=row.read_data_index_path,
                     trgt_catalog_bed_paths=repeat_catalog_paths,
@@ -118,12 +119,13 @@ def main():
                     output_prefix= f"{row.sample_id}.STRs.positive_loci.{tool}")
             elif tool == "LongTR":
                 if row.sequencing_data_type not in LONG_READ_DATA_TYPES:
-                    print(f"WARNING: Skipping LongTR for {row.sample_id} {row.sequencing_data_type} since LongTR only supports pacbio data")
+                    print(f"WARNING: Skipping LongTR for {row.sample_id} {row.sequencing_data_type} since LongTR only supports long read data")
                     continue
 
                 longtr_step = create_longtr_steps(
                     bp,
                     reference_fasta=REFERENCE_FASTA_PATH,
+                    reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
                     input_bam=row.read_data_path,
                     input_bai=row.read_data_index_path,
                     regions_bed_paths=repeat_catalog_paths,
@@ -131,7 +133,19 @@ def main():
                     output_prefix=f"{row.sample_id}.STRs.positive_loci.{tool}")
 
             elif tool == "straglr":
-                pass
+                if row.sequencing_data_type not in LONG_READ_DATA_TYPES:
+                    print(f"WARNING: Skipping Straglr for {row.sample_id} {row.sequencing_data_type} since Straglr only supports long read data")
+                    continue
+
+                longtr_step = create_straglr_steps(
+                    bp,
+                    reference_fasta=REFERENCE_FASTA_PATH,
+                    reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
+                    input_bam=row.read_data_path,
+                    input_bai=row.read_data_index_path,
+                    regions_bed_paths=repeat_catalog_paths,
+                    output_dir=output_dir,
+                    output_prefix=f"{row.sample_id}.STRs.positive_loci.{tool}")
             else:
                 raise ValueError(f"Unknown tool: {tool}")
 
