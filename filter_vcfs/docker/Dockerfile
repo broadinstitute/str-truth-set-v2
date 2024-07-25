@@ -50,12 +50,15 @@ RUN wget https://github.com/arq5x/bedtools2/releases/download/v${BED_TOOLS_VERSI
 	&& chmod 777 bedtools.static \
 	&& mv bedtools.static /usr/bin/bedtools
 
+RUN apt-get install -y --no-install-recommends bc dvipng texlive-latex-extra texlive-fonts-recommended cm-super
+
+# set up "aliases" for MacOSX commands
+RUN cp /bin/zcat /bin/gzcat
+
+# install str-analysis
 RUN python3 -m pip install --no-cache-dir --upgrade cmake pip
 RUN python3 -m pip install --no-cache-dir git+https://github.com/broadinstitute/str-analysis
 
-# set up "aliases" for MacOSX commands
-RUN apt-get install -y --no-install-recommends bc dvipng texlive-latex-extra texlive-fonts-recommended cm-super
-RUN cp /bin/zcat /bin/gzcat
 
 # install str-truth-set repo
 COPY str-truth-set/requirements.txt /

@@ -19,7 +19,7 @@ import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
 STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:6e3128a78fe2125e5c12a999a64479084bdec2ed69ee95072c87a846d2a550ff"
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:a05ec272d2dd64612600f92c83f074965030eac59ce5c77565ec5af1fa165eea"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:732f501e5d6e57db2173eba20185f89a2fa82d9dbaa1d7e8cff1d40848f1bdad"
 
 
 def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False, keep_loci_that_have_overlapping_variants=False):
@@ -61,8 +61,8 @@ def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, 
             --min-str-length 9 \
             --min-str-repeats 3 \
             --min-repeat-unit-length {min_repeat_unit_length} \
-            --max-repeat-unit-length 50 \
-            {keep_loci_that_have_overlapping_variants_arg} --output-prefix {row.sample_id}{suffix} \
+            {keep_loci_that_have_overlapping_variants_arg} \
+            --output-prefix {row.sample_id}{suffix} \
             --verbose \
             {row.sample_id}.high_confidence_regions.vcf.gz |& tee {row.sample_id}{suffix}.filter_vcf.log")
 
@@ -479,6 +479,7 @@ def main():
     parser = bp.get_config_arg_parser()
     parser.add_argument("--only-pure-repeats", action="store_true")
     parser.add_argument("--exclude-homopolymers", action="store_true")
+    parser.add_argument("--keep-loci-that-have-overlapping-variants", action="store_true")
     parser.add_argument("--output-negative-loci", action="store_true")
     parser.add_argument("--skip-combine-steps", action="store_true")
     parser.add_argument("-s", "--sample-id", action="append",
@@ -525,7 +526,7 @@ def main():
                                          os.path.join(args.output_dir, f"{output_dir_suffix}_keeping_loci_that_have_overlapping_variants", row.sample_id),
                                          exclude_homopolymers=args.exclude_homopolymers,
                                          only_pure_repeats=args.only_pure_repeats,
-                                         keep_loci_that_have_overlapping_variants=True)
+                                         keep_loci_that_have_overlapping_variants=args.keep_loci_that_have_overlapping_variants)
 
         filter_steps_keeping_all_loci.append(filter_step_keeping_all_loci)
 
