@@ -479,7 +479,6 @@ def main():
     parser = bp.get_config_arg_parser()
     parser.add_argument("--only-pure-repeats", action="store_true")
     parser.add_argument("--exclude-homopolymers", action="store_true")
-    parser.add_argument("--keep-loci-that-have-overlapping-variants", action="store_true")
     parser.add_argument("--output-negative-loci", action="store_true")
     parser.add_argument("--skip-combine-steps", action="store_true")
     parser.add_argument("-s", "--sample-id", action="append",
@@ -526,7 +525,7 @@ def main():
                                          os.path.join(args.output_dir, f"{output_dir_suffix}_keeping_loci_that_have_overlapping_variants", row.sample_id),
                                          exclude_homopolymers=args.exclude_homopolymers,
                                          only_pure_repeats=args.only_pure_repeats,
-                                         keep_loci_that_have_overlapping_variants=args.keep_loci_that_have_overlapping_variants)
+                                         keep_loci_that_have_overlapping_variants=True)
 
         filter_steps_keeping_all_loci.append(filter_step_keeping_all_loci)
 
