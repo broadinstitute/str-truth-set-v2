@@ -87,8 +87,9 @@ def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, 
     return filter_step
 
 
-def create_annotate_steps(bp, row, suffix, output_dir, exclude_homopolymers=False, use_preemptibles=True):
+def create_annotate_steps(bp, row, suffix, output_dir, exclude_homopolymers=False, use_preemptibles=True, negative_loci=False):
 
+    # TODO implement negative_loci arg
     annotate_steps = []
     for table_type in "variants", "alleles":
 
@@ -180,6 +181,9 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
 
     high_confidence_regions_bed_input = variant_catalogs_step.input(
         os.path.join("gs://str-truth-set-v2/dipcall_pipeline", row.sample_id, f"{row.sample_id}.dip.bed.gz"))
+    if output_negative_loci:
+        dipcall_vcf_input = variant_catalogs_step.input(
+            os.path.join("gs://str-truth-set-v2/dipcall_pipeline", row.sample_id, f"{row.sample_id}.dip.vcf.gz"))
     variants_tsv_input = variant_catalogs_step.input(
         os.path.join(output_dir, f"{row.sample_id}{suffix}.variants.tsv.gz"))
     variants_bed_input = variant_catalogs_step.input(
@@ -192,7 +196,7 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
     variant_catalogs_step.command(
         f"python3 -u /str-truth-set/tool_comparison/scripts/convert_truth_set_to_variant_catalogs.py "
         f"--ref-fasta {hg38_fasta_input} " +
-        (f" " if output_negative_loci else "--skip-negative-loci ") +
+        (f"--all-indels-vcf {dipcall_vcf_input} " if output_negative_loci else "--skip-negative-loci ") +
         f"--skip-popstr "
         f"--expansion-hunter-loci-per-run {EXPANSION_HUNTER_LOCI_PER_RUN} "
         f"--gangstr-loci-per-run {GANGSTR_LOCI_PER_RUN} "
@@ -206,10 +210,12 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
     variant_catalogs_step.command(
         f"find tool_comparison -name '*.json'")
     variant_catalogs_step.command(
-        f"find tool_comparison -name '*.bed'")
+        f"find tool_comparison -name '*.bed*'")
 
-    #n = 1 if exclude_homopolymers else (600000 // expansion_hunter_loci_per_run)
-    #for i in range(1, n + 1):
+    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/{row.sample_id}{suffix}.positive_loci.bed.gz")
+    if output_negative_loci:
+        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/{row.sample_id}{suffix}.negative_loci.bed.gz")
+
     variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/expansion_hunter/{row.sample_id}{suffix}.positive_loci.EHv5.*.json")
     if output_negative_loci:
         variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/expansion_hunter/{row.sample_id}{suffix}.negative_loci.EHv5.*.json")
@@ -241,6 +247,49 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
 
     return variant_catalogs_step
 
+
+def create_table_for_tool_comparisons_step(bp, row, suffix, output_dir, exclude_homopolymers=False,
+                                           output_negative_loci=False, use_preemptibles=True):
+    table_for_tool_comparisons_step = bp.new_step(
+        f"table for tool comparisons: {row.sample_id}",
+        image=FILTER_VCFS_DOCKER_IMAGE,
+        arg_suffix="table-for-tool-comparisons-step",
+        cpu=1,
+        memory="highmem",
+        preemptible=use_preemptibles,
+        output_dir=output_dir,
+        delocalize_by=Delocalize.GSUTIL_COPY,
+    )
+
+    annotated_variants_table_input = table_for_tool_comparisons_step.input(
+        os.path.join(output_dir, f"{row.sample_id}{suffix}.annotated.variants.tsv.gz"))
+
+    if output_negative_loci:
+        negative_loci_bed_input = table_for_tool_comparisons_step.input(
+            os.path.join(output_dir, f"{row.sample_id}{suffix}.negative_loci.bed"))
+
+    if not output_negative_loci:
+        table_for_tool_comparisons_step.command(
+            f"python3 -u /str-truth-set/tool_comparison/scripts/compute_truth_set_tsv_for_comparisons.py --output-dir . "
+                f"{annotated_variants_table_input}")
+
+        table_for_tool_comparisons_step.command("ls -lhtr")
+
+        table_for_tool_comparisons_step.output(
+            annotated_variants_table_input.filename.replace(".tsv", ".for_comparison.tsv"))
+    else:
+        # compute overlap with other catalogs
+        #variant_catalog_step.command(
+        #    f"python3 -u /str-truth-set/scripts/compute_overlap_with_other_catalogs.py --all-repeats --all-motifs {row.sample_id}{suffix}.negative_loci.bed "
+        #    f"{row.sample_id}{suffix}.negative_loci.with_overlap_columns.tsv.gz")
+        #table_for_tool_comparisons_step.command(
+        #    f"python3 -u /str-truth-set/tool_comparison/scripts/compute_truth_set_tsv_for_comparisons.py --output-dir . "
+        #    f"{annotated_variants_table_input} "
+        #    f"{row.sample_id}{suffix}.negative_loci.with_overlap_columns.tsv.gz")
+
+        table_for_tool_comparisons_step.command("ls -lhtr")
+
+    return table_for_tool_comparisons_step
 
 def create_plot_step(bp, suffix, output_dir, row=None, alleles_tsv_step=None, exclude_homopolymers=False):
     """Must specify either row or alleles_tsv_step"""
@@ -553,7 +602,8 @@ def main():
 
         annotate_variants_step, annotate_alleles_step = create_annotate_steps(bp, row, suffix, output_dir,
                                                                               exclude_homopolymers=args.exclude_homopolymers,
-                                                                              use_preemptibles=not args.use_nonpreemptibles)
+                                                                              use_preemptibles=not args.use_nonpreemptibles,
+                                                                              negative_loci=False)
         annotate_variants_step.depends_on(filter_step)
         annotate_alleles_step.depends_on(filter_step)
         annotate_variants_steps.append(annotate_variants_step)
@@ -565,11 +615,26 @@ def main():
                                                              use_preemptibles=not args.use_nonpreemptibles)
         variant_catalogs_step.depends_on(filter_step)
 
-        plot_step, figures_to_download_dict = create_plot_step(bp, suffix, output_dir, row=row,
-                                                               exclude_homopolymers=args.exclude_homopolymers)
+        #TODO: also annotate the negative loci
+        #if args.output_negative_loci:
+        #    annotate_variants_step, annotate_alleles_step = create_annotate_steps(
+        #        bp, row, suffix, output_dir,
+        #        exclude_homopolymers=args.exclude_homopolymers,
+        #        use_preemptibles=not args.use_nonpreemptibles,
+        #        negative_loci=True)
 
-        plot_step.depends_on(annotate_alleles_step)
-        if row.sample_id == "CHM1_CHM13":
+        if row.sample_id in ("HG002", "CHM1_CHM13"):
+            table_for_tool_comparisons_step = create_table_for_tool_comparisons_step(bp, row, suffix, output_dir,
+                                                                            exclude_homopolymers=args.exclude_homopolymers,
+                                                                            output_negative_loci=False,  #TODO: args.output_negative_loci,
+                                                                            use_preemptibles=not args.use_nonpreemptibles)
+            table_for_tool_comparisons_step.depends_on(annotate_alleles_step)
+
+            plot_step, figures_to_download_dict = create_plot_step(bp, suffix, output_dir, row=row,
+                                                                   exclude_homopolymers=args.exclude_homopolymers)
+
+            plot_step.depends_on(annotate_alleles_step)
+
             for label, file_path in figures_to_download_dict.items():
                 figures_to_download[label].append(file_path)
 
