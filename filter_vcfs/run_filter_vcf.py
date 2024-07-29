@@ -19,7 +19,7 @@ import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
 STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:6e3128a78fe2125e5c12a999a64479084bdec2ed69ee95072c87a846d2a550ff"
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:732f501e5d6e57db2173eba20185f89a2fa82d9dbaa1d7e8cff1d40848f1bdad"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:8fbfd62698724a401a48bf19b97c46d7a9f9cefd821c1916e8e19011e4b2f707"
 
 
 EXPANSION_HUNTER_LOCI_PER_RUN = 10_000 # if exclude_homopolymers else 100000
