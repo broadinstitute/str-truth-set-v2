@@ -18,6 +18,19 @@ FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:bce1d8d478808ced1bacebfe
 REFERENCE_FASTA_PATH = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
 REFERENCE_FASTA_INDEX_PATH = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta.fai"
 
+if not os.getcwd().endswith("run_tools"):
+	os.chdir("run_tools/")
+
+df_meta = pd.read_table("../20130606_sample_info_1kGP.tsv")
+
+df_meta.set_index("Sample", inplace=True)
+sample_id_sex_lookup = dict(df_meta["Gender"])  # "male" or "female"
+sample_id_sex_lookup["HG002"] = "male"
+sample_id_sex_lookup["HG005"] = "male"
+sample_id_sex_lookup["CHM1_CHM13"] = "female"
+
+#%%
+
 df = pd.read_table("broad_short_read_cram_paths_for_HPRC_samples.txt")
 df["sequencing_data_type"] = "illumina"
 df.rename(columns={
@@ -155,6 +168,9 @@ def read_depth_stats(path):
 		return float(depth_of_coverage)
 
 df["depth_of_coverage"] = df["depth_stats_path"].apply(read_depth_stats)
+df["male_or_female"] = df["sample_id"].apply(lambda s: sample_id_sex_lookup.get(s))
+if sum(df["male_or_female"].isna()) > 0:
+	raise ValueError(f"Missing sex metadata for samples {list(df.sample_id)}")
 
 df.sort_values(["sample_id", "sequencing_data_type"], ascending=[False, True], inplace=True)
 for _, row in df.iterrows():

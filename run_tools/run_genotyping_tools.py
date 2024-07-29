@@ -18,6 +18,10 @@ sys.path.append("../str-truth-set/tool_comparison/hail_batch_pipelines")
 from trgt_pipeline import create_trgt_step
 from longtr_pipeline import create_longtr_steps
 from straglr_pipeline import create_straglr_steps
+from expansion_hunter_pipeline import create_expansion_hunter_steps
+from gangstr_pipeline import create_gangstr_steps
+from hipstr_pipeline import create_hipstr_steps
+
 
 SHORT_READ_TOOLS = {
     "EHv5",
@@ -81,69 +85,102 @@ def main():
     if args.exclude_homopolymers:
         suffix += ".excluding_homopolymers"
 
-    if args.only_pure_repeats and args.exclude_homopolymers:
-        output_dir_suffix = "pure_repeats_excluding_homopolymers"
-    elif args.only_pure_repeats:
-        output_dir_suffix = "pure_repeats_including_homopolymers"
-    elif args.exclude_homopolymers:
-        output_dir_suffix = "all_repeats_excluding_homopolymers"
-    else:
-        output_dir_suffix = "all_repeats_including_homopolymers"
+    pure_repeats_or_all_repeats = "pure_repeats" if args.only_pure_repeats else "all_repeats"
+    including_or_excluding_homopolymers = "including_homopolymers" if not args.exclude_homopolymers else "excluding_homopolymers"
+    excluding_homopolymers_string = ".excluding_homopolymers" if args.exclude_homopolymers else ""
+    output_dir_suffix = f"{pure_repeats_or_all_repeats}_{including_or_excluding_homopolymers}"
 
     filter_steps = []
     figures_to_download = collections.defaultdict(list)
     for row_i, (_, row) in enumerate(df.iterrows()):
         coverage = int(round(float(row.depth_of_coverage)))
         for tool in args.tool:
-            repeat_catalog_paths = f"gs://str-truth-set-v2/filter_vcf/{output_dir_suffix}/{row.sample_id}/{row.sample_id}.STRs.positive_loci.{tool}*"
+            if tool in SHORT_READ_TOOLS and row.sequencing_data_type not in SHORT_READ_DATA_TYPES:
+                print(f"WARNING: Skipping {tool} for {row.sample_id} {row.sequencing_data_type} since {tool} "
+                      f"doesn't support {row.sequencing_data_type} data")
+                continue
+            if tool in LONG_READ_TOOLS and row.sequencing_data_type not in LONG_READ_DATA_TYPES:
+                print(f"WARNING: Skipping {tool} for {row.sample_id} {row.sequencing_data_type} since {tool} "
+                      f"doesn't support {row.sequencing_data_type} data")
+                continue
+
+            repeat_catalog_paths = f"gs://str-truth-set-v2/filter_vcf/{output_dir_suffix}/{row.sample_id}/{row.sample_id}.STRs{excluding_homopolymers_string}.positive_loci.{tool}*"
+            print(f"Listing catalogs {repeat_catalog_paths}")
             repeat_catalog_paths = [x.path for x in hfs.ls(repeat_catalog_paths)]
             output_dir = os.path.join(args.output_dir, output_dir_suffix, row.sample_id, tool, f"{coverage}x_coverage")
             if tool == "EHv5":
-                pass
-            elif tool == "GangSTR":
-                pass
-            elif tool == "HipSTR":
-                pass
-            elif tool == "TRGT":
-                if row.sequencing_data_type != "pacbio":
-                    print(f"WARNING: Skipping TRGT for {row.sample_id} {row.sequencing_data_type} since TRGT only supports pacbio data")
-                    continue
-
-                trgt_step = create_trgt_step(
+                create_expansion_hunter_steps(
                     bp,
                     reference_fasta=REFERENCE_FASTA_PATH,
                     reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
                     input_bam=row.read_data_path,
                     input_bai=row.read_data_index_path,
+                    male_or_female=row.male_or_female,
+                    variant_catalog_file_paths=repeat_catalog_paths,
+                    output_dir=output_dir,
+                    output_prefix= f"{row.sample_id}.STRs.positive_loci.{tool}",
+                    use_streaming_mode=False,
+                    loci_to_exclude=None,
+                    min_locus_coverage=None,
+                    use_illumina_expansion_hunter=False)
+            elif tool == "GangSTR":
+                create_gangstr_steps(
+                    bp,
+                    reference_fasta=REFERENCE_FASTA_PATH,
+                    reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
+                    input_bam=row.read_data_path,
+                    input_bai=row.read_data_index_path,
+                    male_or_female=row.male_or_female,
+                    repeat_spec_file_paths=repeat_catalog_paths,
+                    output_dir=output_dir,
+                    output_prefix=f"{row.sample_id}.STRs.positive_loci.{tool}")
+            elif tool == "HipSTR":
+                create_hipstr_steps(
+                    bp,
+                    reference_fasta=REFERENCE_FASTA_PATH,
+                    reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
+                    input_bam=row.read_data_path,
+                    input_bai=row.read_data_index_path,
+                    male_or_female=row.male_or_female,
+                    regions_bed_file_paths=repeat_catalog_paths,
+                    output_dir=output_dir,
+                    output_prefix=f"{row.sample_id}.STRs.positive_loci.{tool}")
+            elif tool == "TRGT":
+                if row.sequencing_data_type != "pacbio":
+                    print(f"WARNING: Skipping {tool} for {row.sample_id} {row.sequencing_data_type} since {tool} "
+                          f"doesn't support {row.sequencing_data_type} data")
+                    continue
+
+                current_step = create_trgt_step(
+                    bp,
+                    reference_fasta=REFERENCE_FASTA_PATH,
+                    reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
+                    input_bam=row.read_data_path,
+                    input_bai=row.read_data_index_path,
+                    male_or_female=row.male_or_female,
                     trgt_catalog_bed_paths=repeat_catalog_paths,
                     output_dir=output_dir,
                     output_prefix= f"{row.sample_id}.STRs.positive_loci.{tool}")
             elif tool == "LongTR":
-                if row.sequencing_data_type not in LONG_READ_DATA_TYPES:
-                    print(f"WARNING: Skipping LongTR for {row.sample_id} {row.sequencing_data_type} since LongTR only supports long read data")
-                    continue
-
-                longtr_step = create_longtr_steps(
+                current_step = create_longtr_steps(
                     bp,
                     reference_fasta=REFERENCE_FASTA_PATH,
                     reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
                     input_bam=row.read_data_path,
                     input_bai=row.read_data_index_path,
+                    male_or_female=row.male_or_female,
                     regions_bed_paths=repeat_catalog_paths,
                     output_dir=output_dir,
                     output_prefix=f"{row.sample_id}.STRs.positive_loci.{tool}")
 
             elif tool == "straglr":
-                if row.sequencing_data_type not in LONG_READ_DATA_TYPES:
-                    print(f"WARNING: Skipping Straglr for {row.sample_id} {row.sequencing_data_type} since Straglr only supports long read data")
-                    continue
-
-                longtr_step = create_straglr_steps(
+                current_step = create_straglr_steps(
                     bp,
                     reference_fasta=REFERENCE_FASTA_PATH,
                     reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
                     input_bam=row.read_data_path,
                     input_bai=row.read_data_index_path,
+                    male_or_female=row.male_or_female,
                     straglr_catalog_bed_paths=repeat_catalog_paths,
                     output_dir=output_dir,
                     output_prefix=f"{row.sample_id}.STRs.positive_loci.{tool}")
@@ -198,7 +235,7 @@ if __name__ == "__main__":
 #       --input-bai gs://bw2-delete-after-60-days/long-reads/HG002.aligned.bam.bai \
 #       --output-dir gs://bw2-delete-after-60-days/excluding_homopolymers/trgt_egor_bam \
 
-
+"""
 n = 6
 expansion_hunter_variant_catalogs = " ".join([
     f"--variant-catalog gs://str-truth-set-v2/filter_vcf/all_repeats_including_homopolymers/CHM1_CHM13/positive_loci.EHv5.00{i}_of_00{n}.json "
@@ -220,50 +257,50 @@ def run(cmd):
     print(cmd)
     #os.system(cmd)
 
-run(f"""
+run(f"
 python3 ../str-truth-set/tool_comparison/hail_batch_pipelines/downsample_bam_pipeline.py \
     --verbose \
     --target-coverage 30 \
     --output-dir gs://bw2-delete-after-30-days/ \
     --input-bam {input_cram}
-""")
+")
 
 
-run(f"""
+run(f"
 python3 ../str-truth-set/tool_comparison/hail_batch_pipelines/expansion_hunter_pipeline.py \
     --input-bam {input_cram} \
     --input-bai {input_cram}.crai \
     --output-dir {output_dir}/eh \
     --use-streaming-mode \
     {expansion_hunter_variant_catalogs}
-""")
+")
 
-run(f"""
+run(f"
 python3 ../str-truth-set/tool_comparison/hail_batch_pipelines/gangstr_pipeline.py \
     --input-bam {input_cram} \
     --input-bai {input_cram}.crai \
     --output-dir {output_dir}/gangstr \
     --repeat-specs {gangstr_repeat_specs}
-""")
+")
 
 
-run(f"""
+run(f"
 python3 ../str-truth-set/tool_comparison/hail_batch_pipelines/hipstr_pipeline.py \
     --input-bam {input_cram} \
     --input-bai {input_cram}.crai \
     --output-dir {output_dir}/hipstr \
     --regions-bed {hipstr_regions_bed}
-""")
+")
 
-run(f"""
+run(f"
 python3 ../str-truth-set/tool_comparison/hail_batch_pipelines/trgt_pipeline.py \
     --input-bam {input_long_read_bam} \
     --input-bai {input_long_read_bam}.bai \
     --output-dir {output_dir}/trgt \
     --trgt-catalog-bed {trgt_catalog_bed}
-""")
+")
 
-"""
+
 truth_set=HG00438.STRs.excluding_homopolymers.annotated.variants.tsv.gz
 python3 ../../str-truth-set/tool_comparison/scripts/compute_truth_set_tsv_for_comparisons.py \
     --output-dir . \
