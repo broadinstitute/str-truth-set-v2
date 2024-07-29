@@ -41,6 +41,8 @@ df.rename(columns={
 df["depth_stats_path"] = df["sample_id"].apply(
 	lambda sample_id: os.path.join(f"gs://str-truth-set-v2/raw_data/{sample_id}/illumina", f"{sample_id}.total_depth.txt")) 
 
+
+
 df = pd.concat([df, pd.DataFrame([{
 	"sample_id": "HG002",  # aka. NA24385  (https://www.coriell.org/1/NIGMS/Collections/NIST-Reference-Materials)
 	"sequencing_data_type": "illumina",
@@ -48,11 +50,17 @@ df = pd.concat([df, pd.DataFrame([{
 	"read_data_index_path": "gs://str-truth-set-v2/raw_data/HG002/illumina/HG002.pcr_free.cram.crai",
 	"depth_stats_path":     "gs://str-truth-set-v2/raw_data/HG002/illumina/HG002.pcr_free.total_depth.txt",
 }, {
+	"sample_id": "HG002",    # from https://www.biorxiv.org/content/10.1101/2020.12.11.422022v1.full  gs://brain-genomics-public/research/sequencing/grch38/bam/novaseq/wes_idt/100x/
+	"sequencing_data_type": "illumina_exome",  # chose Novaseq 100x since that's likely the highest quality exome and IDT is the kit used by UKBB (https://www.ukbiobank.ac.uk/media/najcnoaz/access_064-uk-biobank-exome-release-faq_v11-1_final-002.pdf)
+	"read_data_path":       "gs://str-truth-set-v2/raw_data/HG002/illumina_exome/HG002.novaseq.wes_idt.100x.dedup.bam",
+	"read_data_index_path": "gs://str-truth-set-v2/raw_data/HG002/illumina_exome/HG002.novaseq.wes_idt.100x.dedup.bam.bai",
+	"depth_stats_path":     "gs://str-truth-set-v2/raw_data/HG002/illumina_exome/HG002.total_depth.txt",
+}, {
 	"sample_id": "HG002",  # aka. NA24385
 	"sequencing_data_type": "element",
-	"read_data_path":       "gs://str-truth-set-v2/raw_data/HG002/element/HG002.element.cram",
-	"read_data_index_path": "gs://str-truth-set-v2/raw_data/HG002/element/HG002.element.cram.crai",
-	"depth_stats_path":     "gs://str-truth-set-v2/raw_data/HG002/element/HG002.element.total_depth.txt",
+	"read_data_path":       "gs://str-truth-set-v2/raw_data/HG002/element/HG002.element.downsampled_to_30x.bam",
+	"read_data_index_path": "gs://str-truth-set-v2/raw_data/HG002/element/HG002.element.downsampled_to_30x.bam.bai",
+	"depth_stats_path":     "gs://str-truth-set-v2/raw_data/HG002/element/HG002.element.downsampled_to_30x.total_depth.txt",
 }, {
 	# Ultima HG002 downloaded from "https://ultima-ashg-2023-reference-set.s3.amazonaws.com/crams/030945-NA24385-Z0114-CAACATACATCAGAT.cram"
 	"sample_id": "HG002",  # aka. NA24385
@@ -83,6 +91,12 @@ df = pd.concat([df, pd.DataFrame([{
 	"read_data_index_path": "gs://str-truth-set-v2/raw_data/CHM1_CHM13/pacbio/CHM1_CHM13.bam.bai",
 	"depth_stats_path": "gs://str-truth-set-v2/raw_data/CHM1_CHM13/pacbio/CHM1_CHM13.total_depth.txt",
 }, {
+	"sample_id": "CHM1_CHM13",
+	"sequencing_data_type": "illumina_exome",
+	"read_data_path":       "gs://broad-public-datasets/CHM1_CHM13_WES/CHMI_CHMI3_Nex1.cram",
+	"read_data_index_path": "gs://broad-public-datasets/CHM1_CHM13_WES/CHMI_CHMI3_Nex1.cram.crai",
+	"depth_stats_path":     "gs://str-truth-set-v2/raw_data/CHM1_CHM13/illumina_exome/CHM1_CHM13.total_depth.txt",
+}, {
 	"sample_id": "HG005",
 	"sequencing_data_type": "pacbio",
 	"read_data_path":       "gs://str-truth-set-v2/raw_data/HG005/pacbio/HG005.downsampled_to_30x.bam",
@@ -109,10 +123,8 @@ df = pd.concat([df, pd.DataFrame([{
 }])], ignore_index=True)
 
 for sequencing_data_type, downsampled_bam in [
-	("pacbio", "gs://str-truth-set-v2/raw_data/HG005/pacbio/HG005.downsampled_to_30x.bam"),
 	("illumina", "gs://str-truth-set-v2/raw_data/HG002/illumina/HG002.pcr_free.downsampled_to_20x.bam"),
 	("illumina", "gs://str-truth-set-v2/raw_data/HG002/illumina/HG002.pcr_free.downsampled_to_10x.bam"),
-	("element", "gs://str-truth-set-v2/raw_data/HG002/element/HG002.element.downsampled_to_30x.bam"),
 	("pacbio", "gs://str-truth-set-v2/raw_data/HG002/pacbio/HG002.downsampled_to_30x.bam"),
 	("pacbio", "gs://str-truth-set-v2/raw_data/HG002/pacbio/HG002.downsampled_to_20x.bam"),
 	("pacbio", "gs://str-truth-set-v2/raw_data/HG002/pacbio/HG002.downsampled_to_8x.bam"),

@@ -37,6 +37,7 @@ LONG_READ_TOOLS = {
 
 SHORT_READ_DATA_TYPES = {
     "illumina",
+    "illumina_exome",
     "element",
     "ultima",
 }
@@ -107,7 +108,7 @@ def main():
             repeat_catalog_paths = f"gs://str-truth-set-v2/filter_vcf/{output_dir_suffix}/{row.sample_id}/{row.sample_id}.STRs{excluding_homopolymers_string}.positive_loci.{tool}*"
             print(f"Listing catalogs {repeat_catalog_paths}")
             repeat_catalog_paths = [x.path for x in hfs.ls(repeat_catalog_paths)]
-            output_dir = os.path.join(args.output_dir, output_dir_suffix, row.sample_id, tool, f"{coverage}x_coverage")
+            output_dir = os.path.join(args.output_dir, output_dir_suffix, row.sample_id, row.sequencing_data_type, tool, f"{coverage}x_coverage")
             if tool == "EHv5":
                 create_expansion_hunter_steps(
                     bp,
@@ -116,7 +117,7 @@ def main():
                     input_bam=row.read_data_path,
                     input_bai=row.read_data_index_path,
                     male_or_female=row.male_or_female,
-                    variant_catalog_file_paths=repeat_catalog_paths,
+                    variant_catalog_file_paths=[p for p in repeat_catalog_paths if "001_of_001" not in p], # exclude the unsharded catalog
                     output_dir=output_dir,
                     output_prefix= f"{row.sample_id}.STRs.positive_loci.{tool}",
                     use_streaming_mode=False,
