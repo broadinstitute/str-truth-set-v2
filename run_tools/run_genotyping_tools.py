@@ -64,6 +64,7 @@ def main():
                         help="Process only this sample. Can be specified more than once.")
     parser.add_argument("-t", "--tool", action="append", choices=SHORT_READ_TOOLS|LONG_READ_TOOLS, help="The tool to run.")
     parser.add_argument("--data-type", action="append", choices=SHORT_READ_DATA_TYPES|LONG_READ_DATA_TYPES, help="Which data type(s) to process")
+    parser.add_argument("-k", "--filename-keyword", help="If specified, only BAM paths that contain this keyword will be processed", action="append")
     parser.add_argument("--output-dir", default="gs://str-truth-set-v2/tool_results")
     args = bp.parse_known_args()
 
@@ -94,6 +95,10 @@ def main():
     filter_steps = []
     figures_to_download = collections.defaultdict(list)
     for row_i, (_, row) in enumerate(df.iterrows()):
+        if args.filename_keyword:
+            if not any(keyword in row.read_data_path for keyword in args.filename_keyword):
+                continue
+
         coverage = int(round(float(row.depth_of_coverage)))
         for tool in args.tool:
             if tool in SHORT_READ_TOOLS and row.sequencing_data_type not in SHORT_READ_DATA_TYPES:
