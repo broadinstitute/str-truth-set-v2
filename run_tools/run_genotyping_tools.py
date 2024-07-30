@@ -50,6 +50,8 @@ LONG_READ_DATA_TYPES = {
 REFERENCE_FASTA_PATH = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
 REFERENCE_FASTA_FAI_PATH = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta.fai"
 
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:d327d8164fb2eb155967a55eb28e95ed5cb37375ec016d9767ac589b605bf133"
+
 def main():
     sample_table_path = "HPRC_all_aligned_short_read_and_long_read_samples.tsv"
     df = pd.read_table(sample_table_path)
@@ -65,6 +67,7 @@ def main():
     parser.add_argument("-t", "--tool", action="append", choices=SHORT_READ_TOOLS|LONG_READ_TOOLS, help="The tool to run.")
     parser.add_argument("--data-type", action="append", choices=SHORT_READ_DATA_TYPES|LONG_READ_DATA_TYPES, help="Which data type(s) to process")
     parser.add_argument("-k", "--filename-keyword", help="If specified, only BAM paths that contain this keyword will be processed", action="append")
+    parser.add_argument("--filter-vcf-dir", default="gs://str-truth-set-v2/filter_vcf", help="Base dir for filter_vcf pipeline output files")
     parser.add_argument("--output-dir", default="gs://str-truth-set-v2/tool_results")
     args = bp.parse_known_args()
 
@@ -115,7 +118,7 @@ def main():
             repeat_catalog_paths = [x.path for x in hfs.ls(repeat_catalog_paths)]
             output_dir = os.path.join(args.output_dir, output_dir_suffix, row.sample_id, row.sequencing_data_type, tool, f"{coverage}x_coverage")
             if tool == "EHv5":
-                create_expansion_hunter_steps(
+                current_step = create_expansion_hunter_steps(
                     bp,
                     reference_fasta=REFERENCE_FASTA_PATH,
                     reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
@@ -130,7 +133,7 @@ def main():
                     min_locus_coverage=None,
                     use_illumina_expansion_hunter=False)
             elif tool == "GangSTR":
-                create_gangstr_steps(
+                current_step = create_gangstr_steps(
                     bp,
                     reference_fasta=REFERENCE_FASTA_PATH,
                     reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
@@ -141,7 +144,7 @@ def main():
                     output_dir=output_dir,
                     output_prefix=f"{row.sample_id}.STRs.positive_loci.{tool}")
             elif tool == "HipSTR":
-                create_hipstr_steps(
+                current_step = create_hipstr_steps(
                     bp,
                     reference_fasta=REFERENCE_FASTA_PATH,
                     reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
@@ -178,7 +181,6 @@ def main():
                     regions_bed_paths=repeat_catalog_paths,
                     output_dir=output_dir,
                     output_prefix=f"{row.sample_id}.STRs.positive_loci.{tool}")
-
             elif tool == "straglr":
                 current_step = create_straglr_steps(
                     bp,
@@ -193,9 +195,95 @@ def main():
             else:
                 raise ValueError(f"Unknown tool: {tool}")
 
-
+            add_columns_step = add_tool_comparison_columns_step(
+                bp,
+                current_step,
+                tool=tool,
+                coverage=coverage,
+                sample_id=row.sample_id,
+                output_dir=output_dir,
+                filter_vcf_dir=os.path.join(args.filter_vcf_dir, output_dir_suffix, row.sample_id),
+                suffix=suffix,
+                tool2="Truth")
     bp.run()
 
+
+def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage, sample_id, output_dir, filter_vcf_dir, suffix, tool2="Truth"):
+    tool_results_path = None
+    for output_spec in tool_results_step.get_outputs():
+        if output_spec.output_path.endswith(".variants.tsv.gz"):
+            tool_results_path = output_spec.output_path
+
+    if tool_results_path is None:
+        raise ValueError(f"Couldn't find a .variants.tsv.gz table among the output files for {tool}: "
+                         f"{[s.output_path for s in tool_results_step.get_outputs()]}")
+
+    add_columns_step = bp.new_step(
+        name=f"Compare {sample_id} {tool} results to {tool2}",
+        arg_suffix=f"add-columns-step",
+        image=FILTER_VCFS_DOCKER_IMAGE,
+        cpu=1,
+        memory="highmem",
+        storage="20Gi",
+        output_dir=output_dir)
+
+    add_columns_step.depends_on(tool_results_step)
+
+    add_columns_step.command("set -ex")
+
+    local_tool_results_input = add_columns_step.input(tool_results_path)
+    local_truth_set_input = add_columns_step.input(
+        os.path.join(filter_vcf_dir, f"{sample_id}{suffix}.annotated.variants.for_comparison.tsv.gz"))
+
+    add_columns_step.command(f"""python3 <<EOF
+import pandas as pd
+df = pd.read_table("{local_tool_results_input}", dtype=str)
+df.loc[:, "Coverage"] = "{coverage}x"
+df.to_csv("{local_tool_results_input}", sep="\\t", index=False, header=True)
+EOF
+""")
+
+    add_columns_step.command(f"python3 -u /str-truth-set/tool_comparison/scripts/add_tool_results_columns.py "
+               f"--tool {tool} "
+               f"{local_tool_results_input} " 
+               f"{local_truth_set_input} ")
+
+    add_columns_step.command("ls -lhrt")
+
+    local_tsv_file_path = str(local_truth_set_input).replace(".tsv.gz", "") + f".with_{tool}_results.tsv.gz"
+    output_filename = local_truth_set_input.filename.replace(".tsv.gz", "") + f".with_{tool}_vs_{tool2}_columns.tsv.gz"
+    add_columns_step.command(f"python3 -u /str-truth-set/tool_comparison/scripts/add_concordance_columns.py "
+               f"--tool {tool} "
+               f"--compare-to {tool2} "
+               f"--output-tsv {output_filename} "
+               f"{local_tsv_file_path}")
+
+    add_columns_step.command("ls -lhrt")
+
+    add_columns_step.output(output_filename)
+
+    return add_columns_step
+
+#Coverage
+
+#def add_plot_steps():
+#
+#    python3 -u plot_tool_accuracy_percent_exactly_right.py --show-title --output-dir ${output_dir}
+#    python3 -u plot_tool_accuracy_percent_exactly_right.py --show-title --exclude-hipstr-no-call-loci --output-dir ${output_dir}
+#    python3 -u plot_tool_accuracy_by_motif_size.py --output-dir ${output_dir}
+#
+#    # generate tool accuracy vs Q and tool accuracy by num repeats plots
+#    python3 figures_pipeline.py --force --batch-size 25
+#
+#    gsutil -m cp -r gs://str-truth-set/hg38/figures/accuracy_vs_Q .
+#    gsutil -m cp -r gs://str-truth-set/hg38/figures/accuracy_by_allele_size  .
+#
+#    #python3 -u plot_tool_accuracy_vs_Q.py --verbose
+#    #python3 -u plot_tool_accuracy_by_allele_size.py --verbose
+#
+#    ./generate_figure_panels_for_paper.sh
+#
+#    TODO plot fraction of loci that are polymorphic by size in reference
 
 if __name__ == "__main__":
     main()
