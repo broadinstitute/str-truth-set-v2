@@ -18,9 +18,7 @@ import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
-STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:6c4577678cc9dc43dffe51ae52a5dc6d7707122fdc8e504847e39afb104cbf82"
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:d4401ddb2fb5c6d87e8fddccf5ae680bc9946d5bfa95de9d840d12e3e37f60de"
-
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:ba23c9ddab4f1c9e599fe2b57d83a37e54aa5a5e38d4dfa27c277e4d6d83d225"
 
 EXPANSION_HUNTER_LOCI_PER_RUN = 10_000 # if exclude_homopolymers else 100000
 GANGSTR_LOCI_PER_RUN = 1_000_000
@@ -30,7 +28,7 @@ def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, 
                        keep_loci_that_have_overlapping_variants=False, use_preemptibles=True):
     filter_step = bp.new_step(
         f"filter_vcf: {row.sample_id}" + (" (keep loci that have overlapping variants)" if keep_loci_that_have_overlapping_variants else ""),
-        image=STR_ANALYSIS_DOCKER_IMAGE,
+        image=FILTER_VCFS_DOCKER_IMAGE,
         arg_suffix="filter-step",
         preemptible=use_preemptibles,
         cpu=2,
@@ -433,6 +431,7 @@ def create_combine_results_step(
     combined_output_dir = os.path.join(output_dir, "combined")
 
     for combine_step_type, combine_step_prefix, variants_or_alleles, combine_step_suffix, cpu in [
+        ("expansion hunter catalogs", "merged", "variants", "json", 4),
         ("concat tsvs", "concat", "variants", "tsv", 4),
         ("concat tsvs", "concat", "annotated.variants", "tsv", 8),
         ("concat tsvs", "concat", "alleles", "tsv", 4),
@@ -466,13 +465,34 @@ def create_combine_results_step(
 
         combine_step.command("set -exuo pipefail")
 
-        input_files = [
-            combine_step.input(
-                os.path.join(output_dir, f"{row.sample_id}/{row.sample_id}{suffix}.{variants_or_alleles}.{combine_step_suffix}.gz")
-            ) for _, row in df.iterrows()
-        ]
+        if combine_step_type == "expansion hunter catalogs":
+            input_files = [
+                combine_step.input(
+                    os.path.join(output_dir, f"{row.sample_id}/positive_loci.EHv5.001_of_001.json")
+                ) for _, row in df.iterrows()
+            ]
+        else:
+            input_files = [
+                combine_step.input(
+                    os.path.join(output_dir, f"{row.sample_id}/{row.sample_id}{suffix}.{variants_or_alleles}.{combine_step_suffix}.gz")
+                ) for _, row in df.iterrows()
+            ]
 
-        if combine_step_type == "concat tsvs":
+        if combine_step_type == "expansion hunter catalogs":
+            merged_json_output_prefix = f"merged_expansion_hunter_catalog.{len(df)}_samples.{combine_step_suffix}.gz"
+            if not exclude_homopolymers:
+                combine_step.storage("20G")
+            combine_step.command(
+                f"python3 str_analysis.merge_loci  "
+                    f"--add-source-field "
+                    f"--output-format JSON "
+                    f"--overlapping-loci-action keep-narrow "
+                    "--output-merge-stats-tsv"
+                    f"--output-prefix {merged_json_output_prefix} " +
+                    " ".join(i.local_path for i in input_files))
+            combine_step.output(f"{merged_json_output_prefix}.json.gz")
+            combine_step.output(f"{merged_json_output_prefix}.merge_stats.tsv")
+        elif combine_step_type == "concat tsvs":
             concat_tsv_output_filename = f"{combine_step_prefix}.{len(df)}_samples.{variants_or_alleles}.{combine_step_suffix}.gz"
             if not exclude_homopolymers:
                 combine_step.storage("20G")
@@ -504,7 +524,7 @@ def create_combine_results_step(
 
         combine_steps.append(combine_step)
 
-    _, concat_annotated_variants_tsv_step, _, concat_annotated_alleles_tsv_step, join_tsvs_step, _ = combine_steps
+    _, _, concat_annotated_variants_tsv_step, _, concat_annotated_alleles_tsv_step, join_tsvs_step, _ = combine_steps
 
     # create plots
     figures_to_download_dict = {}
@@ -569,7 +589,7 @@ def main():
 
     bp.precache_file_paths("gs://str-truth-set-v2/filter_vcf/**/*.*")
 
-    df = pd.read_table("../dipcall_pipeline/hprc_assemblies.tsv")
+    df = pd.read_table("../dipcall_pipeline/all_assemblies.tsv")
     if args.sample_id:
         df = df[df.sample_id.isin(args.sample_id)]
 

@@ -71,6 +71,7 @@ for sample_id, sample_urls in urls_by_sample_id.items():
         "accession_pat": row["sample_id"] + "_h2",
         "sex": sample_id_sex.get(sample_id, None),
     }
+    print(row)
     metadata_table_rows.append(row)
 
     if row["sex"] is None:
