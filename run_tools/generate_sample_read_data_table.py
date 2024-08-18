@@ -13,7 +13,7 @@ from step_pipeline import pipeline, Backend, Localize, files_exist
 from str_analysis.utils.file_utils import open_file
 
 
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:d327d8164fb2eb155967a55eb28e95ed5cb37375ec016d9767ac589b605bf133"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:d4401ddb2fb5c6d87e8fddccf5ae680bc9946d5bfa95de9d840d12e3e37f60de"
 
 REFERENCE_FASTA_PATH = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
 REFERENCE_FASTA_INDEX_PATH = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta.fai"
