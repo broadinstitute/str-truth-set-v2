@@ -57,6 +57,8 @@ RUN cp /bin/zcat /bin/gzcat
 
 # install str-analysis
 RUN python3 -m pip install --no-cache-dir --upgrade cmake pip
+
+ADD "https://www.random.org/cgi-bin/randbyte?nbytes=10&format=h" skipcache
 RUN python3 -m pip install --no-cache-dir git+https://github.com/broadinstitute/str-analysis
 
 
