@@ -18,8 +18,8 @@ import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
-STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:6e3128a78fe2125e5c12a999a64479084bdec2ed69ee95072c87a846d2a550ff"
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:d327d8164fb2eb155967a55eb28e95ed5cb37375ec016d9767ac589b605bf133"
+STR_ANALYSIS_DOCKER_IMAGE = "weisburd/str-analysis@sha256:6c4577678cc9dc43dffe51ae52a5dc6d7707122fdc8e504847e39afb104cbf82"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:d4401ddb2fb5c6d87e8fddccf5ae680bc9946d5bfa95de9d840d12e3e37f60de"
 
 
 EXPANSION_HUNTER_LOCI_PER_RUN = 10_000 # if exclude_homopolymers else 100000
@@ -268,6 +268,7 @@ def create_table_for_tool_comparisons_step(bp, row, suffix, output_dir, exclude_
         negative_loci_bed_input = table_for_tool_comparisons_step.input(
             os.path.join(output_dir, f"{row.sample_id}{suffix}.negative_loci.bed"))
 
+    table_for_tool_comparisons_step.command("set -ex")
     if not output_negative_loci:
         table_for_tool_comparisons_step.command(
             f"python3 -u /str-truth-set/tool_comparison/scripts/compute_truth_set_tsv_for_comparisons.py --output-dir . "
@@ -279,6 +280,7 @@ def create_table_for_tool_comparisons_step(bp, row, suffix, output_dir, exclude_
             annotated_variants_table_input.filename.replace(".tsv", ".for_comparison.tsv"))
     else:
         # compute overlap with other catalogs
+        #table_for_tool_comparisons_step.command("ls -lhtr")
         #variant_catalog_step.command(
         #    f"python3 -u /str-truth-set/scripts/compute_overlap_with_other_catalogs.py --all-repeats --all-motifs {row.sample_id}{suffix}.negative_loci.bed "
         #    f"{row.sample_id}{suffix}.negative_loci.with_overlap_columns.tsv.gz")
@@ -286,8 +288,8 @@ def create_table_for_tool_comparisons_step(bp, row, suffix, output_dir, exclude_
         #    f"python3 -u /str-truth-set/tool_comparison/scripts/compute_truth_set_tsv_for_comparisons.py --output-dir . "
         #    f"{annotated_variants_table_input} "
         #    f"{row.sample_id}{suffix}.negative_loci.with_overlap_columns.tsv.gz")
+        raise ValueError(f"Not implemented")
 
-        table_for_tool_comparisons_step.command("ls -lhtr")
 
     return table_for_tool_comparisons_step
 
@@ -401,6 +403,23 @@ def create_plot_step(bp, suffix, output_dir, row=None, alleles_tsv_step=None, ex
             output_path = os.path.join(output_dir, "figures", f"combined{suffix}.{filename}")
         plot_step.output(filename, output_path)
         files_to_download[filename.replace(".png", "")] = output_path
+
+    # create step to run gcloud storage objects update --content-type 'image/svg+xml' --content-encoding 'gzip' gs://str-truth-set-v2/tool_results/all_repeats_excluding_homopolymers/HG002/**/*.svg.gz
+    # on each image
+    image_headers_step = bp.new_step(
+        name=f"Set plot image headers",
+        arg_suffix="image-headers-step",
+        image=FILTER_VCFS_DOCKER_IMAGE,
+        cpu=1,
+        output_dir=output_dir)
+
+    image_headers_step.depends_on(plot_step)
+
+    image_headers_step.command("set -ex")
+    for previous_step_output in plot_step.get_outputs():
+        if previous_step_output.filename.endswith(".svg") or previous_step_output.filename.endswith(".svg.gz"):
+            image_headers_step.command(
+                f"gcloud storage objects update --content-type 'image/svg+xml' --content-encoding 'gzip' {previous_step_output.output_path}")
 
     return plot_step, files_to_download
 
