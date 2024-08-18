@@ -1,7 +1,8 @@
 sample_id	assembly_mat	assembly_pat	population	accession_mat	accession_pat	sex
+CHM1_CHM13	CHM1_20220129	CHM13v2_T2T	NewSynDip	CHM1_20220129	CHM13v2_T2T	female
 HG002	HG002.pri.mat.f1_v2	HG002.alt.pat.f1_v2	Caucasian	GCA_018852615.1	GCA_018852605.1	male
-HG00438	HG00438.pri.mat.f1_v2	HG00438.alt.pat.f1_v2	Han Chinese South	GCA_018471515.1	GCA_018472595.1	female
 HG005	HG005.pri.mat.f1_v2	HG005.alt.pat.f1_v2	Asian	GCA_018506965.1	GCA_018506945.1	male
+HG00438	HG00438.pri.mat.f1_v2	HG00438.alt.pat.f1_v2	Han Chinese South	GCA_018471515.1	GCA_018472595.1	female
 HG00621	HG00621.pri.mat.f1_v2	HG00621.alt.pat.f1_v2	Han Chinese South	GCA_018472605.1	GCA_018472575.1	male
 HG00673	HG00673.pri.mat.f1_v2	HG00673.alt.pat.f1_v2	Han Chinese South	GCA_018472565.1	GCA_018472585.1	male
 HG00733	HG00733.pri.mat.f1_v2	HG00733.alt.pat.f1_v2	Puerto Rican In Puerto Rico	GCA_018506975.1	GCA_018506955.1	female
@@ -46,4 +47,3 @@ NA18906	NA18906.pri.mat.f1_v2	NA18906.alt.pat.f1_v2	Yoruban In Ibadan, Nigeria	G
 NA19240	NA19240.pri.mat.f1_v2	NA19240.alt.pat.f1_v2	Yoruban	GCA_018503275.1	GCA_018503265.1	female
 NA20129	NA20129.pri.mat.f1_v2	NA20129.alt.pat.f1_v2	Southwest USA	GCA_018504635.1	GCA_018504625.1	female
 NA21309	NA21309.pri.mat.f1_v2	NA21309.alt.pat.f1_v2	Kinyawa, Kenya	GCA_018504655.1	GCA_018504665.1	female
-CHM1_CHM13	CHM1_20220129	CHM13v2_T2T	NewSynDip	CHM1_20220129	CHM13v2_T2T	female

@@ -486,7 +486,7 @@ def create_combine_results_step(
                 f"python3 str_analysis.merge_loci  "
                     f"--add-source-field "
                     f"--output-format JSON "
-                    f"--overlapping-loci-action keep-narrow "
+                    f"--overlapping-loci-action keep-first "
                     "--output-merge-stats-tsv"
                     f"--output-prefix {merged_json_output_prefix} " +
                     " ".join(i.local_path for i in input_files))
