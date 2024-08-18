@@ -20,17 +20,19 @@ from step_pipeline import pipeline, Backend, Localize
 
 DOCKER_IMAGE = "weisburd/dipcall-pipeline@sha256:6e13af8c4008fbea3ca1498e22c00df7265988f2a3673532f0b97f24c85c0dcc"
 
-bp = pipeline("HPRC dipcall pipeline", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline_gnomad")
+bp = pipeline("dipcall pipeline", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline_gnomad")
 
 parser = bp.get_config_arg_parser()
 parser.add_argument("-s", "--sample-id", action="append",
                     help="Process only this sample. Can be specified more than once.")
 parser.add_argument("--more-memory", action="store_true", help="Run with 2x more memory")
+parser.add_argument("--sample-table", default="hprc_assemblies.tsv")
+parser.add_argument("--urls-table", default="hprc_assembly_urls.tsv")
 parser.add_argument("--output-dir", default="gs://str-truth-set-v2/dipcall_pipeline")
 args = bp.parse_known_args()
 
-df = pd.read_table("hprc_assemblies.tsv")
-df_urls = pd.read_table("hprc_assembly_urls.tsv")
+df = pd.read_table(args.sample_table)
+df_urls = pd.read_table(args.urls_table)
 accession_to_url_map = dict(zip(df_urls.accession, df_urls.url))
 df["url_pat"] = df["accession_pat"].map(accession_to_url_map)
 df["url_mat"] = df["accession_mat"].map(accession_to_url_map)
@@ -42,7 +44,7 @@ s1_steps = []
 for i, (_, row) in enumerate(df.iterrows()):
 
     s1 = bp.new_step(
-        f"HPRC dipcall: {row.sample_id}",
+        f"dipcall: {row.sample_id}",
         image=DOCKER_IMAGE,
         arg_suffix="step1",
         cpu=16 if args.more_memory else 8,
