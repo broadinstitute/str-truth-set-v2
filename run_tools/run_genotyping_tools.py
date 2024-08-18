@@ -50,7 +50,9 @@ LONG_READ_DATA_TYPES = {
 REFERENCE_FASTA_PATH = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
 REFERENCE_FASTA_FAI_PATH = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta.fai"
 
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:d327d8164fb2eb155967a55eb28e95ed5cb37375ec016d9767ac589b605bf133"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:d4401ddb2fb5c6d87e8fddccf5ae680bc9946d5bfa95de9d840d12e3e37f60de"
+
+DEFAULT_OUTPUT_DIR = "gs://str-truth-set-v2/tool_results"
 
 def main():
     sample_table_path = "HPRC_all_aligned_short_read_and_long_read_samples.tsv"
@@ -68,19 +70,25 @@ def main():
     parser.add_argument("--data-type", action="append", choices=SHORT_READ_DATA_TYPES|LONG_READ_DATA_TYPES, help="Which data type(s) to process")
     parser.add_argument("-k", "--filename-keyword", help="If specified, only BAM paths that contain this keyword will be processed", action="append")
     parser.add_argument("--filter-vcf-dir", default="gs://str-truth-set-v2/filter_vcf", help="Base dir for filter_vcf pipeline output files")
-    parser.add_argument("--output-dir", default="gs://str-truth-set-v2/tool_results")
+    parser.add_argument("--custom-catalog-path", help="If specified, use this catalog instead of the filter_vcf catalogs")
+    parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
     args = bp.parse_known_args()
 
     if not args.tool:
         args.tool = ["TRGT"]
-    unknown_data_types = set(df.sequencing_data_type) - (SHORT_READ_DATA_TYPES | LONG_READ_DATA_TYPES)
-    if unknown_data_types:
-        raise ValueError(f"Unknown value(s) in the sequencing_data_type column of {sample_table_path}: {unknown_data_types}")
+    if not args.data_type:
+        args.data_type = ["pacbio"]
 
     if args.sample_id:
         df = df[df.sample_id.isin(args.sample_id)]
+
     if args.data_type:
         df = df[df.sequencing_data_type.isin(args.data_type)]
+
+    df = df[df.sample_id.isin({"HG002", "CHM1_CHM13"})]  # only use these samples for tool evaluations
+
+    if args.custom_catalog_path and args.output_dir == DEFAULT_OUTPUT_DIR:
+        paser.error("--custom-catalog-path is set without also setting --output-dir")
 
     bp.precache_file_paths(os.path.join(args.output_dir, "**/*.*"))
 
@@ -113,7 +121,12 @@ def main():
                       f"doesn't support {row.sequencing_data_type} data")
                 continue
 
-            repeat_catalog_paths = f"gs://str-truth-set-v2/filter_vcf/{output_dir_suffix}/{row.sample_id}/{row.sample_id}.STRs{excluding_homopolymers_string}.positive_loci.{tool}*"
+            if args.custom_catalog_path:
+                repeat_catalog_paths = args.custom_catalog_path
+            else:
+                repeat_catalog_paths = os.path.join(args.filter_vcf_dir, output_dir_suffix, row.sample_id,
+                    f"{row.sample_id}.STRs{excluding_homopolymers_string}.positive_loci.{tool}*")
+
             print(f"Listing catalogs {repeat_catalog_paths}")
             repeat_catalog_paths = [x.path for x in hfs.ls(repeat_catalog_paths)]
             output_dir = os.path.join(args.output_dir, output_dir_suffix, row.sample_id, row.sequencing_data_type, tool, f"{coverage}x_coverage")
@@ -133,6 +146,11 @@ def main():
                     min_locus_coverage=None,
                     use_illumina_expansion_hunter=False)
             elif tool == "GangSTR":
+                if row.sequencing_data_type == "ultima":
+                    # for some reason GangSTR never completes on ultima data
+                    print(f"WARNING: Skipping {tool} for {row.sample_id} {row.sequencing_data_type} since {tool} "
+                          f"doesn't support {row.sequencing_data_type} data")
+                    continue
                 current_step = create_gangstr_steps(
                     bp,
                     reference_fasta=REFERENCE_FASTA_PATH,
@@ -168,6 +186,7 @@ def main():
                     input_bai=row.read_data_index_path,
                     male_or_female=row.male_or_female,
                     trgt_catalog_bed_paths=repeat_catalog_paths,
+                    parse_reference_region_from_locus_id=True,
                     output_dir=output_dir,
                     output_prefix= f"{row.sample_id}.STRs.positive_loci.{tool}")
             elif tool == "LongTR":
@@ -195,6 +214,7 @@ def main():
             else:
                 raise ValueError(f"Unknown tool: {tool}")
 
+
             add_columns_step = add_tool_comparison_columns_step(
                 bp,
                 current_step,
@@ -205,10 +225,21 @@ def main():
                 filter_vcf_dir=os.path.join(args.filter_vcf_dir, output_dir_suffix, row.sample_id),
                 suffix=suffix,
                 tool2="Truth")
+
+            plot_tool_accuracy_step = create_plot_tool_accuracy_steps(
+                bp,
+                add_columns_step,
+                tool=tool,
+                coverage=coverage,
+                sample_id=row.sample_id,
+                output_dir=output_dir)
     bp.run()
 
 
 def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage, sample_id, output_dir, filter_vcf_dir, suffix, tool2="Truth"):
+    if tool == "EHv5":
+        tool = "ExpansionHunter"
+
     tool_results_path = None
     for output_spec in tool_results_step.get_outputs():
         if output_spec.output_path.endswith(".variants.tsv.gz"):
@@ -219,7 +250,7 @@ def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage, s
                          f"{[s.output_path for s in tool_results_step.get_outputs()]}")
 
     add_columns_step = bp.new_step(
-        name=f"Compare {sample_id} {tool} results to {tool2}",
+        name=f"Add {sample_id} {tool} results columns to {tool2} table for {os.path.basename(output_dir)}",
         arg_suffix=f"add-columns-step",
         image=FILTER_VCFS_DOCKER_IMAGE,
         cpu=1,
@@ -237,8 +268,10 @@ def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage, s
 
     add_columns_step.command(f"""python3 <<EOF
 import pandas as pd
+print("Adding columns to {local_tool_results_input}")
 df = pd.read_table("{local_tool_results_input}", dtype=str)
 df.loc[:, "Coverage"] = "{coverage}x"
+print(f"Writing {{len(df):,d}} rows to {local_tool_results_input}")
 df.to_csv("{local_tool_results_input}", sep="\\t", index=False, header=True)
 EOF
 """)
@@ -261,12 +294,87 @@ EOF
     add_columns_step.command("ls -lhrt")
 
     add_columns_step.output(output_filename)
+    add_columns_step.output(output_filename.replace(".tsv", ".alleles.tsv"))
 
     return add_columns_step
 
-#Coverage
 
-#def add_plot_steps():
+def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage, sample_id, output_dir):
+    if tool == "EHv5":
+        tool = "ExpansionHunter"
+
+
+    plot_tool_accuracy_step = bp.new_step(
+        name=f"Plot {sample_id} {tool} accuracy for {os.path.basename(output_dir)}",
+        arg_suffix=f"plot-accuracy-step",
+        image=FILTER_VCFS_DOCKER_IMAGE,
+        cpu=1,
+        memory="highmem",
+        storage="20Gi",
+        output_dir=output_dir)
+
+    local_variants_tsv, local_alleles_tsv = plot_tool_accuracy_step.use_previous_step_outputs_as_inputs(add_columns_step)
+
+    plot_tool_accuracy_step.command("set -ex")
+
+    for min_motif_size, max_motif_size in [(2, 6), (7, 1000)]:
+        plot_tool_accuracy_step.command(
+            f"python3 -u /str-truth-set/figures_and_tables/plot_tool_accuracy_by_allele_size.py "
+            "--verbose "
+            f"--tool {tool} "
+            f"--coverage {coverage}x "
+            "--q-threshold 0 "
+            f"--min-motif-size {min_motif_size} " +
+            (f"--max-motif-size {max_motif_size} " if max_motif_size is not None else "") +
+            "--genotype all "
+            "--show-no-call-loci "
+            "--image-type svg "
+            "--show-title "
+            f"{local_alleles_tsv} ")
+
+        plot_tool_accuracy_step.command("ls -lhrt")
+        for output_filename in [
+            f"tool_accuracy_by_true_allele_size.{min_motif_size}to{max_motif_size}bp_motifs.all_genotypes.{coverage}x.{tool}.svg",
+            f"tool_accuracy_by_true_allele_size.{min_motif_size}to{max_motif_size}bp_motifs.all_genotypes.pure_repeats.{coverage}x.{tool}.svg",
+            f"tool_accuracy_by_true_allele_size.{min_motif_size}to{max_motif_size}bp_motifs.all_genotypes.with_interruptions.{coverage}x.{tool}.svg"
+        ]:
+            plot_tool_accuracy_step.command(f"gzip {output_filename}")
+            plot_tool_accuracy_step.command(f"mv {output_filename}.gz {output_filename}")
+            plot_tool_accuracy_step.output(output_filename)
+
+
+    # create step to run gcloud storage objects update --content-type 'image/svg+xml' --content-encoding 'gzip' gs://str-truth-set-v2/tool_results/all_repeats_excluding_homopolymers/HG002/**/*.svg.gz
+    # on each image
+    image_headers_step = bp.new_step(
+        name=f"Set image headers for {sample_id} {tool} accuracy plots",
+        arg_suffix="image-headers-step",
+        image=FILTER_VCFS_DOCKER_IMAGE,
+        cpu=1,
+        output_dir=output_dir)
+
+    image_headers_step.depends_on(plot_tool_accuracy_step)
+
+    image_headers_step.command("set -ex")
+    for previous_step_output in plot_tool_accuracy_step.get_outputs():
+        if previous_step_output.filename.endswith(".svg") or previous_step_output.filename.endswith(".svg.gz"):
+            image_headers_step.command(
+                f"gcloud storage objects update --content-type 'image/svg+xml' --content-encoding 'gzip' {previous_step_output.output_path}")
+
+    #plot_tool_accuracy_step.command(f"python3 -u /str-truth-set/figures_and_tables/plot_tool_accuracy_vs_Q.py "
+    #                                "--verbose "
+    #                                f"--coverage {coverage}x "
+    #                                f"--min-motif-size {min_motif_size} "
+    #                                f"--max-motif-size {max_motif_size} "
+    #                                "--genotype all "
+    #                                "--show-no-call-loci "
+    #                                "--image-type svg "
+    #                                "--show-title "
+    #                                f"{local_alleles_tsv} ")
+
+    plot_tool_accuracy_step.command("ls -lhrt")
+
+    return plot_tool_accuracy_step
+
 #
 #    python3 -u plot_tool_accuracy_percent_exactly_right.py --show-title --output-dir ${output_dir}
 #    python3 -u plot_tool_accuracy_percent_exactly_right.py --show-title --exclude-hipstr-no-call-loci --output-dir ${output_dir}
