@@ -5,7 +5,7 @@ import subprocess
 
 metadata_df = pd.read_table("20130606_sample_info_1kGP.tsv")
 sample_id_sex = dict(zip(metadata_df["Sample"], metadata_df["Gender"]))
-sample_id_sex["NA24385"] = "male"
+sample_id_population = dict(zip(metadata_df["Sample"], metadata_df["Population"]))
 
 #%%
 # print ftp:// paths of assebmly fastas from the HGVS Consortium
@@ -19,7 +19,7 @@ urls = subprocess.check_output("""for x in \
 do
     for n in $(curl -sl $x )
     do
-      echo ${x}/${n}
+      echo ${x}${n}
     done
 done
 """, shell=True, text=True).strip().split("\n")
@@ -30,13 +30,14 @@ url_table_rows = []
 urls_by_sample_id = collections.defaultdict(dict)
 for url in urls:
     filename = os.path.basename(url)
+    if "NA24385" in filename or "NA24631" in filename:
+        continue  # these are aliases for HG002 and HG005
+
     if filename.endswith("fai"):
         continue
     match = re.match("v12_([^_]+)_(hgsvc|giab|hpg)_([^_]+)_1000-([^.]+).(h[12])", filename)
     if not match:
         raise ValueError(f"Unable to parse filename: {filename}")
-
-    print(f"sample_id: {sample_id}, source_project: {source_project} sequencing_type: {sequencing_type}, assembler: {assembler}, h1_or_h2: {h1_or_h2}")
 
     row = {
         "sample_id": match.group(1),
@@ -53,6 +54,9 @@ for url in urls:
 
     urls_by_sample_id[row["sample_id"]][row["h1_or_h2"]] = row["url"]
 
+    print(f"sample_id: {row['sample_id']}, source_project: {row['source_project']} sequencing_type: {row['sequencing_type']}, assembler: {row['assembler']}, h1_or_h2: {row['h1_or_h2']}")
+
+
 pd.DataFrame(url_table_rows).to_csv("hgvsc_assembly_urls.tsv", sep="\t", index=False)
 
 metadata_table_rows = []
@@ -64,11 +68,11 @@ for sample_id, sample_urls in urls_by_sample_id.items():
     h2_url = sample_urls["h2"]
     row = {
         "sample_id": sample_id,
-        "assembly_mat": row["sample_id"] + "_h1",
-        "assembly_pat": row["sample_id"] + "_h2",
-        "population": None,
-        "accession_mat": row["sample_id"] + "_h1",
-        "accession_pat": row["sample_id"] + "_h2",
+        "assembly_mat": f"{sample_id}_h1",
+        "assembly_pat": f"{sample_id}_h2",
+        "population": sample_id_population.get(sample_id, None),
+        "accession_mat": f"{sample_id}_h1",
+        "accession_pat": f"{sample_id}_h2",
         "sex": sample_id_sex.get(sample_id, None),
     }
     print(row)

@@ -11,7 +11,7 @@ ref
 *.twb
 *.twbr
 *.tsv.gz
-*.tsv
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

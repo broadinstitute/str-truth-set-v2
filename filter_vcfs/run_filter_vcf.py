@@ -18,7 +18,7 @@ import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:ba23c9ddab4f1c9e599fe2b57d83a37e54aa5a5e38d4dfa27c277e4d6d83d225"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:93f2983e5112ef18cee372ac5782f77639ea616fb8b27cd8980d1eadf58daa72"
 
 EXPANSION_HUNTER_LOCI_PER_RUN = 10_000 # if exclude_homopolymers else 100000
 GANGSTR_LOCI_PER_RUN = 1_000_000
@@ -193,6 +193,7 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
     if only_EH:
         variant_catalogs_step.command(
             f"python3 -u /str-truth-set/tool_comparison/scripts/convert_truth_set_to_variant_catalogs.py "
+            f"--skip-loci-not-found-in-the-reference "
             f"--ref-fasta {hg38_fasta_input} " +
             (f"--all-indels-vcf {dipcall_vcf_input} " if output_negative_loci else "--skip-negative-loci ") +
             f"--only eh "
@@ -205,6 +206,7 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
     else:
         variant_catalogs_step.command(
             f"python3 -u /str-truth-set/tool_comparison/scripts/convert_truth_set_to_variant_catalogs.py "
+            f"--skip-loci-not-found-in-the-reference "
             f"--ref-fasta {hg38_fasta_input} " +
             (f"--all-indels-vcf {dipcall_vcf_input} " if output_negative_loci else "--skip-negative-loci ") +
             f"--skip-popstr "
@@ -441,23 +443,21 @@ def create_combine_results_step(
         annotate_variants_steps, annotate_alleles_steps, output_dir, exclude_homopolymers=False,
         keep_loci_that_have_overlapping_variants=False,
         use_preemptibles=True):
-    combine_steps = []
     combined_output_dir = os.path.join(output_dir, "combined")
 
+    join_tsvs_step = None
     for combine_step_type, combine_step_prefix, variants_or_alleles, combine_step_suffix, cpu in [
         ("expansion hunter catalogs", "merged", "variants", "json", 4),
+        ("join tsvs", "joined", "variants", "tsv", 4),
+        ("combine beds", "combined", "variants", "bed", 1),
         #("concat tsvs", "concat", "variants", "tsv", 16),
         #("concat tsvs", "concat", "annotated.variants", "tsv", 16),
         #("concat tsvs", "concat", "alleles", "tsv", 16),
         #("concat tsvs", "concat", "annotated.alleles", "tsv", 16),
-        ("join tsvs", "joined", "variants", "tsv", 2),
-        ("combine beds", "combined", "variants", "bed", 1),
     ]:
         if variants_or_alleles == "annotated.variants" and annotate_variants_steps is None:
-            combine_steps.append(None)
             continue
         if variants_or_alleles == "annotated.alleles" and annotate_alleles_steps is None:
-            combine_steps.append(None)
             continue
 
         combine_step = bp.new_step(
@@ -497,11 +497,11 @@ def create_combine_results_step(
             if not exclude_homopolymers:
                 combine_step.storage("20G")
             combine_step.command(
-                f"python3 str_analysis.merge_loci  "
+                f"python3 -u -m str_analysis.merge_loci  "
                     f"--add-source-field "
                     f"--output-format JSON "
                     f"--overlapping-loci-action keep-first "
-                    "--output-merge-stats-tsv "
+                    "--write-merge-stats-tsv "
                     f"--output-prefix {merged_json_output_prefix} " +
                     " ".join(i.local_path for i in input_files))
             combine_step.output(f"{merged_json_output_prefix}.json.gz")
@@ -524,6 +524,7 @@ def create_combine_results_step(
                 " ".join(i.local_path for i in input_files))
             combine_step.output(joined_tsv_output_filename)
             combine_step.output(joined_tsv_output_stats_filename)
+            join_tsvs_step = combine_step
         elif combine_step_type == "combine beds":
             combined_bed_output_filename = f"combined.{len(df)}_samples.variants.bed.gz"
             combined_bed_output_stats_filename = f"combined.{len(df)}_bed_files.variants.stats.tsv.gz"
@@ -536,23 +537,21 @@ def create_combine_results_step(
             combine_step.output(combined_bed_output_filename + ".tbi")
             combine_step.output(combined_bed_output_stats_filename)
 
-        combine_steps.append(combine_step)
-
-    _, _, concat_annotated_variants_tsv_step, _, concat_annotated_alleles_tsv_step, join_tsvs_step, _ = combine_steps
+    assert join_tsvs_step is not None
 
     # create plots
     figures_to_download_dict = {}
-    if concat_annotated_alleles_tsv_step is not None:
-        combine_plot_step, figures_to_download_dict = create_plot_step(
-            bp, suffix, combined_output_dir,
-            alleles_tsv_step=concat_annotated_alleles_tsv_step,
-            exclude_homopolymers=exclude_homopolymers)
+    #if concat_annotated_alleles_tsv_step is not None:
+    #    combine_plot_step, figures_to_download_dict = create_plot_step(
+    #        bp, suffix, combined_output_dir,
+    #        alleles_tsv_step=concat_annotated_alleles_tsv_step,
+    #        exclude_homopolymers=exclude_homopolymers)
 
     # convert to catalogs
     combined_variant_catalogs_step = bp.new_step(
         f"combined variant catalogs: {len(df)} samples",
         arg_suffix="combine-variant-catalogs-step",
-        cpu=2,
+        cpu=4,
         preemptible=use_preemptibles,
         memory="highmem",
         storage="20G",
@@ -568,6 +567,7 @@ def create_combine_results_step(
     combined_variant_catalogs_step.command(
         "python3 -u /str-truth-set/tool_comparison/scripts/convert_truth_set_to_variant_catalogs.py "
         f"--ref-fasta {hg38_fasta_input} "
+        f"--skip-loci-not-found-in-the-reference "
         f"--expansion-hunter-loci-per-run {EXPANSION_HUNTER_LOCI_PER_RUN} "
         f"--gangstr-loci-per-run {GANGSTR_LOCI_PER_RUN} "
         f"--straglr-loci-per-run {STRAGLR_LOCI_PER_RUN} "
@@ -645,7 +645,6 @@ def main():
                                             keep_loci_that_have_overlapping_variants=True,
                                             use_preemptibles=not args.use_nonpreemptibles)
 
-        variant_catalog_steps_keeping_all_loci.append(filter_step_keeping_all_loci)
 
         variant_catalogs_step_keeping_all_loci = create_variant_catalogs_step(bp, row, suffix_keeping_all_loci,
                                                              output_dir_keeping_all_loci,
@@ -653,6 +652,8 @@ def main():
                                                              use_preemptibles=not args.use_nonpreemptibles,
                                                              only_EH=True)
         variant_catalogs_step_keeping_all_loci.depends_on(filter_step_keeping_all_loci)
+
+        variant_catalog_steps_keeping_all_loci.append(variant_catalogs_step_keeping_all_loci)
 
 
         filter_step = create_filter_step(bp, row, suffix, output_dir,
