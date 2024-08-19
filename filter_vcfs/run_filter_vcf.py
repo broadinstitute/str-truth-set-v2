@@ -161,7 +161,7 @@ def create_annotate_steps(bp, row, suffix, output_dir, exclude_homopolymers=Fals
     return annotate_steps
 
 
-def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolymers=False, output_negative_loci=False, use_preemptibles=True):
+def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolymers=False, output_negative_loci=False, use_preemptibles=True, only_EH=False):
     variant_catalogs_step = bp.new_step(
         f"variant catalogs: {row.sample_id}",
         image=FILTER_VCFS_DOCKER_IMAGE,
@@ -169,8 +169,7 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
         cpu=1,
         preemptible=use_preemptibles,
         output_dir=output_dir,
-        delocalize_by=Delocalize.GSUTIL_COPY,
-    )
+        delocalize_by=Delocalize.GSUTIL_COPY)
 
     hg38_fasta_input, _ = variant_catalogs_step.inputs(
         "gs://str-truth-set/hg38/ref/hg38.fa",
@@ -191,57 +190,72 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
         "gs://str-truth-set/hg38/ref/other/repeat_specs_GRCh38_without_mismatches.including_homopolymers.sorted.at_least_9bp.bed.gz.tbi")
 
     variant_catalogs_step.command("set -exuo pipefail")
-    variant_catalogs_step.command(
-        f"python3 -u /str-truth-set/tool_comparison/scripts/convert_truth_set_to_variant_catalogs.py "
-        f"--ref-fasta {hg38_fasta_input} " +
-        (f"--all-indels-vcf {dipcall_vcf_input} " if output_negative_loci else "--skip-negative-loci ") +
-        f"--skip-popstr "
-        f"--expansion-hunter-loci-per-run {EXPANSION_HUNTER_LOCI_PER_RUN} "
-        f"--gangstr-loci-per-run {GANGSTR_LOCI_PER_RUN} "
-        f"--straglr-loci-per-run {STRAGLR_LOCI_PER_RUN} "
-        f"--high-confidence-regions-bed {high_confidence_regions_bed_input} "
-        f"--all-hg38-repeats-bed {all_hg38_repeats_bed_input} "
-        f"--output-filename-prefix {row.sample_id}{suffix} "
-        f"--truth-set-bed {variants_bed_input} "
-        f"{variants_tsv_input}")
+    if only_EH:
+        variant_catalogs_step.command(
+            f"python3 -u /str-truth-set/tool_comparison/scripts/convert_truth_set_to_variant_catalogs.py "
+            f"--ref-fasta {hg38_fasta_input} " +
+            (f"--all-indels-vcf {dipcall_vcf_input} " if output_negative_loci else "--skip-negative-loci ") +
+            f"--only eh "
+            f"--expansion-hunter-loci-per-run 1000000000 "
+            f"--high-confidence-regions-bed {high_confidence_regions_bed_input} "
+            f"--all-hg38-repeats-bed {all_hg38_repeats_bed_input} "
+            f"--output-filename-prefix {row.sample_id}{suffix} "
+            f"--truth-set-bed {variants_bed_input} "
+            f"{variants_tsv_input}")
+    else:
+        variant_catalogs_step.command(
+            f"python3 -u /str-truth-set/tool_comparison/scripts/convert_truth_set_to_variant_catalogs.py "
+            f"--ref-fasta {hg38_fasta_input} " +
+            (f"--all-indels-vcf {dipcall_vcf_input} " if output_negative_loci else "--skip-negative-loci ") +
+            f"--skip-popstr "
+            f"--expansion-hunter-loci-per-run {EXPANSION_HUNTER_LOCI_PER_RUN} "
+            f"--gangstr-loci-per-run {GANGSTR_LOCI_PER_RUN} "
+            f"--straglr-loci-per-run {STRAGLR_LOCI_PER_RUN} "
+            f"--high-confidence-regions-bed {high_confidence_regions_bed_input} "
+            f"--all-hg38-repeats-bed {all_hg38_repeats_bed_input} "
+            f"--output-filename-prefix {row.sample_id}{suffix} "
+            f"--truth-set-bed {variants_bed_input} "
+            f"{variants_tsv_input}")
 
     variant_catalogs_step.command(
         f"find tool_comparison -name '*.json'")
     variant_catalogs_step.command(
         f"find tool_comparison -name '*.bed*'")
 
-    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/{row.sample_id}{suffix}.positive_loci.bed.gz")
-    if output_negative_loci:
-        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/{row.sample_id}{suffix}.negative_loci.bed.gz")
 
     variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/expansion_hunter/{row.sample_id}{suffix}.positive_loci.EHv5.*.json")
     if output_negative_loci:
         variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/expansion_hunter/{row.sample_id}{suffix}.negative_loci.EHv5.*.json")
 
-    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/gangstr/{row.sample_id}{suffix}.positive_loci.GangSTR.*.bed")
-    if output_negative_loci:
-        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/gangstr/{row.sample_id}{suffix}.negative_loci.GangSTR.*.bed")
+    if not only_EH:
+        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/{row.sample_id}{suffix}.positive_loci.bed.gz")
+        if output_negative_loci:
+            variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/{row.sample_id}{suffix}.negative_loci.bed.gz")
 
-    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/hipstr/{row.sample_id}{suffix}.positive_loci.HipSTR.*.bed")
-    if output_negative_loci:
-        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/hipstr/{row.sample_id}{suffix}.negative_loci.HipSTR.*.bed")
+        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/gangstr/{row.sample_id}{suffix}.positive_loci.GangSTR.*.bed")
+        if output_negative_loci:
+            variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/gangstr/{row.sample_id}{suffix}.negative_loci.GangSTR.*.bed")
 
-    #for chrom in [*range(1, 23), "X"]:
-    #    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/popstr/{row.sample_id}{suffix}.positive_loci.popSTR.chr{chrom}.markerInfo.gz")
-    #    if output_negative_loci:
-    #        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/popstr/{row.sample_id}{suffix}.negative_loci.popSTR.chr{chrom}.markerInfo.gz")
+        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/hipstr/{row.sample_id}{suffix}.positive_loci.HipSTR.*.bed")
+        if output_negative_loci:
+            variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/hipstr/{row.sample_id}{suffix}.negative_loci.HipSTR.*.bed")
 
-    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/trgt/{row.sample_id}{suffix}.positive_loci.TRGT_repeat_catalog.bed")
-    if output_negative_loci:
-        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/trgt/{row.sample_id}{suffix}.negative_loci.TRGT_repeat_catalog.bed")
+        #for chrom in [*range(1, 23), "X"]:
+        #    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/popstr/{row.sample_id}{suffix}.positive_loci.popSTR.chr{chrom}.markerInfo.gz")
+        #    if output_negative_loci:
+        #        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/popstr/{row.sample_id}{suffix}.negative_loci.popSTR.chr{chrom}.markerInfo.gz")
 
-    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/longtr/{row.sample_id}{suffix}.positive_loci.LongTR.*.bed")
-    if output_negative_loci:
-        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/longtr/{row.sample_id}{suffix}.negative_loci.LongTR.*.bed")
+        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/trgt/{row.sample_id}{suffix}.positive_loci.TRGT_repeat_catalog.bed")
+        if output_negative_loci:
+            variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/trgt/{row.sample_id}{suffix}.negative_loci.TRGT_repeat_catalog.bed")
 
-    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/straglr/{row.sample_id}{suffix}.positive_loci.straglr_catalog.*.bed")
-    if output_negative_loci:
-        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/straglr/{row.sample_id}{suffix}.negative_loci.straglr_catalog.*.bed")
+        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/longtr/{row.sample_id}{suffix}.positive_loci.LongTR.*.bed")
+        if output_negative_loci:
+            variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/longtr/{row.sample_id}{suffix}.negative_loci.LongTR.*.bed")
+
+        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/straglr/{row.sample_id}{suffix}.positive_loci.straglr_catalog.*.bed")
+        if output_negative_loci:
+            variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/straglr/{row.sample_id}{suffix}.negative_loci.straglr_catalog.*.bed")
 
     return variant_catalogs_step
 
@@ -423,7 +437,7 @@ def create_plot_step(bp, suffix, output_dir, row=None, alleles_tsv_step=None, ex
 
 
 def create_combine_results_step(
-        bp, df, suffix, filter_steps,
+        bp, df, suffix, variant_catalog_steps,
         annotate_variants_steps, annotate_alleles_steps, output_dir, exclude_homopolymers=False,
         keep_loci_that_have_overlapping_variants=False,
         use_preemptibles=True):
@@ -432,10 +446,10 @@ def create_combine_results_step(
 
     for combine_step_type, combine_step_prefix, variants_or_alleles, combine_step_suffix, cpu in [
         ("expansion hunter catalogs", "merged", "variants", "json", 4),
-        ("concat tsvs", "concat", "variants", "tsv", 4),
-        ("concat tsvs", "concat", "annotated.variants", "tsv", 8),
-        ("concat tsvs", "concat", "alleles", "tsv", 4),
-        ("concat tsvs", "concat", "annotated.alleles", "tsv", 8),
+        #("concat tsvs", "concat", "variants", "tsv", 16),
+        #("concat tsvs", "concat", "annotated.variants", "tsv", 16),
+        #("concat tsvs", "concat", "alleles", "tsv", 16),
+        #("concat tsvs", "concat", "annotated.alleles", "tsv", 16),
         ("join tsvs", "joined", "variants", "tsv", 2),
         ("combine beds", "combined", "variants", "bed", 1),
     ]:
@@ -461,14 +475,14 @@ def create_combine_results_step(
         elif variants_or_alleles == "annotated.alleles":
             combine_step.depends_on(annotate_alleles_steps)
         else:
-            combine_step.depends_on(filter_steps)
+            combine_step.depends_on(variant_catalog_steps)
 
         combine_step.command("set -exuo pipefail")
 
         if combine_step_type == "expansion hunter catalogs":
             input_files = [
                 combine_step.input(
-                    os.path.join(output_dir, f"{row.sample_id}/positive_loci.EHv5.001_of_001.json")
+                    os.path.join(output_dir, f"{row.sample_id}/{row.sample_id}{suffix}.positive_loci.EHv5.001_of_001.json")
                 ) for _, row in df.iterrows()
             ]
         else:
@@ -479,7 +493,7 @@ def create_combine_results_step(
             ]
 
         if combine_step_type == "expansion hunter catalogs":
-            merged_json_output_prefix = f"merged_expansion_hunter_catalog.{len(df)}_samples.{combine_step_suffix}.gz"
+            merged_json_output_prefix = f"merged_expansion_hunter_catalog.{len(df)}_samples"
             if not exclude_homopolymers:
                 combine_step.storage("20G")
             combine_step.command(
@@ -487,7 +501,7 @@ def create_combine_results_step(
                     f"--add-source-field "
                     f"--output-format JSON "
                     f"--overlapping-loci-action keep-first "
-                    "--output-merge-stats-tsv"
+                    "--output-merge-stats-tsv "
                     f"--output-prefix {merged_json_output_prefix} " +
                     " ".join(i.local_path for i in input_files))
             combine_step.output(f"{merged_json_output_prefix}.json.gz")
@@ -608,8 +622,9 @@ def main():
     else:
         output_dir_suffix = "all_repeats_including_homopolymers"
 
-    filter_steps_keeping_all_loci = []
-    filter_steps = []
+    output_base_dir_keeping_all_loci = os.path.join(args.output_dir, f"{output_dir_suffix}_keeping_loci_that_have_overlapping_variants")
+    variant_catalog_steps_keeping_all_loci = []
+    variant_catalog_steps = []
     annotate_alleles_steps = []
     annotate_variants_steps = []
     figures_to_download = collections.defaultdict(list)
@@ -622,14 +637,22 @@ def main():
         # so can be included in a set of all polymorphic STRs in the genome.
         # The steps below first compute the set of all STRs without this post-filter (for use as a polymorphic STR catalog)
         # and then compute the post-filtered set of STRs without any overlapping variants (for use as an STR truth set).
-        filter_step_keeping_all_loci = create_filter_step(bp, row, f"{suffix}.keeping_loci_that_have_overlapping_variants",
-                                            os.path.join(args.output_dir, f"{output_dir_suffix}_keeping_loci_that_have_overlapping_variants", row.sample_id),
+        suffix_keeping_all_loci = f"{suffix}.keeping_loci_that_have_overlapping_variants"
+        output_dir_keeping_all_loci = os.path.join(output_base_dir_keeping_all_loci, row.sample_id)
+        filter_step_keeping_all_loci = create_filter_step(bp, row, suffix_keeping_all_loci, output_dir_keeping_all_loci,
                                             exclude_homopolymers=args.exclude_homopolymers,
                                             only_pure_repeats=args.only_pure_repeats,
                                             keep_loci_that_have_overlapping_variants=True,
                                             use_preemptibles=not args.use_nonpreemptibles)
 
-        filter_steps_keeping_all_loci.append(filter_step_keeping_all_loci)
+        variant_catalog_steps_keeping_all_loci.append(filter_step_keeping_all_loci)
+
+        variant_catalogs_step_keeping_all_loci = create_variant_catalogs_step(bp, row, suffix_keeping_all_loci,
+                                                             output_dir_keeping_all_loci,
+                                                             exclude_homopolymers=args.exclude_homopolymers,
+                                                             use_preemptibles=not args.use_nonpreemptibles,
+                                                             only_EH=True)
+        variant_catalogs_step_keeping_all_loci.depends_on(filter_step_keeping_all_loci)
 
 
         filter_step = create_filter_step(bp, row, suffix, output_dir,
@@ -637,7 +660,7 @@ def main():
                                          only_pure_repeats=args.only_pure_repeats,
                                          use_preemptibles=not args.use_nonpreemptibles)
 
-        filter_steps.append(filter_step)
+        variant_catalog_steps.append(filter_step)
 
         annotate_variants_step, annotate_alleles_step = create_annotate_steps(bp, row, suffix, output_dir,
                                                                               exclude_homopolymers=args.exclude_homopolymers,
@@ -681,7 +704,7 @@ def main():
     if not args.skip_combine_steps:
         figures_to_download_dict = create_combine_results_step(
             bp, df, suffix,
-            filter_steps, annotate_variants_steps, annotate_alleles_steps,
+            variant_catalog_steps, annotate_variants_steps, annotate_alleles_steps,
             output_dir=os.path.join(args.output_dir, output_dir_suffix),
             exclude_homopolymers=args.exclude_homopolymers,
             use_preemptibles=not args.use_nonpreemptibles)
@@ -690,9 +713,9 @@ def main():
             figures_to_download[label].append(file_path)
 
         create_combine_results_step(
-            bp, df, f"{suffix}.keeping_loci_that_have_overlapping_variants",
-            filter_steps_keeping_all_loci, None, None,
-            output_dir=os.path.join(args.output_dir, f"{output_dir_suffix}_keeping_loci_that_have_overlapping_variants"),
+            bp, df, suffix_keeping_all_loci,
+            variant_catalog_steps_keeping_all_loci, None, None,
+            output_dir=output_base_dir_keeping_all_loci,
             exclude_homopolymers=args.exclude_homopolymers,
             use_preemptibles=not args.use_nonpreemptibles)
 
