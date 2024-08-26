@@ -18,7 +18,7 @@ import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:93f2983e5112ef18cee372ac5782f77639ea616fb8b27cd8980d1eadf58daa72"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:7cbc2b98032007511e7411bec9eb157617df2b8f165846a3f0df5c6ac034d3f3"
 
 EXPANSION_HUNTER_LOCI_PER_RUN = 10_000 # if exclude_homopolymers else 100000
 GANGSTR_LOCI_PER_RUN = 1_000_000
@@ -446,14 +446,15 @@ def create_combine_results_step(
     combined_output_dir = os.path.join(output_dir, "combined")
 
     join_tsvs_step = None
-    for combine_step_type, combine_step_prefix, variants_or_alleles, combine_step_suffix, cpu in [
-        ("expansion hunter catalogs", "merged", "variants", "json", 4),
-        ("join tsvs", "joined", "variants", "tsv", 4),
-        ("combine beds", "combined", "variants", "bed", 1),
-        #("concat tsvs", "concat", "variants", "tsv", 16),
-        #("concat tsvs", "concat", "annotated.variants", "tsv", 16),
-        #("concat tsvs", "concat", "alleles", "tsv", 16),
-        #("concat tsvs", "concat", "annotated.alleles", "tsv", 16),
+    for arg_suffix, combine_step_type, combine_step_prefix, variants_or_alleles, combine_step_suffix, cpu in [
+        ("merge-step", "expansion hunter catalogs", "merged", "variants", "json", 4),
+        ("join-step", "join tsvs", "joined", "variants", "tsv", 4),
+        ("join-step", "join tsvs only pure repeats", "joined_only_pure_repeats", "variants", "tsv", 4),
+        ("combine-step", "combine beds", "combined", "variants", "bed", 1),
+        #("concat-step", "concat tsvs", "concat", "variants", "tsv", 16),
+        #("concat-step", "concat tsvs", "concat", "annotated.variants", "tsv", 16),
+        #("concat-step", "concat tsvs", "concat", "alleles", "tsv", 16),
+        #("concat-step", "concat tsvs", "concat", "annotated.alleles", "tsv", 16),
     ]:
         if variants_or_alleles == "annotated.variants" and annotate_variants_steps is None:
             continue
@@ -462,7 +463,7 @@ def create_combine_results_step(
 
         combine_step = bp.new_step(
             f"{combine_step_type}: {variants_or_alleles}: {len(df)} samples",
-            arg_suffix="combine-step",
+            arg_suffix=arg_suffix,
             image=FILTER_VCFS_DOCKER_IMAGE,
             cpu=cpu,
             preemptible=use_preemptibles,
@@ -514,11 +515,12 @@ def create_combine_results_step(
                 f"python3 /filter_vcfs/scripts/concat_per_sample_tables.py -o {concat_tsv_output_filename} " +
                 " ".join(i.local_path for i in input_files))
             combine_step.output(concat_tsv_output_filename)
-        elif combine_step_type == "join tsvs":
-            joined_tsv_output_filename = f"joined.{len(df)}_samples.variants.tsv.gz"
-            joined_tsv_output_stats_filename = f"joined.{len(df)}_samples.variants.stats.tsv.gz"
+        elif combine_step_type == "join tsvs" or combine_step_type == "join tsvs only pure repeats":
+            joined_tsv_output_filename = f"{combine_step_prefix}.{len(df)}_samples.variants.tsv.gz"
+            joined_tsv_output_stats_filename = f"{combine_step_prefix}.{len(df)}_samples.variants.stats.tsv.gz"
+            extra_args = "--discard-impure-genotypes" if combine_step_type == "join tsvs only pure repeats" else ""
             combine_step.command(
-                f"python3 /filter_vcfs/scripts/join_per_sample_variant_tables.py "
+                f"python3 /filter_vcfs/scripts/join_per_sample_variant_tables.py {extra_args} "
                 f"--output-stats-tsv {joined_tsv_output_stats_filename} "
                 f"-o {joined_tsv_output_filename} " +
                 " ".join(i.local_path for i in input_files))
