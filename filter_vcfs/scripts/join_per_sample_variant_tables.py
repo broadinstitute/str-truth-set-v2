@@ -6,6 +6,7 @@ import pandas as pd
 
 parser = argparse.ArgumentParser(description="Perform an outer-join on multiple per-sample tables")
 parser.add_argument("-o", "--output-tsv", help="Combined tsv file path")
+parser.add_argument("--discard-impure-genotypes", action="store_true", help="Discard genotypes that are not pure repeats")
 parser.add_argument("--output-stats-tsv", action="store", const="+", default="-", nargs="?", help="If specified, will "
                     "output a table with stats. The optional value can be the path of this output file")
 parser.add_argument("input_tsvs", nargs="+", help="Input tsv files")
@@ -91,6 +92,7 @@ args.input_tsvs.sort(key=os.path.getsize, reverse=True)  # largest to smallest
 
 combined_df = None
 output_stats = []
+all_allele_size_columns = []
 for table_i, input_tsv in enumerate(args.input_tsvs):
     sample_id = os.path.basename(input_tsv).split(".")[0]
 
@@ -99,13 +101,20 @@ for table_i, input_tsv in enumerate(args.input_tsvs):
     if len(missing_columns) > 0:
         raise ValueError(f"{input_tsv} is missing these columns: {missing_columns}. Its columns are: {df.columns}")
 
+    if args.discard_impure_genotypes:
+        df = df[df["IsPureRepeat"]]
+
     df = df[PER_LOCUS_COLUMNS + SAMPLE_SPECIFIC_COLUMNS]
     df.set_index(PER_LOCUS_COLUMNS, inplace=True)
 
     for column in SAMPLE_SPECIFIC_COLUMNS:
+        renamed_column = f"{column}:{sample_id}"
         df.rename(columns={
-            column: f"{column}:{sample_id}",
+            column: renamed_column,
         }, inplace=True)
+        if column.startswith("NumRepeats") and column.endswith("Allele"):
+            all_allele_size_columns.append(renamed_column)
+
     if combined_df is None:
         locus_ids_before_join = 0
         combined_df = df
@@ -122,6 +131,7 @@ for table_i, input_tsv in enumerate(args.input_tsvs):
     print(f"#{table_i+1}: Added {sample_id:10s} with {len(df):8,d} loci which yielded {new_locus_id_count:8,d} new loci"
           f" ({new_locus_id_count/len(combined_df):6.1%}) for an overall total of {len(combined_df):10,d} loci in the "
           f"combined table.")
+
     if args.output_stats_tsv:
         output_stats.append({
             "Id": table_i + 1,
@@ -142,5 +152,11 @@ combined_df["IsPureRepeat"] = combined_df[is_pure_repeat_columns].all(axis=1)
 combined_df.drop(columns=is_pure_repeat_columns, inplace=True)
 
 combined_df = combined_df.reset_index()
+
+for c in all_allele_size_columns:
+    num_empty_values = combined_df[c].isna().sum()
+    combined_df[c] = combined_df[c].fillna(combined_df["NumRepeatsInReference"])
+    print(f"Filled {num_empty_values:,d} empty values in column {c} out of {len(df):,d} total rows")
+
 combined_df.to_csv(args.output_tsv, sep="\t", index=False)
 print(f"Wrote combined table with {len(combined_df):,d} loci to {args.output_tsv}")
