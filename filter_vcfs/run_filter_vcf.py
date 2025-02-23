@@ -18,7 +18,7 @@ import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:7cbc2b98032007511e7411bec9eb157617df2b8f165846a3f0df5c6ac034d3f3"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:4d45ca4037c6ad19655df6be7635ba3d58f4728fc3ba5f684691d88644b02036"
 
 EXPANSION_HUNTER_LOCI_PER_RUN = 10_000 # if exclude_homopolymers else 100000
 GANGSTR_LOCI_PER_RUN = 1_000_000
