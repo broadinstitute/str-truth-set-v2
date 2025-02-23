@@ -51,7 +51,7 @@ LONG_READ_DATA_TYPES = {
 REFERENCE_FASTA_PATH = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
 REFERENCE_FASTA_FAI_PATH = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta.fai"
 
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:b7957a582e82ead817b8b50059c4f8ec412f429058c1581ed143899c87fdc2cf"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:b2efc5ddc70316b4f90ca8659c254c459a0f937cf8881aba735701448aa02e13"
 
 DEFAULT_OUTPUT_DIR = "gs://str-truth-set-v2/tool_results"
 
