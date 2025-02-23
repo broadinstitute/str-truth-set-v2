@@ -15,16 +15,17 @@ from step_pipeline import pipeline, Backend, Localize
 import sys
 
 sys.path.append("../str-truth-set/tool_comparison/hail_batch_pipelines")
+from expansion_hunter_pipeline import create_expansion_hunter_steps, create_expansion_hunter_dev_steps
+from gangstr_pipeline import create_gangstr_steps
+from hipstr_pipeline import create_hipstr_steps
 from trgt_pipeline import create_trgt_step
 from longtr_pipeline import create_longtr_steps
 from straglr_pipeline import create_straglr_steps
-from expansion_hunter_pipeline import create_expansion_hunter_steps
-from gangstr_pipeline import create_gangstr_steps
-from hipstr_pipeline import create_hipstr_steps
 
 
 SHORT_READ_TOOLS = {
     "EHv5",
+    "EHv5-dev",
     "GangSTR",
     "HipSTR",
 }
@@ -58,7 +59,7 @@ def main():
     sample_table_path = "HPRC_all_aligned_short_read_and_long_read_samples.tsv"
     df = pd.read_table(sample_table_path)
 
-    bp = pipeline("run_genotyping_tools", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline_gnomad")
+    bp = pipeline("run_genotyping_tools", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline")
 
     parser = bp.get_config_arg_parser()
     parser.add_argument("--only-pure-repeats", action="store_true")
@@ -72,6 +73,7 @@ def main():
     parser.add_argument("--filter-vcf-dir", default="gs://str-truth-set-v2/filter_vcf", help="Base dir for filter_vcf pipeline output files")
     parser.add_argument("--custom-catalog-path", help="If specified, use this catalog instead of the filter_vcf catalogs")
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument("--download-results", action="store_true", help="Download the resulting images to the local ../results directory")
     args = bp.parse_known_args()
 
     if not args.tool:
@@ -88,7 +90,7 @@ def main():
     df = df[df.sample_id.isin({"HG002", "CHM1_CHM13"})]  # only use these samples for tool evaluations
 
     if args.custom_catalog_path and args.output_dir == DEFAULT_OUTPUT_DIR:
-        paser.error("--custom-catalog-path is set without also setting --output-dir")
+        parser.error("--custom-catalog-path is set without also setting --output-dir")
 
     bp.precache_file_paths(os.path.join(args.output_dir, "**/*.*"))
 
@@ -124,8 +126,13 @@ def main():
             if args.custom_catalog_path:
                 repeat_catalog_paths = args.custom_catalog_path
             else:
+                if tool == "EHv5-dev":
+                    catalog_path_suffix = "EHv5"
+                else:
+                    catalog_path_suffix = tool
+
                 repeat_catalog_paths = os.path.join(args.filter_vcf_dir, output_dir_suffix, row.sample_id,
-                    f"{row.sample_id}.STRs{excluding_homopolymers_string}.positive_loci.{tool}*")
+                    f"{row.sample_id}.STRs{excluding_homopolymers_string}.positive_loci.{catalog_path_suffix}*")
 
             print(f"Listing catalogs {repeat_catalog_paths}")
             repeat_catalog_paths = [x.path for x in hfs.ls(repeat_catalog_paths)]
@@ -145,6 +152,18 @@ def main():
                     loci_to_exclude=None,
                     min_locus_coverage=None,
                     use_illumina_expansion_hunter=False)
+            elif tool == "EHv5-dev":
+                current_step = create_expansion_hunter_dev_steps(
+                    bp,
+                    reference_fasta=REFERENCE_FASTA_PATH,
+                    reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
+                    input_bam=row.read_data_path,
+                    input_bai=row.read_data_index_path,
+                    male_or_female=row.male_or_female,
+                    variant_catalog_file_paths=[p for p in repeat_catalog_paths if "001_of_001" not in p], # exclude the unsharded catalog
+                    output_dir=output_dir,
+                    output_prefix= f"{row.sample_id}.STRs.positive_loci.{tool}",
+                    analysis_mode="fast-low-mem-streaming")
             elif tool == "GangSTR":
                 if row.sequencing_data_type == "ultima":
                     # for some reason GangSTR never completes on ultima data
@@ -239,6 +258,8 @@ def main():
 def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage, sample_id, output_dir, filter_vcf_dir, suffix, tool2="Truth"):
     if tool == "EHv5":
         tool = "ExpansionHunter"
+    elif tool == "EHv5-dev":
+        tool = "ExpansionHunter-dev"
 
     tool_results_path = None
     for output_spec in tool_results_step.get_outputs():
@@ -253,7 +274,7 @@ def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage, s
         name=f"Add {sample_id} {tool} results columns to {tool2} table for {os.path.basename(output_dir)}",
         arg_suffix=f"add-columns-step",
         image=FILTER_VCFS_DOCKER_IMAGE,
-        cpu=1,
+        cpu=2,
         memory="highmem",
         storage="20Gi",
         output_dir=output_dir)
@@ -302,6 +323,8 @@ EOF
 def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage, sample_id, output_dir):
     if tool == "EHv5":
         tool = "ExpansionHunter"
+    elif tool == "EHv5-dev":
+        tool = "ExpansionHunter-dev"
 
 
     plot_tool_accuracy_step = bp.new_step(
