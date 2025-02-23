@@ -51,7 +51,7 @@ LONG_READ_DATA_TYPES = {
 REFERENCE_FASTA_PATH = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
 REFERENCE_FASTA_FAI_PATH = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta.fai"
 
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:7cbc2b98032007511e7411bec9eb157617df2b8f165846a3f0df5c6ac034d3f3"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:f19b62b6cb10b177fca4c9e02d6714bb47ddeaa697535823f3acc32f7815d8d7"
 
 DEFAULT_OUTPUT_DIR = "gs://str-truth-set-v2/tool_results"
 
@@ -94,14 +94,16 @@ def main():
 
     bp.precache_file_paths(os.path.join(args.output_dir, "**/*.*"))
 
+
     suffix = ".STRs"
     if args.only_pure_repeats:
         suffix += ".only_pure"
     if args.exclude_homopolymers:
         suffix += ".excluding_homopolymers"
 
+    download_to_dir = "../results_without_homopolymers" if args.exclude_homopolymers else "../results_with_homopolymers"
     pure_repeats_or_all_repeats = "pure_repeats" if args.only_pure_repeats else "all_repeats"
-    including_or_excluding_homopolymers = "including_homopolymers" if not args.exclude_homopolymers else "excluding_homopolymers"
+    including_or_excluding_homopolymers = "excluding_homopolymers" if args.exclude_homopolymers else "including_homopolymers"
     excluding_homopolymers_string = ".excluding_homopolymers" if args.exclude_homopolymers else ""
     output_dir_suffix = f"{pure_repeats_or_all_repeats}_{including_or_excluding_homopolymers}"
 
@@ -243,7 +245,8 @@ def main():
                 output_dir=output_dir,
                 filter_vcf_dir=os.path.join(args.filter_vcf_dir, output_dir_suffix, row.sample_id),
                 suffix=suffix,
-                tool2="Truth")
+                tool2="Truth",
+                download_to_dir=download_to_dir)
 
             plot_tool_accuracy_step = create_plot_tool_accuracy_steps(
                 bp,
@@ -251,11 +254,12 @@ def main():
                 tool=tool,
                 coverage=coverage,
                 sample_id=row.sample_id,
-                output_dir=output_dir)
+                output_dir=output_dir,
+                download_to_dir=download_to_dir)
     bp.run()
 
 
-def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage, sample_id, output_dir, filter_vcf_dir, suffix, tool2="Truth"):
+def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage, sample_id, output_dir, filter_vcf_dir, suffix, tool2="Truth", download_to_dir=None):
     if tool == "EHv5":
         tool = "ExpansionHunter"
     elif tool == "EHv5-dev":
@@ -314,13 +318,13 @@ EOF
 
     add_columns_step.command("ls -lhrt")
 
-    add_columns_step.output(output_filename)
+    add_columns_step.output(output_filename, download_to_dir=download_to_dir)
     add_columns_step.output(output_filename.replace(".tsv", ".alleles.tsv"))
 
     return add_columns_step
 
 
-def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage, sample_id, output_dir):
+def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage, sample_id, output_dir, download_to_dir=None):
     if tool == "EHv5":
         tool = "ExpansionHunter"
     elif tool == "EHv5-dev":
@@ -363,7 +367,7 @@ def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage, sam
         ]:
             plot_tool_accuracy_step.command(f"gzip {output_filename}")
             plot_tool_accuracy_step.command(f"mv {output_filename}.gz {output_filename}")
-            plot_tool_accuracy_step.output(output_filename)
+            plot_tool_accuracy_step.output(output_filename, download_to_dir=download_to_dir)
 
 
     # create step to run gcloud storage objects update --content-type 'image/svg+xml' --content-encoding 'gzip' gs://str-truth-set-v2/tool_results/all_repeats_excluding_homopolymers/HG002/**/*.svg.gz
