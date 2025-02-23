@@ -345,29 +345,30 @@ def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage, sam
     plot_tool_accuracy_step.command("set -ex")
 
     for min_motif_size, max_motif_size in [(2, 6), (7, 1000)]:
-        plot_tool_accuracy_step.command(
-            f"python3 -u /str-truth-set/figures_and_tables/plot_tool_accuracy_by_allele_size.py "
-            "--verbose "
-            f"--tool {tool} "
-            f"--coverage {coverage}x "
-            "--q-threshold 0 "
-            f"--min-motif-size {min_motif_size} " +
-            (f"--max-motif-size {max_motif_size} " if max_motif_size is not None else "") +
-            "--genotype all "
-            "--show-no-call-loci "
-            "--image-type svg "
-            "--show-title "
-            f"{local_alleles_tsv} ")
+        for exclude_no_call_loci in [".exclude_no_call_loci", ""]:
+            plot_tool_accuracy_step.command(
+                f"python3 -u /str-truth-set/figures_and_tables/plot_tool_accuracy_by_allele_size.py "
+                "--verbose "
+                f"--tool {tool} "
+                f"--coverage {coverage}x "
+                "--q-threshold 0 "
+                f"--min-motif-size {min_motif_size} " +
+                (f"--max-motif-size {max_motif_size} " if max_motif_size is not None else "") +
+                ("--hide-no-call-loci " if exclude_no_call_loci else "") +
+                "--genotype all "
+                "--image-type svg "
+                "--show-title "
+                f"{local_alleles_tsv} ")
 
-        plot_tool_accuracy_step.command("ls -lhrt")
-        for output_filename in [
-            f"tool_accuracy_by_true_allele_size.{min_motif_size}to{max_motif_size}bp_motifs.all_genotypes.{coverage}x.{tool}.svg",
-            f"tool_accuracy_by_true_allele_size.{min_motif_size}to{max_motif_size}bp_motifs.all_genotypes.pure_repeats.{coverage}x.{tool}.svg",
-            f"tool_accuracy_by_true_allele_size.{min_motif_size}to{max_motif_size}bp_motifs.all_genotypes.with_interruptions.{coverage}x.{tool}.svg"
-        ]:
-            plot_tool_accuracy_step.command(f"gzip {output_filename}")
-            plot_tool_accuracy_step.command(f"mv {output_filename}.gz {output_filename}")
-            plot_tool_accuracy_step.output(output_filename, download_to_dir=download_to_dir)
+            plot_tool_accuracy_step.command("ls -lhrt")
+            for output_filename in [
+                f"tool_accuracy_by_true_allele_size.{min_motif_size}to{max_motif_size}bp_motifs.all_genotypes.{coverage}x{exclude_no_call_loci}.{tool}.svg",
+                f"tool_accuracy_by_true_allele_size.{min_motif_size}to{max_motif_size}bp_motifs.all_genotypes.pure_repeats.{coverage}x{exclude_no_call_loci}.{tool}.svg",
+                f"tool_accuracy_by_true_allele_size.{min_motif_size}to{max_motif_size}bp_motifs.all_genotypes.with_interruptions.{coverage}x{exclude_no_call_loci}.{tool}.svg"
+            ]:
+                plot_tool_accuracy_step.command(f"gzip {output_filename}")
+                plot_tool_accuracy_step.command(f"mv {output_filename}.gz {output_filename}")
+                plot_tool_accuracy_step.output(output_filename, download_to_dir=download_to_dir)
 
 
     # create step to run gcloud storage objects update --content-type 'image/svg+xml' --content-encoding 'gzip' gs://str-truth-set-v2/tool_results/all_repeats_excluding_homopolymers/HG002/**/*.svg.gz
