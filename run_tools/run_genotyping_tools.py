@@ -18,6 +18,7 @@ sys.path.append("../str-truth-set/tool_comparison/hail_batch_pipelines")
 from expansion_hunter_pipeline import create_expansion_hunter_steps, create_expansion_hunter_dev_steps
 from gangstr_pipeline import create_gangstr_steps
 from hipstr_pipeline import create_hipstr_steps
+from constrain_pipeline import create_constrain_steps
 from trgt_pipeline import create_trgt_step
 from longtr_pipeline import create_longtr_steps
 from straglr_pipeline import create_straglr_steps
@@ -28,6 +29,7 @@ SHORT_READ_TOOLS = {
     "EHv5-dev",
     "GangSTR",
     "HipSTR",
+    "constrain"
 }
 
 LONG_READ_TOOLS = {
@@ -193,6 +195,18 @@ def main():
                     regions_bed_file_paths=repeat_catalog_paths,
                     output_dir=output_dir,
                     output_prefix=f"{row.sample_id}.STRs.positive_loci.{tool}")
+            elif tool == "constrain":
+                current_step = create_constrain_steps(
+                    bp,
+                    reference_fasta=REFERENCE_FASTA_PATH,
+                    reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
+                    input_bam=row.read_data_path,
+                    input_bai=row.read_data_index_path,
+                    male_or_female=row.male_or_female,
+                    regions_bed_file_paths=repeat_catalog_paths,
+                    output_dir=output_dir,
+                    output_prefix=f"{row.sample_id}.STRs.positive_loci.{tool}",
+                )
             elif tool == "TRGT":
                 if row.sequencing_data_type != "pacbio":
                     print(f"WARNING: Skipping {tool} for {row.sample_id} {row.sequencing_data_type} since {tool} "
