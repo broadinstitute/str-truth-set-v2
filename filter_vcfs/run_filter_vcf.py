@@ -18,7 +18,7 @@ import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:abd6c125b1ae84cedae88395739b573ef29d8452d8e2fc86a2ae9b769bb5cecd"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:2c82e8dafc2d336c1687e9e9f9395a45947c1782cea9ea39e534ac759943fc1c"
 
 EXPANSION_HUNTER_LOCI_PER_RUN = 10_000 # if exclude_homopolymers else 100000
 GANGSTR_LOCI_PER_RUN = 1_000_000
@@ -241,6 +241,10 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
         variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/hipstr/{row.sample_id}{suffix}.positive_loci.HipSTR.*.bed")
         if output_negative_loci:
             variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/hipstr/{row.sample_id}{suffix}.negative_loci.HipSTR.*.bed")
+
+        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/constrain/{row.sample_id}{suffix}.positive_loci.constrain_catalog.*.bed")
+        if output_negative_loci:
+            variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/constrain/{row.sample_id}{suffix}.negative_loci.constrain_catalog.*.bed")
 
         #for chrom in [*range(1, 23), "X"]:
         #    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/popstr/{row.sample_id}{suffix}.positive_loci.popSTR.chr{chrom}.markerInfo.gz")
@@ -590,7 +594,7 @@ def create_combine_results_step(
 
 
 def main():
-    bp = pipeline("filter_vcf_to_STRs", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline_gnomad")
+    bp = pipeline("filter_vcf_to_STRs", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline")
 
     parser = bp.get_config_arg_parser()
     parser.add_argument("--only-pure-repeats", action="store_true")
@@ -652,7 +656,7 @@ def main():
                                                              output_dir_keeping_all_loci,
                                                              exclude_homopolymers=args.exclude_homopolymers,
                                                              use_preemptibles=not args.use_nonpreemptibles,
-                                                             only_EH=True)
+                                                             only_EH=False)
         variant_catalogs_step_keeping_all_loci.depends_on(filter_step_keeping_all_loci)
 
         variant_catalog_steps_keeping_all_loci.append(variant_catalogs_step_keeping_all_loci)
