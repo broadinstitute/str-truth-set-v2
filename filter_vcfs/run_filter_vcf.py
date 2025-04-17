@@ -18,7 +18,7 @@ import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:2c82e8dafc2d336c1687e9e9f9395a45947c1782cea9ea39e534ac759943fc1c"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:037205c4f65fc2cf80b82cfb6196e3d951e6061c44fbf535afb551bb06751ee9"
 
 EXPANSION_HUNTER_LOCI_PER_RUN = 10_000 # if exclude_homopolymers else 100000
 GANGSTR_LOCI_PER_RUN = 1_000_000
@@ -242,9 +242,9 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
         if output_negative_loci:
             variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/hipstr/{row.sample_id}{suffix}.negative_loci.HipSTR.*.bed")
 
-        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/constrain/{row.sample_id}{suffix}.positive_loci.constrain_catalog.*.bed")
+        variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/constrain/{row.sample_id}{suffix}.positive_loci.constrain_catalog.bed")
         if output_negative_loci:
-            variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/constrain/{row.sample_id}{suffix}.negative_loci.constrain_catalog.*.bed")
+            variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/constrain/{row.sample_id}{suffix}.negative_loci.constrain_catalog.bed")
 
         #for chrom in [*range(1, 23), "X"]:
         #    variant_catalogs_step.output(f"./tool_comparison/variant_catalogs/popstr/{row.sample_id}{suffix}.positive_loci.popSTR.chr{chrom}.markerInfo.gz")

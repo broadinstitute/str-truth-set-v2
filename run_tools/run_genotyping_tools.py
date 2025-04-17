@@ -18,7 +18,7 @@ sys.path.append("../str-truth-set/tool_comparison/hail_batch_pipelines")
 from expansion_hunter_pipeline import create_expansion_hunter_steps, create_expansion_hunter_dev_steps
 from gangstr_pipeline import create_gangstr_steps
 from hipstr_pipeline import create_hipstr_steps
-from constrain_pipeline import create_constrain_steps
+from constrain_pipeline import create_constrain_step
 from trgt_pipeline import create_trgt_step
 from longtr_pipeline import create_longtr_steps
 from straglr_pipeline import create_straglr_steps
@@ -109,8 +109,6 @@ def main():
     excluding_homopolymers_string = ".excluding_homopolymers" if args.exclude_homopolymers else ""
     output_dir_suffix = f"{pure_repeats_or_all_repeats}_{including_or_excluding_homopolymers}"
 
-    filter_steps = []
-    figures_to_download = collections.defaultdict(list)
     for row_i, (_, row) in enumerate(df.iterrows()):
         if args.filename_keyword:
             if not any(keyword in row.read_data_path for keyword in args.filename_keyword):
@@ -196,14 +194,14 @@ def main():
                     output_dir=output_dir,
                     output_prefix=f"{row.sample_id}.STRs.positive_loci.{tool}")
             elif tool == "constrain":
-                current_step = create_constrain_steps(
+                current_step = create_constrain_step(
                     bp,
                     reference_fasta=REFERENCE_FASTA_PATH,
                     reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
                     input_bam=row.read_data_path,
                     input_bai=row.read_data_index_path,
                     male_or_female=row.male_or_female,
-                    regions_bed_file_paths=repeat_catalog_paths,
+                    constrain_catalog_bed_paths=repeat_catalog_paths,
                     output_dir=output_dir,
                     output_prefix=f"{row.sample_id}.STRs.positive_loci.{tool}",
                 )
