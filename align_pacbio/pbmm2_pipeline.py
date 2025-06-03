@@ -215,7 +215,7 @@ def main():
             preset = "SUBREAD"
         else:
             raise ValueError(f"{sample_id} has a mix of .ccs.bam and .fastq files. Expecting one or the other")
-
+            
         s2.command(f"pbmm2 align --sort --strip --preset {preset} {local_fasta} read_data_paths.fofn {sample_id}.bam")
         s2.output(f"/io/{sample_id}.bam")
         s2.output(f"/io/{sample_id}.bam.bai")
