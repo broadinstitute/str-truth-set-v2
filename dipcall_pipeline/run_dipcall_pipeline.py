@@ -25,6 +25,7 @@ bp = pipeline("dipcall pipeline", backend=Backend.HAIL_BATCH_SERVICE, config_fil
 parser = bp.get_config_arg_parser()
 parser.add_argument("-s", "--sample-id", action="append", help="Process only this sample. Can be specified more than once.")
 parser.add_argument("-n", "--num-samples", type=int, help="Process only this number of samples.")
+parser.add_argument("--offset", type=int, help="Skip the first N samples.")
 parser.add_argument("--more-memory", action="store_true", help="Run with 2x more memory")
 parser.add_argument("--sample-table", default="hprc_assemblies.tsv", help="Sample table path")
 parser.add_argument("--urls-table", default="hprc_assembly_urls.tsv", help="URLs table path")
@@ -40,8 +41,11 @@ df["url_mat"] = df["accession_mat"].map(accession_to_url_map)
 if args.sample_id:
     df = df[df["sample_id"].isin(args.sample_id)]
 
+if args.offset:
+    df = df.iloc[args.offset:]
+
 if args.num_samples:
-    df = df.iloc[:args.num_samples]
+    df = df.iloc[:args.num_samples + args.offset]
 
 s1_steps = []
 for i, (_, row) in enumerate(df.iterrows()):
