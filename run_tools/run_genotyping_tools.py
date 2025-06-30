@@ -53,7 +53,7 @@ LONG_READ_DATA_TYPES = {
 REFERENCE_FASTA_PATH = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
 REFERENCE_FASTA_FAI_PATH = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta.fai"
 
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:324c7e6a152eb2ba55379a85a1c96c691cdf7b02cc93b8f7dabcdd92dd214e1e"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:752d871fff73b612c6e2ede9a3c778e756abafb407c022e1c887e8312efd000f"
 
 DEFAULT_OUTPUT_DIR = "gs://str-truth-set-v2/tool_results"
 
@@ -204,6 +204,7 @@ def main():
                     constrain_catalog_bed_paths=repeat_catalog_paths,
                     output_dir=output_dir,
                     output_prefix=f"{row.sample_id}.STRs.positive_loci.{tool}",
+                    cpu=1,
                 )
             elif tool == "TRGT":
                 if row.sequencing_data_type != "pacbio":
