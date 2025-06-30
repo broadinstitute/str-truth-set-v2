@@ -3,14 +3,20 @@
 import argparse
 import os
 import pandas as pd
+import tqdm
 
 parser = argparse.ArgumentParser(description="Perform an outer-join on multiple per-sample tables")
 parser.add_argument("-o", "--output-tsv", help="Combined tsv file path")
+parser.add_argument("-n", type=int, help="Number of tables to process")
 parser.add_argument("--discard-impure-genotypes", action="store_true", help="Discard genotypes that are not pure repeats")
 parser.add_argument("--output-stats-tsv", action="store", const="+", default="-", nargs="?", help="If specified, will "
                     "output a table with stats. The optional value can be the path of this output file")
 parser.add_argument("input_tsvs", nargs="+", help="Input tsv files")
 args = parser.parse_args()
+
+if args.n:
+    args.input_tsvs = args.input_tsvs[:args.n]
+
 
 if not args.output_tsv:
     args.output_tsv = f"joined.{len(args.input_tsvs)}_tables.tsv.gz"
@@ -21,7 +27,7 @@ if not args.output_tsv.endswith(".gz"):
 if args.output_stats_tsv == "-":
     args.output_stats_tsv = None
 elif args.output_stats_tsv == "+":
-    args.output_stats_tsv = f"combined.{len(args.input_beds)}_bed_files.stats.tsv"
+    args.output_stats_tsv = f"combined.{len(args.input_tsvs)}_bed_files.stats.tsv"
 
 """
 $1                    Chrom : chr1
@@ -84,19 +90,40 @@ SAMPLE_SPECIFIC_COLUMNS = [
     #"FractionPureRepeats",
 ]
 
+# Define dtypes for each column to avoid mixed types warning
+DTYPES = {
+    "Chrom": "string",
+    "Start1Based": "Int32",
+    "End1Based": "Int32", 
+    "Locus": "string",
+    "LocusId": "string",
+    "Motif": "string",
+    "CanonicalMotif": "string",
+    "MotifSize": "Int32",
+    "NumRepeatsInReference": "Float32",
+    "IsFoundInReference": "boolean",
+    "NumRepeatsShortAllele": "Float32",
+    "NumRepeatsLongAllele": "Float32",
+    "IsPureRepeat": "boolean",
+}
+
 for input_tsv in args.input_tsvs:
     if not os.path.exists(input_tsv):
         parser.error(f"Input file {input_tsv} does not exist")
 
-args.input_tsvs.sort(key=os.path.getsize, reverse=True)  # largest to smallest
+# Sort by file size (largest first)
+args.input_tsvs.sort(key=os.path.getsize, reverse=True)
 
 combined_df = None
 output_stats = []
 all_allele_size_columns = []
-for table_i, input_tsv in enumerate(args.input_tsvs):
+
+
+for table_i, input_tsv in tqdm.tqdm(enumerate(args.input_tsvs), total=len(args.input_tsvs), unit=" tables"):
+
     sample_id = os.path.basename(input_tsv).split(".")[0]
 
-    df = pd.read_table(input_tsv)
+    df = pd.read_table(input_tsv, usecols=PER_LOCUS_COLUMNS + SAMPLE_SPECIFIC_COLUMNS, low_memory=False, dtype=DTYPES)
     missing_columns = set(PER_LOCUS_COLUMNS + SAMPLE_SPECIFIC_COLUMNS) - set(df.columns)
     if len(missing_columns) > 0:
         raise ValueError(f"{input_tsv} is missing these columns: {missing_columns}. Its columns are: {df.columns}")
@@ -104,28 +131,35 @@ for table_i, input_tsv in enumerate(args.input_tsvs):
     if args.discard_impure_genotypes:
         df = df[df["IsPureRepeat"]]
 
-    df = df[PER_LOCUS_COLUMNS + SAMPLE_SPECIFIC_COLUMNS]
     df.set_index(PER_LOCUS_COLUMNS, inplace=True)
 
+    # Rename columns efficiently - build rename dict once
+    rename_dict = {}
+    allele_columns = []
     for column in SAMPLE_SPECIFIC_COLUMNS:
         renamed_column = f"{column}:{sample_id}"
-        df.rename(columns={
-            column: renamed_column,
-        }, inplace=True)
+        rename_dict[column] = renamed_column
         if column.startswith("NumRepeats") and column.endswith("Allele"):
-            all_allele_size_columns.append(renamed_column)
+            allele_columns.append(renamed_column)
+    
+    df.rename(columns=rename_dict, inplace=True)
+    all_allele_size_columns.extend(allele_columns)
 
     if combined_df is None:
         locus_ids_before_join = 0
         combined_df = df
     else:
         locus_ids_before_join = len(combined_df)
-        combined_df = combined_df.join(df, how="outer", rsuffix=f":{sample_id}")
-        combined_df = combined_df.copy()  # intended to avoid the "DataFrame is highly fragmented" warning.
+        # Use concat instead of join for better performance with large datasets
+        combined_df = pd.concat([combined_df, df], axis=1, join='outer')
 
-    duplicate_locus_id_count = len(combined_df) - len(set(combined_df.index))
-    if duplicate_locus_id_count > 0:
-        raise ValueError(f"{duplicate_locus_id_count:,d} duplicate locus ids found after adding table #{table_i+1}: {input_tsv}")
+    #if table_i % 50 == 0:
+    #    combined_df = combined_df.copy()  # intended to avoid the "DataFrame is highly fragmented" warning.
+
+    # Check for duplicates more efficiently
+    if combined_df.index.duplicated().any():
+        duplicate_count = combined_df.index.duplicated().sum()
+        raise ValueError(f"{duplicate_count:,d} duplicate locus ids found after adding table #{table_i+1}: {input_tsv}")
 
     new_locus_id_count = len(combined_df) - locus_ids_before_join
     print(f"#{table_i+1}: Added {sample_id:10s} with {len(df):8,d} loci which yielded {new_locus_id_count:8,d} new loci"
@@ -156,7 +190,7 @@ combined_df = combined_df.reset_index()
 for c in all_allele_size_columns:
     num_empty_values = combined_df[c].isna().sum()
     combined_df[c] = combined_df[c].fillna(combined_df["NumRepeatsInReference"])
-    print(f"Filled {num_empty_values:,d} empty values in column {c} out of {len(df):,d} total rows")
+    print(f"Filled {num_empty_values:,d} empty values in column {c} out of {len(combined_df):,d} total rows")
 
 combined_df.to_csv(args.output_tsv, sep="\t", index=False)
 print(f"Wrote combined table with {len(combined_df):,d} loci to {args.output_tsv}")
