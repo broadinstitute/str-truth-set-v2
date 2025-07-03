@@ -24,7 +24,7 @@ EXPANSION_HUNTER_LOCI_PER_RUN = 10_000 # if exclude_homopolymers else 100000
 GANGSTR_LOCI_PER_RUN = 1_000_000
 STRAGLR_LOCI_PER_RUN = 200_000
 
-def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, only_pure_repeats=False,
+def create_filter_step(bp, row, suffix, input_dir, output_dir, exclude_homopolymers=False, only_pure_repeats=False,
                        keep_loci_that_have_overlapping_variants=False, use_preemptibles=True):
     filter_step = bp.new_step(
         f"filter_vcf: {row.sample_id}" + (" (keep loci that have overlapping variants)" if keep_loci_that_have_overlapping_variants else ""),
@@ -41,8 +41,8 @@ def create_filter_step(bp, row, suffix, output_dir, exclude_homopolymers=False, 
         localize_by=Localize.HAIL_BATCH_CLOUDFUSE)
 
     dipcall_vcf_input, dipcall_high_confidence_regions_bed_input = filter_step.inputs(
-        f"gs://str-truth-set-v2/dipcall_pipeline/{row.sample_id}/{row.sample_id}.dip.vcf.gz",
-        f"gs://str-truth-set-v2/dipcall_pipeline/{row.sample_id}/{row.sample_id}.dip.bed.gz",
+        os.path.join(input_dir, f"{row.sample_id}.dip.vcf.gz"),
+        os.path.join(input_dir, f"{row.sample_id}.dip.bed.gz"),
     )
 
     filter_step.command("set -exuo pipefail")
@@ -161,7 +161,7 @@ def create_annotate_steps(bp, row, suffix, output_dir, exclude_homopolymers=Fals
     return annotate_steps
 
 
-def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolymers=False, output_negative_loci=False, use_preemptibles=True, only_EH=False):
+def create_variant_catalogs_step(bp, row, suffix, input_dir,output_dir, exclude_homopolymers=False, output_negative_loci=False, use_preemptibles=True, only_EH=False):
     variant_catalogs_step = bp.new_step(
         f"variant catalogs: {row.sample_id}",
         image=FILTER_VCFS_DOCKER_IMAGE,
@@ -177,10 +177,10 @@ def create_variant_catalogs_step(bp, row, suffix, output_dir, exclude_homopolyme
         localize_by=Localize.HAIL_BATCH_CLOUDFUSE)
 
     high_confidence_regions_bed_input = variant_catalogs_step.input(
-        os.path.join("gs://str-truth-set-v2/dipcall_pipeline", row.sample_id, f"{row.sample_id}.dip.bed.gz"))
+        os.path.join(input_dir, f"{row.sample_id}.dip.bed.gz"))
     if output_negative_loci:
         dipcall_vcf_input = variant_catalogs_step.input(
-            os.path.join("gs://str-truth-set-v2/dipcall_pipeline", row.sample_id, f"{row.sample_id}.dip.vcf.gz"))
+            os.path.join(input_dir, f"{row.sample_id}.dip.vcf.gz"))
     variants_tsv_input = variant_catalogs_step.input(
         os.path.join(output_dir, f"{row.sample_id}{suffix}.variants.tsv.gz"))
     variants_bed_input = variant_catalogs_step.input(
@@ -311,7 +311,7 @@ def create_table_for_tool_comparisons_step(bp, row, suffix, output_dir, exclude_
 
     return table_for_tool_comparisons_step
 
-def create_plot_step(bp, suffix, output_dir, row=None, alleles_tsv_step=None, exclude_homopolymers=False):
+def create_plot_step(bp, suffix, input_dir, output_dir, row=None, alleles_tsv_step=None, exclude_homopolymers=False):
     """Must specify either row or alleles_tsv_step"""
 
     plot_step = bp.new_step(
@@ -341,7 +341,7 @@ def create_plot_step(bp, suffix, output_dir, row=None, alleles_tsv_step=None, ex
     # figure 1 panels
     dipcall_vcf_input = None
     if row is not None:
-        dipcall_vcf_input = plot_step.input(f"gs://str-truth-set-v2/dipcall_pipeline/{row.sample_id}/{row.sample_id}.dip.vcf.gz")
+        dipcall_vcf_input = plot_step.input(os.path.join(input_dir, f"{row.sample_id}.dip.vcf.gz"))
         plot_step.command(f"python3 /str-truth-set/figures_and_tables/plot_syndip_indel_size_distribution.py --width 12 --height 4 --syndip-vcf {dipcall_vcf_input} --image-type png")
 
     # figure 2 panels
@@ -604,12 +604,14 @@ def main():
     parser.add_argument("--use-nonpreemptibles", action="store_true")
     parser.add_argument("-s", "--sample-id", action="append",
                         help="Process only this sample. Can be specified more than once.")
+    parser.add_argument("--metadata-tsv", default="../dipcall_pipeline/all_assemblies.tsv")
+    parser.add_argument("--input-dir", default="gs://str-truth-set-v2/dipcall_pipeline")
     parser.add_argument("--output-dir", default="gs://str-truth-set-v2/filter_vcf")
     args = bp.parse_known_args()
 
-    bp.precache_file_paths("gs://str-truth-set-v2/filter_vcf/**/*.*")
+    bp.precache_file_paths(f"{args.output_dir}/**/*.*")
 
-    df = pd.read_table("../dipcall_pipeline/all_assemblies.tsv")
+    df = pd.read_table(args.metadata_tsv)
     if args.sample_id:
         df = df[df.sample_id.isin(args.sample_id)]
 
@@ -628,6 +630,7 @@ def main():
     else:
         output_dir_suffix = "all_repeats_including_homopolymers"
 
+    
     output_base_dir_keeping_all_loci = os.path.join(args.output_dir, f"{output_dir_suffix}_keeping_loci_that_have_overlapping_variants")
     variant_catalog_steps_keeping_all_loci = []
     variant_catalog_steps = []
@@ -635,6 +638,8 @@ def main():
     annotate_variants_steps = []
     figures_to_download = collections.defaultdict(list)
     for row_i, (_, row) in enumerate(df.iterrows()):
+        input_dir = os.path.join(args.input_dir, row.sample_id)
+
         output_dir = os.path.join(args.output_dir, output_dir_suffix, row.sample_id)
 
         # The default filter options discard detected STR variants if they overlap any other variant in the input VCF
@@ -645,7 +650,7 @@ def main():
         # and then compute the post-filtered set of STRs without any overlapping variants (for use as an STR truth set).
         suffix_keeping_all_loci = f"{suffix}.keeping_loci_that_have_overlapping_variants"
         output_dir_keeping_all_loci = os.path.join(output_base_dir_keeping_all_loci, row.sample_id)
-        filter_step_keeping_all_loci = create_filter_step(bp, row, suffix_keeping_all_loci, output_dir_keeping_all_loci,
+        filter_step_keeping_all_loci = create_filter_step(bp, row, suffix_keeping_all_loci, input_dir, output_dir_keeping_all_loci,
                                             exclude_homopolymers=args.exclude_homopolymers,
                                             only_pure_repeats=args.only_pure_repeats,
                                             keep_loci_that_have_overlapping_variants=True,
@@ -653,6 +658,7 @@ def main():
 
 
         variant_catalogs_step_keeping_all_loci = create_variant_catalogs_step(bp, row, suffix_keeping_all_loci,
+                                                             input_dir,
                                                              output_dir_keeping_all_loci,
                                                              exclude_homopolymers=args.exclude_homopolymers,
                                                              use_preemptibles=not args.use_nonpreemptibles,
@@ -662,7 +668,7 @@ def main():
         variant_catalog_steps_keeping_all_loci.append(variant_catalogs_step_keeping_all_loci)
 
 
-        filter_step = create_filter_step(bp, row, suffix, output_dir,
+        filter_step = create_filter_step(bp, row, suffix, input_dir, output_dir,
                                          exclude_homopolymers=args.exclude_homopolymers,
                                          only_pure_repeats=args.only_pure_repeats,
                                          use_preemptibles=not args.use_nonpreemptibles)
@@ -678,7 +684,7 @@ def main():
         annotate_variants_steps.append(annotate_variants_step)
         annotate_alleles_steps.append(annotate_alleles_step)
 
-        variant_catalogs_step = create_variant_catalogs_step(bp, row, suffix, output_dir,
+        variant_catalogs_step = create_variant_catalogs_step(bp, row, suffix, input_dir, output_dir,
                                                              exclude_homopolymers=args.exclude_homopolymers,
                                                              output_negative_loci=args.output_negative_loci,
                                                              use_preemptibles=not args.use_nonpreemptibles)
@@ -699,7 +705,7 @@ def main():
                                                                             use_preemptibles=not args.use_nonpreemptibles)
             table_for_tool_comparisons_step.depends_on(annotate_alleles_step)
 
-            plot_step, figures_to_download_dict = create_plot_step(bp, suffix, output_dir, row=row,
+            plot_step, figures_to_download_dict = create_plot_step(bp, suffix, input_dir, output_dir, row=row,
                                                                    exclude_homopolymers=args.exclude_homopolymers)
 
             plot_step.depends_on(annotate_alleles_step)
