@@ -73,10 +73,10 @@ def main():
     parser = bp.get_config_arg_parser()
     parser.add_argument("-s", "--sample-id", action="append",
                         help="Process only this sample. Can be specified more than once.")
-    parser.add_argument("--metadata-tsv", default="../dipcall_pipeline/all_assemblies.tsv")
-    parser.add_argument("--input-dir", default="gs://str-truth-set-v2/dipcall_pipeline")
-    parser.add_argument("--output-dir", default="gs://str-truth-set-v2/filter_vcf_v2")
-    parser.add_argument("--cpu", type=int, default=2)
+    parser.add_argument("--metadata-tsv", default="../dipcall_pipeline/hprc_assemblies_release2.tsv")
+    parser.add_argument("--input-dir", default="gs://str-truth-set-v2/dipcall_pipeline/HPRC_release2")
+    parser.add_argument("--output-dir", default="gs://str-truth-set-v2/filter_vcf_v2/HPRC_release2")
+    parser.add_argument("--cpu", type=int, default=4)
     parser.add_argument("--memory", default="lowmem", choices=["lowmem", "standard", "highmem"])
     args = bp.parse_known_args()
 
