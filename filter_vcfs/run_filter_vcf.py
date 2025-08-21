@@ -1,17 +1,3 @@
-"""Hail Batch pipeline for running dipcall on HPRC assemblies.
-
-Relevant links:
-
-HPRC assemblies
-  https://projects.ensembl.org/hprc/
-
-The design and construction of reference pangenome graphs with minigraph by Li et al. 2020
-  https://genomebiology.biomedcentral.com/articles/10.1186/s13059-020-02168-z
-
-Increased mutation and gene conversion within human segmental duplications by Vollger et al.
-  https://www.nature.com/articles/s41586-023-05895-y
-
-"""
 import collections
 import hailtop.fs as hfs
 import os
