@@ -6,7 +6,7 @@ import pandas as pd
 
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
-DOCKER_IMAGE = "weisburd/str-analysis@sha256:46fd53c06059b89a874c0eb438c2f761f1e96c98b9fa7bf9d83eb88e2756c3f8"
+DOCKER_IMAGE = "weisburd/str-analysis@sha256:348c44ee6b3975c691243e084a32012aa438b7c3d88dd163d191b781e1c24cd0"
 
 def create_filter_step(bp, row, input_dir, output_dir, cpu=4, memory="lowmem"):
 
@@ -44,19 +44,21 @@ def create_filter_step(bp, row, input_dir, output_dir, cpu=4, memory="lowmem"):
             --min-repeats 3 \
             --min-tandem-repeat-length 9 \
             --trf-executable-path /usr/bin/trf \
-            --trf-threads {int(cpu*1.5)} \
+            --trf-threads {2*cpu} \
+            --write-detailed-bed \
             --write-tsv \
             --write-vcf \
             --output-prefix {row.sample_id} \
             {row.sample_id}.high_confidence_regions.vcf.gz |& tee {row.sample_id}.filter_vcf.log")
 
-    filter_step.command(f"tabix -f {row.sample_id}.tandem_repeats.vcf.gz")
     filter_step.command("ls -lhtr")
 
     filter_step.output(f"{row.sample_id}.high_confidence_regions.vcf.gz")
     filter_step.output(f"{row.sample_id}.high_confidence_regions.vcf.gz.tbi")
     filter_step.output(f"{row.sample_id}.tandem_repeats.bed.gz")
     filter_step.output(f"{row.sample_id}.tandem_repeats.bed.gz.tbi")
+    filter_step.output(f"{row.sample_id}.tandem_repeats.detailed.bed.gz")
+    filter_step.output(f"{row.sample_id}.tandem_repeats.detailed.bed.gz.tbi")
     filter_step.output(f"{row.sample_id}.tandem_repeats.vcf.gz")
     filter_step.output(f"{row.sample_id}.tandem_repeats.vcf.gz.tbi")
     filter_step.output(f"{row.sample_id}.tandem_repeats.tsv.gz")
@@ -77,7 +79,7 @@ def main():
     parser.add_argument("--input-dir", default="gs://str-truth-set-v2/dipcall_pipeline/HPRC_release2")
     parser.add_argument("--output-dir", default="gs://str-truth-set-v2/filter_vcf_v2/HPRC_release2")
     parser.add_argument("--cpu", type=int, default=4)
-    parser.add_argument("--memory", default="lowmem", choices=["lowmem", "standard", "highmem"])
+    parser.add_argument("--memory", default="standard", choices=["lowmem", "standard", "highmem"])
     args = bp.parse_known_args()
 
     bp.precache_file_paths(f"{args.output_dir}/**/*.*")
