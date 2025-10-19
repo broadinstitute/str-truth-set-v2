@@ -6,20 +6,20 @@ import pandas as pd
 
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
-DOCKER_IMAGE = "weisburd/str-analysis@sha256:356e167ca5f55e002e038b1ecb8d0d058294da20c3ea27cce24753a4224a0be1"
+DOCKER_IMAGE = "weisburd/str-analysis@sha256:17b9c6b289eb6042c4e9d0053f62e94d539d45cdd63b5f9b84b181453d1aea3b"
 
 def parse_args(bp):
     parser = bp.get_config_arg_parser()
     parser.add_argument("-s", "--sample-id", action="append",
                         help="Process only this sample. Can be specified more than once.")
     
-    #parser.add_argument("--metadata-tsv", default="../dipcall_pipeline/all_assemblies.tsv")
-    #parser.add_argument("--input-dir", default="gs://str-truth-set-v2/dipcall_pipeline")
-    #parser.add_argument("--output-dir", default="gs://str-truth-set-v2/filter_vcf_v2")
+    parser.add_argument("--metadata-tsv", default="../dipcall_pipeline/all_assemblies.tsv")
+    parser.add_argument("--input-dir", default="gs://str-truth-set-v2/dipcall_pipeline")
+    parser.add_argument("--output-dir", default="gs://str-truth-set-v2/filter_vcf_v2")
 
-    parser.add_argument("--metadata-tsv", default="../dipcall_pipeline/hprc_assemblies_release2.tsv")
-    parser.add_argument("--input-dir", default="gs://str-truth-set-v2/dipcall_pipeline/HPRC_release2")
-    parser.add_argument("--output-dir", default="gs://str-truth-set-v2/filter_vcf_v2/HPRC_release2")
+    #parser.add_argument("--metadata-tsv", default="../dipcall_pipeline/hprc_assemblies_release2.tsv")
+    #parser.add_argument("--input-dir", default="gs://str-truth-set-v2/dipcall_pipeline/HPRC_release2")
+    #parser.add_argument("--output-dir", default="gs://str-truth-set-v2/filter_vcf_v2/HPRC_release2")
 
     parser.add_argument("--cpu", type=int, default=4)
     parser.add_argument("--memory", default="standard", choices=["lowmem", "standard", "highmem"])
