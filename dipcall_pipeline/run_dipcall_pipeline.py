@@ -21,7 +21,7 @@ import pandas as pd
 from step_pipeline import pipeline, Backend, Localize
 
 
-DOCKER_IMAGE = "weisburd/dipcall-pipeline@sha256:6e13af8c4008fbea3ca1498e22c00df7265988f2a3673532f0b97f24c85c0dcc"
+DOCKER_IMAGE = "weisburd/dipcall-pipeline@sha256:bf74b72c4b0a44932f5d659350153526b3a56015463ea63d0121371b769dc76e"
 
 bp = pipeline("dipcall pipeline", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline")
 
