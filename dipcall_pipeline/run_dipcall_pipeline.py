@@ -11,6 +11,9 @@ The design and construction of reference pangenome graphs with minigraph by Li e
 Increased mutation and gene conversion within human segmental duplications by Vollger et al.
   https://www.nature.com/articles/s41586-023-05895-y
 
+A collection of 579 high-quality human assemblies (including HPRC release 1 and 2) is a available at:
+https://github.com/lh3/OpenHGL
+https://zenodo.org/records/17772289
 """
 
 import os
@@ -28,7 +31,9 @@ parser.add_argument("-n", "--num-samples", type=int, help="Process only this num
 parser.add_argument("--offset", type=int, help="Skip the first N samples.")
 parser.add_argument("--more-memory", action="store_true", help="Run with 2x more memory")
 parser.add_argument("--sample-table", default="hprc_assemblies.tsv", help="Sample table path")
-parser.add_argument("--urls-table", default="hprc_assembly_urls.tsv", help="URLs table path")
+g = parser.add_mutually_exclusive_group(required=True)
+g.add_argument("--urls-table", help="URLs table path")   # default="hprc_assembly_urls.tsv"
+g.add_argument("--agc-archive-url", help="Output table path")   # default="https://zenodo.org/records/17772289/files/human579.agc"
 parser.add_argument("--output-dir", default="gs://str-truth-set-v2/dipcall_pipeline", help="Output bucket path")
 args = bp.parse_known_args()
 
