@@ -33,15 +33,16 @@ parser.add_argument("--more-memory", action="store_true", help="Run with 2x more
 parser.add_argument("--sample-table", default="hprc_assemblies.tsv", help="Sample table path")
 g = parser.add_mutually_exclusive_group(required=True)
 g.add_argument("--urls-table", help="URLs table path")   # default="hprc_assembly_urls.tsv"
-g.add_argument("--agc-archive-url", help="Output table path")   # default="https://zenodo.org/records/17772289/files/human579.agc"
+g.add_argument("--agc-archive-url", help="Output table path")   # default="https://zenodo.org/records/17772289/files/human579.agc" or "gs://str-truth-set/hg38/ref/human579.agc"
 parser.add_argument("--output-dir", default="gs://str-truth-set-v2/dipcall_pipeline", help="Output bucket path")
 args = bp.parse_known_args()
 
 df = pd.read_table(args.sample_table)
-df_urls = pd.read_table(args.urls_table)
-accession_to_url_map = dict(zip(df_urls.accession, df_urls.url))
-df["url_pat"] = df["accession_pat"].map(accession_to_url_map)
-df["url_mat"] = df["accession_mat"].map(accession_to_url_map)
+if args.urls_table:
+    df_urls = pd.read_table(args.urls_table)
+    accession_to_url_map = dict(zip(df_urls.accession, df_urls.url))
+    df["url_pat"] = df["accession_pat"].map(accession_to_url_map)
+    df["url_mat"] = df["accession_mat"].map(accession_to_url_map)
 
 if args.sample_id:
     df = df[df["sample_id"].isin(args.sample_id)]
@@ -73,15 +74,28 @@ for i, (_, row) in enumerate(df.iterrows()):
 
     s1.command("set -exuo pipefail")
     s1.command(f"cd /io")
-    s1.command(f"wget --quiet {row.url_pat} & wget --quiet {row.url_mat} & wait")
+    if args.urls_table:
+        s1.command(f"wget --quiet {row.url_pat} & wget --quiet {row.url_mat} & wait")
+        father_fasta_path = os.path.basename(row.url_pat)
+        mother_fasta_path = os.path.basename(row.url_mat)
+    elif args.agc_archive_url:
+        agc_archive_path = s1.input(args.agc_archive_url)
+        father_fasta_path = f"{row.assembly_pat}.fasta"
+        mother_fasta_path = f"{row.assembly_mat}.fasta"
+        s1.command(f"agc getset {agc_archive_path} {row.assembly_pat} > {father_fasta_path} &")
+        s1.command(f"agc getset {agc_archive_path} {row.assembly_mat} > {mother_fasta_path} &")
+        s1.command(f"wait")
 
-    pseudoautosomal_region_arg = "-x /dipcall.kit/hs38.PAR.bed" if row["sex"] == "male" else ""
+    else:
+        parser.error("Must specify either --urls-table or --agc-archive-url")
+
+    pseudoautosomal_region_arg = "-x /dipcall.kit/hs38.PAR.bed" if row.sex == "male" else ""
     s1.command(f"/dipcall.kit/run-dipcall "
                f"{pseudoautosomal_region_arg} "
                f"{row.sample_id} "
                f"{hg38_fasta_input} "
-               f"{os.path.basename(row.url_pat)} "
-               f"{os.path.basename(row.url_mat)} > out.mak")
+               f"{father_fasta_path} "
+               f"{mother_fasta_path} > out.mak")
 
     s1.command(f"make -j2 -f out.mak")
 
