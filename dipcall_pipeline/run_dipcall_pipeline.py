@@ -51,7 +51,7 @@ if args.offset:
     df = df.iloc[args.offset:]
 
 if args.num_samples:
-    df = df.iloc[:args.num_samples + args.offset]
+    df = df.iloc[:args.num_samples]
 
 s1_steps = []
 for i, (_, row) in enumerate(df.iterrows()):
