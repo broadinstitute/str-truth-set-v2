@@ -57,5 +57,10 @@ RUN wget https://github.com/lh3/dipcall/releases/download/v0.3/dipcall-0.3_x64-l
  	&& tar -jxf dipcall-0.3_x64-linux.tar.bz2 \
 	&& rm dipcall-0.3_x64-linux.tar.bz2
 
+RUN wget https://github.com/refresh-bio/agc/releases/download/v3.2.1/agc-3.2_x64_linux.tar.gz \
+    && tar -xzf agc-3.2_x64_linux.tar.gz agc-3.2_x64_linux/agc \
+    && cp agc-3.2_x64_linux/agc /usr/bin/agc \
+    && rm -rf agc-3.2_x64_linux*
+
 
 ENTRYPOINT ["/bin/bash"]
