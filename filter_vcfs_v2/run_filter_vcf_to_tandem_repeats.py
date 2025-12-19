@@ -1,26 +1,24 @@
-"""Hail Batch pipeline for running str_analysis.filter_vcf_to_catalog_tandem_repeats on DipCall ouptut VCFs generated from aligning HPRC assemblies to hg38"""
+"""Hail Batch pipeline for running str_analysis.filter_vcf_to_tandem_repeats on DipCall ouptut VCFs generated from
+aligning T2T assemblies to hg38. This is the next iteration of the str_analysis.filter_vcf_to_STRs method.
+"""
 
 #import hailtop.fs as hfs
 import os
 import pandas as pd
-
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
-DOCKER_IMAGE = "weisburd/str-analysis@sha256:17b9c6b289eb6042c4e9d0053f62e94d539d45cdd63b5f9b84b181453d1aea3b"
+DOCKER_IMAGE = "weisburd/str-analysis@sha256:4de1c779f80ece7f538db344af74ea590afbf010ef4526caac4a9a8bbb1118d0"
 
 def parse_args(bp):
     parser = bp.get_config_arg_parser()
-    parser.add_argument("-s", "--sample-id", action="append",
-                        help="Process only this sample. Can be specified more than once.")
-    
+    parser.add_argument("--exclude-homopolymers", action="store_true")
+    parser.add_argument("--skip-combine-steps", action="store_true")
+    parser.add_argument("--use-nonpreemptibles", action="store_true")
+    parser.add_argument("-n", type=int, help="Number of samples to process")
+    parser.add_argument("-s", "--sample-id", action="append", help="Process only this sample. Can be specified more than once.")
     parser.add_argument("--metadata-tsv", default="../dipcall_pipeline/all_assemblies.tsv")
     parser.add_argument("--input-dir", default="gs://str-truth-set-v2/dipcall_pipeline")
     parser.add_argument("--output-dir", default="gs://str-truth-set-v2/filter_vcf_v2")
-
-    #parser.add_argument("--metadata-tsv", default="../dipcall_pipeline/hprc_assemblies_release2.tsv")
-    #parser.add_argument("--input-dir", default="gs://str-truth-set-v2/dipcall_pipeline/HPRC_release2")
-    #parser.add_argument("--output-dir", default="gs://str-truth-set-v2/filter_vcf_v2/HPRC_release2")
-
     parser.add_argument("--cpu", type=int, default=4)
     parser.add_argument("--memory", default="standard", choices=["lowmem", "standard", "highmem"])
     args = bp.parse_known_args()
@@ -28,12 +26,13 @@ def parse_args(bp):
     return args
 
 
-def create_filter_step(bp, row, input_dir, output_dir, cpu=4, memory="lowmem"):
+def create_filter_step(bp, row, input_dir, output_dir, exclude_homopolymers=False, use_preemptibles=True, cpu=4, memory="lowmem"):
 
     filter_step = bp.new_step(
-        f"filter_vcf_to_catalog_tandem_repeats (cpu={cpu}): {row.sample_id}",
+        f"filter_vcf_to_tandem_repeats (cpu={cpu}): {row.sample_id}",
         image=DOCKER_IMAGE,
         arg_suffix="filter-step",
+        preemptible=use_preemptibles,
         cpu=cpu,
         memory=memory,
         output_dir=output_dir)
@@ -58,11 +57,13 @@ def create_filter_step(bp, row, input_dir, output_dir, cpu=4, memory="lowmem"):
             | bgzip > {row.sample_id}.high_confidence_regions.vcf.gz")
     filter_step.command(f"tabix -f {row.sample_id}.high_confidence_regions.vcf.gz")
 
+    min_repeat_unit_length = 2 if exclude_homopolymers else 1
     filter_step.command(f"python3 -u -m str_analysis.filter_vcf_to_tandem_repeats catalog \
             -R {hg38_fasta_input} \
-            --min-repeat-unit-length 1 \
+            --min-repeat-unit-length {min_repeat_unit_length} \
             --min-repeats 3 \
             --min-tandem-repeat-length 9 \
+            --min-indel-size-to-run-trf 7 \
             --trf-executable-path /usr/bin/trf \
             --trf-threads {2*cpu} \
             --write-detailed-bed \
@@ -126,7 +127,7 @@ def create_combine_step(bp, filter_steps, data_dir, cpu=1, memory="highmem"):
 
 
 def main():
-    bp = pipeline("filter_vcf_to_catalog_tandem_repeats", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline")
+    bp = pipeline("filter_vcf_to_tandem_repeats", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline")
 
     args = parse_args(bp)
     bp.precache_file_paths(f"{args.output_dir}/**/*.*")
@@ -134,13 +135,19 @@ def main():
     df = pd.read_table(args.metadata_tsv)
     if args.sample_id:
         df = df[df.sample_id.isin(args.sample_id)]
-    
+
+    if args.n:
+        df = df.iloc[:args.n]
+
     filter_steps = []
     for row_i, (_, row) in enumerate(df.iterrows()):
         input_dir = os.path.join(args.input_dir, row.sample_id)
-
         output_dir = os.path.join(args.output_dir, row.sample_id)
-        filter_step = create_filter_step(bp, row, input_dir, output_dir, cpu=args.cpu, memory=args.memory)
+        filter_step = create_filter_step(bp, row, input_dir, output_dir,
+                                         exclude_homopolymers=args.exclude_homopolymers,
+                                         use_preemptibles=not args.use_nonpreemptibles,
+                                         cpu=args.cpu,
+                                         memory=args.memory)
         
         filter_steps.append(filter_step)
 
@@ -152,6 +159,5 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 #%%
