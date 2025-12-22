@@ -14,6 +14,7 @@ def parse_args(bp):
     parser.add_argument("--exclude-homopolymers", action="store_true")
     parser.add_argument("--skip-combine-steps", action="store_true")
     parser.add_argument("--use-nonpreemptibles", action="store_true")
+    parser.add_argument("--allow-multiple-trf-results-per-locus", action="store_true")
     parser.add_argument("-n", type=int, help="Number of samples to process")
     parser.add_argument("-s", "--sample-id", action="append", help="Process only this sample. Can be specified more than once.")
     parser.add_argument("--metadata-tsv", default="../dipcall_pipeline/all_assemblies.tsv")
@@ -26,7 +27,12 @@ def parse_args(bp):
     return args
 
 
-def create_filter_step(bp, row, input_dir, output_dir, exclude_homopolymers=False, use_preemptibles=True, cpu=4, memory="lowmem"):
+def create_filter_step(bp, row, input_dir, output_dir,
+                       allow_multiple_trf_results_per_locus=False,
+                       exclude_homopolymers=False,
+                       use_preemptibles=True,
+                       cpu=4,
+                       memory="lowmem"):
 
     filter_step = bp.new_step(
         f"filter_vcf_to_tandem_repeats (cpu={cpu}): {row.sample_id}",
@@ -57,7 +63,12 @@ def create_filter_step(bp, row, input_dir, output_dir, exclude_homopolymers=Fals
             | bgzip > {row.sample_id}.high_confidence_regions.vcf.gz")
     filter_step.command(f"tabix -f {row.sample_id}.high_confidence_regions.vcf.gz")
 
+    filter_step.command(f"python3 -m pip uninstall -y str-analysis")
+    filter_step.command(f"python3 -m pip install --upgrade --no-cache-dir git+https://github.com/broadinstitute/str-analysis")
+    #filter_step.command(f"python3 -u -m str_analysis.filter_vcf_to_tandem_repeats catalog -h || true")
+
     min_repeat_unit_length = 2 if exclude_homopolymers else 1
+    allow_multiple_arg = "--allow-multiple-trf-results-per-locus" if allow_multiple_trf_results_per_locus else ""
     filter_step.command(f"python3 -u -m str_analysis.filter_vcf_to_tandem_repeats catalog \
             -R {hg38_fasta_input} \
             --min-repeat-unit-length {min_repeat_unit_length} \
@@ -69,7 +80,7 @@ def create_filter_step(bp, row, input_dir, output_dir, exclude_homopolymers=Fals
             --write-detailed-bed \
             --write-tsv \
             --write-vcf \
-            --verbose \
+            --verbose  {allow_multiple_arg} \
             --output-prefix {row.sample_id} \
             {row.sample_id}.high_confidence_regions.vcf.gz |& tee {row.sample_id}.filter_vcf.log")
 
@@ -144,6 +155,7 @@ def main():
         input_dir = os.path.join(args.input_dir, row.sample_id)
         output_dir = os.path.join(args.output_dir, row.sample_id)
         filter_step = create_filter_step(bp, row, input_dir, output_dir,
+                                         allow_multiple_trf_results_per_locus=args.allow_multiple_trf_results_per_locus,
                                          exclude_homopolymers=args.exclude_homopolymers,
                                          use_preemptibles=not args.use_nonpreemptibles,
                                          cpu=args.cpu,
