@@ -7,7 +7,7 @@ import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
-DOCKER_IMAGE = "weisburd/str-analysis@sha256:4de1c779f80ece7f538db344af74ea590afbf010ef4526caac4a9a8bbb1118d0"
+DOCKER_IMAGE = "weisburd/str-analysis@sha256:53b7340cf0446dc1f5ce4652a23e412d30d7382fff21c509248d2fe4075a04b4"
 
 def parse_args(bp):
     parser = bp.get_config_arg_parser()
@@ -48,9 +48,14 @@ def create_filter_step(bp, row, input_dir, output_dir,
         "gs://str-truth-set/hg38/ref/hg38.fa.fai",
         localize_by=Localize.HAIL_BATCH_CLOUDFUSE)
 
+    dipcall_input_dir = input_dir
+    if row.get("subdirectory") and not pd.isna(row.get("subdirectory")):
+        dipcall_input_dir = os.path.join(input_dir, row.subdirectory)
+    dipcall_input_dir = os.path.join(dipcall_input_dir, row.sample_id)
+
     dipcall_vcf_input, dipcall_high_confidence_regions_bed_input = filter_step.inputs(
-        os.path.join(input_dir, f"{row.sample_id}.dip.vcf.gz"),
-        os.path.join(input_dir, f"{row.sample_id}.dip.bed.gz"),
+        os.path.join(dipcall_input_dir, f"{row.sample_id}.dip.vcf.gz"),
+        os.path.join(dipcall_input_dir, f"{row.sample_id}.dip.bed.gz"),
     )
 
     filter_step.command("set -exuo pipefail")
@@ -100,13 +105,14 @@ def create_filter_step(bp, row, input_dir, output_dir,
     return filter_step
 
 
-def create_combine_step(bp, filter_steps, data_dir, cpu=1, memory="highmem"):
+def create_combine_step(bp, filter_steps, data_dir, cpu=2, memory="highmem"):
 
     output_prefix = f"combined.{len(filter_steps)}_catalogs"
     combine_step = bp.new_step(
         f"combine (cpu={cpu}): {len(filter_steps):,d} catalogs",
         image=DOCKER_IMAGE,
         arg_suffix="combine-step",
+        localize_by=Localize.HAIL_BATCH_CLOUDFUSE,
         cpu=cpu,
         memory=memory,
         output_dir=data_dir)
@@ -120,6 +126,9 @@ def create_combine_step(bp, filter_steps, data_dir, cpu=1, memory="highmem"):
         catalog_bed_files.append(local_bed_path)
 
     combine_step.command("set -exuo pipefail")
+
+    combine_step.command(f"python3 -m pip uninstall -y str-analysis")
+    combine_step.command(f"python3 -m pip install --upgrade --no-cache-dir git+https://github.com/broadinstitute/str-analysis")
 
     combine_step.command(f"python3 -u -m str_analysis.filter_vcf_to_tandem_repeats merge \
             --write-detailed-bed \
@@ -152,9 +161,8 @@ def main():
 
     filter_steps = []
     for row_i, (_, row) in enumerate(df.iterrows()):
-        input_dir = os.path.join(args.input_dir, row.sample_id)
         output_dir = os.path.join(args.output_dir, row.sample_id)
-        filter_step = create_filter_step(bp, row, input_dir, output_dir,
+        filter_step = create_filter_step(bp, row, args.input_dir, output_dir,
                                          allow_multiple_trf_results_per_locus=args.allow_multiple_trf_results_per_locus,
                                          exclude_homopolymers=args.exclude_homopolymers,
                                          use_preemptibles=not args.use_nonpreemptibles,
