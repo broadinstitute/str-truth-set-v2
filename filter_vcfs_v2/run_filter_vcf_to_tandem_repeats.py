@@ -46,7 +46,7 @@ def create_filter_step(bp, row, input_dir, output_dir,
     hg38_fasta_input, _ = filter_step.inputs(
         "gs://str-truth-set/hg38/ref/hg38.fa",
         "gs://str-truth-set/hg38/ref/hg38.fa.fai",
-        localize_by=Localize.HAIL_BATCH_CLOUDFUSE)
+        localize_by=Localize.GSUTIL_COPY)
 
     dipcall_input_dir = input_dir
     if row.get("subdirectory") and not pd.isna(row.get("subdirectory")):
@@ -112,7 +112,7 @@ def create_combine_step(bp, filter_steps, data_dir, cpu=2, memory="highmem"):
         f"combine (cpu={cpu}): {len(filter_steps):,d} catalogs",
         image=DOCKER_IMAGE,
         arg_suffix="combine-step",
-        localize_by=Localize.HAIL_BATCH_CLOUDFUSE,
+        localize_by=Localize.GSUTIL_COPY,
         cpu=cpu,
         memory=memory,
         output_dir=data_dir)
