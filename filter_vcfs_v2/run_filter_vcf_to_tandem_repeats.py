@@ -138,6 +138,8 @@ def create_combine_step(bp, filter_steps, data_dir, cpu=2, memory="highmem"):
 
     combine_step.command("ls -lhtr")
 
+    combine_step.output(f"{output_prefix}.tandem_repeats.bed.gz")
+    combine_step.output(f"{output_prefix}.tandem_repeats.bed.gz.tbi")
     combine_step.output(f"{output_prefix}.tandem_repeats.detailed.bed.gz")
     combine_step.output(f"{output_prefix}.tandem_repeats.detailed.bed.gz.tbi")
     combine_step.output(f"{output_prefix}.log")
