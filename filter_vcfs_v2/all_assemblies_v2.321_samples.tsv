@@ -1,0 +1,322 @@
+sample_id	assembly_mat	assembly_pat	population	accession_mat	accession_pat	sex	subdirectory
+CHM1_CHM13	CHM1_20220129	CHM13v2_T2T	NewSynDip	CHM1_20220129	CHM13v2_T2T	female	
+HG002	HG002.pri.mat.f1_v2	HG002.alt.pat.f1_v2	Caucasian	GCA_018852615.1	GCA_018852605.1	male	
+HG005	HG005.pri.mat.f1_v2	HG005.alt.pat.f1_v2	Asian	GCA_018506965.1	GCA_018506945.1	male	
+HG00438	HG00438.pri.mat.f1_v2	HG00438.alt.pat.f1_v2	Han Chinese South	GCA_018471515.1	GCA_018472595.1	female	
+HG00621	HG00621.pri.mat.f1_v2	HG00621.alt.pat.f1_v2	Han Chinese South	GCA_018472605.1	GCA_018472575.1	male	
+HG00673	HG00673.pri.mat.f1_v2	HG00673.alt.pat.f1_v2	Han Chinese South	GCA_018472565.1	GCA_018472585.1	male	
+HG00733	HG00733.pri.mat.f1_v2	HG00733.alt.pat.f1_v2	Puerto Rican In Puerto Rico	GCA_018506975.1	GCA_018506955.1	female	
+HG00735	HG00735.pri.mat.f1_v2	HG00735.alt.pat.f1_v2	Puerto Rican In Puerto Rico	GCA_018472765.1	GCA_018472715.1	female	
+HG00741	HG00741.pri.mat.f1_v2	HG00741.alt.pat.f1_v2	Puerto Rican In Puerto Rico	GCA_018471095.1	GCA_018471105.1	female	
+HG01071	HG01071.pri.mat.f1_v2	HG01071.alt.pat.f1_v2	Puerto Rican In Puerto Rico	GCA_018472685.1	GCA_018472725.1	female	
+HG01106	HG01106.pri.mat.f1_v2	HG01106.alt.pat.f1_v2	Puerto Rican In Puerto Rico	GCA_018471345.1	GCA_018471075.1	male	
+HG01109	HG01109.pri.mat.f1_v2	HG01109.alt.pat.f1_v2	Puerto Rico	GCA_018504365.1	GCA_018504645.1	male	
+HG01123	HG01123.pri.mat.f1_v2.1	HG01123.alt.pat.f1_v2.1	Colombian In Medellin, Colombia	GCA_018469665.1	GCA_018469695.1	female	
+HG01175	HG01175.pri.mat.f1_v2	HG01175.alt.pat.f1_v2	Puerto Rican In Puerto Rico	GCA_018471085.1	GCA_018471065.1	female	
+HG01243	HG01243.pri.mat.f1_v2	HG01243.alt.pat.f1_v2	Puerto Rican In Puerto Rico	GCA_018504375.1	GCA_018504045.1	male	
+HG01258	HG01258.pri.mat.f1_v2	HG01258.alt.pat.f1_v2	Colombian In Medellin, Colombia	GCA_018469405.1	GCA_018469675.1	male	
+HG01358	HG01358.pri.mat.f1_v2.1	HG01358.alt.pat.f1_v2.1	Colombian In Medellin, Colombia	GCA_018469865.1	GCA_018469965.1	male	
+HG01361	HG01361.pri.mat.f1_v2	HG01361.alt.pat.f1_v2	Colombian In Medellin, Colombia	GCA_018469685.1	GCA_018469705.1	female	
+HG01891	HG01891.pri.mat.f1_v2	HG01891.alt.pat.f1_v2	African Caribbean In Barbados	GCA_018467155.1	GCA_018467165.1	female	
+HG01928	HG01928.pri.mat.f1_v2	HG01928.alt.pat.f1_v2	Peruvian In Lima, Peru	GCA_018472695.1	GCA_018472705.1	male	
+HG01952	HG01952.pri.mat.f1_v2	HG01952.alt.pat.f1_v2	Peruvian In Lima, Peru	GCA_018471545.1	GCA_018471555.1	male	
+HG01978	HG01978.pri.mat.f1_v2	HG01978.alt.pat.f1_v2	Peruvian In Lima, Peru	GCA_018472865.1	GCA_018472845.1	female	
+HG02055	HG02055.pri.mat.f1_v2	HG02055.alt.pat.f1_v2	Barbados	GCA_018506125.1	GCA_018505855.1	male	
+HG02080	HG02080.pri.mat.f1_v2	HG02080.alt.pat.f1_v2	Vietnamese Kinh In Ho Chi Minh City, Vietnam	GCA_018504085.1	GCA_018504055.1	female	
+HG02109	HG02109.pri.mat.f1_v2	HG02109.alt.pat.f1_v2	African Ancestry From Barbados In The Caribbean	GCA_018505825.1	GCA_018505865.1	female	
+HG02145	HG02145.pri.mat.f1_v2	HG02145.alt.pat.f1_v2	African Ancestry From Barbados In The Caribbean	GCA_018852585.1	GCA_018852595.1	male	
+HG02148	HG02148.pri.mat.f1_v2	HG02148.alt.pat.f1_v2	Peruvian In Lima, Peru	GCA_018471535.1	GCA_018471525.1	female	
+HG02257	HG02257.pri.mat.f1_v2	HG02257.alt.pat.f1_v2	African Caribbean In Barbados	GCA_018466845.1	GCA_018466835.1	female	
+HG02486	HG02486.pri.mat.f1_v2	HG02486.alt.pat.f1_v2	African Caribbean In Barbados	GCA_018467015.1	GCA_018467005.1	male	
+HG02559	HG02559.pri.mat.f1_v2	HG02559.alt.pat.f1_v2	African Caribbean In Barbados	GCA_018466985.1	GCA_018466855.1	female	
+HG02572	HG02572.pri.mat.f1_v2	HG02572.alt.pat.f1_v2	Gambian In Western Division, The Gambia	GCA_018470445.1	GCA_018470435.1	male	
+HG02622	HG02622.pri.mat.f1_v2	HG02622.alt.pat.f1_v2	Gambian In Western Division, The Gambia	GCA_018469875.1	GCA_018469925.1	female	
+HG02630	HG02630.pri.mat.f1_v2	HG02630.alt.pat.f1_v2	Gambian In Western Division, The Gambia	GCA_018469955.1	GCA_018469945.1	female	
+HG02717	HG02717.pri.mat.f1_v2	HG02717.alt.pat.f1_v2	Gambian In Western Division, The Gambia	GCA_018469935.1	GCA_018470425.1	male	
+HG02723	HG02723.pri.mat.f1_v2	HG02723.alt.pat.f1_v2	Gambian In Western Division, The Gambia	GCA_018504065.1	GCA_018504075.1	female	
+HG02818	HG02818.pri.mat.f1_v2	HG02818.alt.pat.f1_v2	Gambian In Western Division Of Gambia	GCA_018503585.1	GCA_018503575.1	female	
+HG02886	HG02886.pri.mat.f1_v2	HG02886.alt.pat.f1_v2	Gambian In Western Division, The Gambia	GCA_018470455.1	GCA_018470465.1	female	
+HG03098	HG03098.pri.mat.f1_v2	HG03098.alt.pat.f1_v2	Mende In Sierra Leone	GCA_018506165.1	GCA_018506155.1	male	
+HG03453	HG03453.pri.mat.f1_v2	HG03453.alt.pat.f1_v2	Mende In Sierra Leone	GCA_018472855.1	GCA_018473305.1	female	
+HG03486	HG03486.pri.mat.f1_v2	HG03486.alt.pat.f1_v2	Mende Of Sierra Leone	GCA_018503525.1	GCA_018503245.1	female	
+HG03492	HG03492.pri.mat.f1_v2	HG03492.alt.pat.f1_v2	Punjabi In Lahore, Pakistan	GCA_018505845.1	GCA_018505835.1	male	
+HG03516	HG03516.pri.mat.f1_v2	HG03516.alt.pat.f1_v2	Esan In Nigeria	GCA_018469425.1	GCA_018469415.1	female	
+HG03540	HG03540.pri.mat.f1_v2	HG03540.alt.pat.f1_v2	Gambian In Western Division, The Gambia	GCA_018473295.1	GCA_018473315.1	female	
+HG03579	HG03579.pri.mat.f1_v2	HG03579.alt.pat.f1_v2	Mende In Sierra Leone	GCA_018472825.1	GCA_018472835.1	male	
+NA18906	NA18906.pri.mat.f1_v2	NA18906.alt.pat.f1_v2	Yoruban In Ibadan, Nigeria	GCA_018503255.1	GCA_018503285.1	female	
+NA19240	NA19240.pri.mat.f1_v2	NA19240.alt.pat.f1_v2	Yoruban	GCA_018503275.1	GCA_018503265.1	female	
+NA20129	NA20129.pri.mat.f1_v2	NA20129.alt.pat.f1_v2	Southwest USA	GCA_018504635.1	GCA_018504625.1	female	
+NA21309	NA21309.pri.mat.f1_v2	NA21309.alt.pat.f1_v2	Kinyawa, Kenya	GCA_018504655.1	GCA_018504665.1	female	
+HG02011	HG02011_h1	HG02011_h2	ACB	HG02011_h1	HG02011_h2	male	
+HG03009	HG03009_h1	HG03009_h2	BEB	HG03009_h1	HG03009_h2	male	
+HG03065	HG03065_h1	HG03065_h2	MSL	HG03065_h1	HG03065_h2	male	
+HG03683	HG03683_h1	HG03683_h2	STU	HG03683_h1	HG03683_h2	female	
+NA19238	NA19238_h1	NA19238_h2	YRI	NA19238_h1	NA19238_h2	female	
+HG00514	HG00514_h1	HG00514_h2	CHS	HG00514_h1	HG00514_h2	female	
+HG03125	HG03125_h1	HG03125_h2	ESN	HG03125_h1	HG03125_h2	female	
+HG00732	HG00732_h1	HG00732_h2	PUR	HG00732_h1	HG00732_h2	female	
+HG02492	HG02492_h1	HG02492_h2	PJL	HG02492_h1	HG02492_h2	male	
+HG03371	HG03371_h1	HG03371_h2	ESN	HG03371_h1	HG03371_h2	male	
+NA12329	NA12329_h1	NA12329_h2	CEU	NA12329_h1	NA12329_h2	female	
+NA19983	NA19983_h1	NA19983_h2	ASW	NA19983_h1	NA19983_h2	female	
+HG00512	HG00512_h1	HG00512_h2	CHS	HG00512_h1	HG00512_h2	male	
+HG00513	HG00513_h1	HG00513_h2	CHS	HG00513_h1	HG00513_h2	female	
+HG00731	HG00731_h1	HG00731_h2	PUR	HG00731_h1	HG00731_h2	male	
+NA12878	NA12878_h1	NA12878_h2	CEU	NA12878_h1	NA12878_h2	female	
+NA19239	NA19239_h1	NA19239_h2	YRI	NA19239_h1	NA19239_h2	male	
+HG00096	HG00096_h1	HG00096_h2	GBR	HG00096_h1	HG00096_h2	male	
+HG00171	HG00171_h1	HG00171_h2	FIN	HG00171_h1	HG00171_h2	female	
+HG00864	HG00864_h1	HG00864_h2	CDX	HG00864_h1	HG00864_h2	female	
+HG01114	HG01114_h1	HG01114_h2	CLM	HG01114_h1	HG01114_h2	female	
+HG01505	HG01505_h1	HG01505_h2	IBS	HG01505_h1	HG01505_h2	male	
+HG01596	HG01596_h1	HG01596_h2	KHV	HG01596_h1	HG01596_h2	male	
+HG02587	HG02587_h1	HG02587_h2	GWD	HG02587_h1	HG02587_h2	female	
+HG03732	HG03732_h1	HG03732_h2	ITU	HG03732_h1	HG03732_h2	male	
+NA18534	NA18534_h1	NA18534_h2	CHB	NA18534_h1	NA18534_h2	male	
+NA18939	NA18939_h1	NA18939_h2	JPT	NA18939_h1	NA18939_h2	female	
+NA19650	NA19650_h1	NA19650_h2	MXL	NA19650_h1	NA19650_h2	male	
+NA20509	NA20509_h1	NA20509_h2	TSI	NA20509_h1	NA20509_h2	male	
+NA20847	NA20847_h1	NA20847_h2	GIH	NA20847_h1	NA20847_h2	female	
+HG00097				HG00097_hap2_hprc_r2_v1.0.1	HG00097_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG00099				HG00099_hap2_hprc_r2_v1.0.1	HG00099_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG00126				HG00126_hap2_hprc_r2_v1.0.1	HG00126_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+HG00128				HG00128_hap2_hprc_r2_v1.0.1	HG00128_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG00133				HG00133_hap2_hprc_r2_v1.0.1	HG00133_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG00140				HG00140_hap2_hprc_r2_v1.0.1	HG00140_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+HG00146				HG00146_hap2_hprc_r2_v1.0.1	HG00146_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG00232				HG00232_hap2_hprc_r2_v1.0.1	HG00232_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG00235				HG00235_hap2_hprc_r2_v1.0.1	HG00235_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG00253				HG00253_hap2_hprc_r2_v1.0.1	HG00253_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG00272				HG00272_hap2_hprc_r2_v1.0.1	HG00272_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG00280				HG00280_hap2_hprc_r2_v1.0.1	HG00280_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+HG00290				HG00290_hap2_hprc_r2_v1.0.1	HG00290_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+HG00320				HG00320_hap2_hprc_r2_v1.0.1	HG00320_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG00321				HG00321_hap2_hprc_r2_v1.0.1	HG00321_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+HG00323				HG00323_hap2_hprc_r2_v1.0.1	HG00323_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG00329				HG00329_hap2_hprc_r2_v1.0.1	HG00329_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+HG00344				HG00344_hap2_hprc_r2_v1.0.1	HG00344_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG00350				HG00350_hap2_hprc_r2_v1.0.1	HG00350_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG00408				HG00408_mat_hprc_r2_v1.0.1	HG00408_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG00423				HG00423_mat_hprc_r2_v1.0.1	HG00423_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG00544				HG00544_mat_hprc_r2_v1.0.1	HG00544_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG00558				HG00558_mat_hprc_r2_v1.0.1	HG00558_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG00597				HG00597_mat_hprc_r2_v1.0.1	HG00597_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG00609				HG00609_mat_hprc_r2_v1.0.1	HG00609_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG00639				HG00639_mat_hprc_r2_v1.0.1	HG00639_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG00642				HG00642_mat_hprc_r2_v1.0.1	HG00642_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG00658				HG00658_mat_hprc_r2_v1.0.1	HG00658_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG00706				HG00706_mat_hprc_r2_v1.0.1	HG00706_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG00738				HG00738_mat_hprc_r2_v1.0.1	HG00738_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG01074				HG01074_mat_hprc_r2_v1.0.1	HG01074_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG01081				HG01081_mat_hprc_r2_v1.0.1	HG01081_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG01099				HG01099_mat_hprc_r2_v1.0.1	HG01099_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG01150				HG01150_mat_hprc_r2_v1.0.1	HG01150_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG01167				HG01167_hap2_hprc_r2_v1.0.1	HG01167_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+HG01192				HG01192_mat_hprc_r2_v1.0.1	HG01192_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG01252				HG01252_mat_hprc_r2_v1.0.1	HG01252_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG01255				HG01255_mat_hprc_r2_v1.0.1	HG01255_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG01261				HG01261_mat_hprc_r2_v1.0.1	HG01261_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG01346				HG01346_mat_hprc_r2_v1.0.1	HG01346_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG01433				HG01433_mat_hprc_r2_v1.0.1	HG01433_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG01496				HG01496_mat_hprc_r2_v1.0.1	HG01496_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG01530				HG01530_hap2_hprc_r2_v1.0.1	HG01530_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+HG01784				HG01784_hap2_hprc_r2_v1.0.1	HG01784_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG01786				HG01786_hap2_hprc_r2_v1.0.1	HG01786_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG01884				HG01884_mat_hprc_r2_v1.0.1	HG01884_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG01934				HG01934_mat_hprc_r2_v1.0.1	HG01934_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG01940				HG01940_mat_hprc_r2_v1.0.1	HG01940_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG01943				HG01943_mat_hprc_r2_v1.0.1	HG01943_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG01960				HG01960_mat_hprc_r2_v1.0.1	HG01960_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG01969				HG01969_mat_hprc_r2_v1.0.1	HG01969_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG01975				HG01975_mat_hprc_r2_v1.0.1	HG01975_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG01981				HG01981_mat_hprc_r2_v1.0.1	HG01981_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG01993				HG01993_mat_hprc_r2_v1.0.1	HG01993_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG02004				HG02004_mat_hprc_r2_v1.0.1	HG02004_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG02015				HG02015_mat_hprc_r2_v1.0.1	HG02015_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG02027				HG02027_mat_hprc_r2_v1.0.1	HG02027_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG02040				HG02040_hap2_hprc_r2_v1.0.1	HG02040_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+HG02056				HG02056_mat_hprc_r2_v1.0.1	HG02056_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG02071				HG02071_mat_hprc_r2_v1.0.1	HG02071_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG02074				HG02074_mat_hprc_r2_v1.0.1	HG02074_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG02083				HG02083_mat_hprc_r2_v1.0.1	HG02083_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG02129				HG02129_mat_hprc_r2_v1.0.1	HG02129_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG02132				HG02132_mat_hprc_r2_v1.0.1	HG02132_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG02135				HG02135_mat_hprc_r2_v1.0.1	HG02135_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG02155				HG02155_hap2_hprc_r2_v1.0.1	HG02155_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG02165				HG02165_hap2_hprc_r2_v1.0.1	HG02165_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG02178				HG02178_hap2_hprc_r2_v1.0.1	HG02178_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG02258				HG02258_mat_hprc_r2_v1.0.1	HG02258_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG02273				HG02273_hap2_hprc_r2_v1.0.1	HG02273_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG02280				HG02280_mat_hprc_r2_v1.0.1	HG02280_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG02293				HG02293_mat_hprc_r2_v1.0.1	HG02293_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG02300				HG02300_mat_hprc_r2_v1.0.1	HG02300_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG02391				HG02391_hap2_hprc_r2_v1.0.1	HG02391_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+HG02392				HG02392_hap2_hprc_r2_v1.0.1	HG02392_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+HG02451				HG02451_mat_hprc_r2_v1.0.1	HG02451_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG02514				HG02514_mat_hprc_r2_v1.0.1	HG02514_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG02523				HG02523_mat_hprc_r2_v1.0.1	HG02523_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG02583				HG02583_hap2_hprc_r2_v1.0.1	HG02583_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG02602				HG02602_mat_hprc_r2_v1.0.1	HG02602_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG02615				HG02615_mat_hprc_r2_v1.0.1	HG02615_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG02647				HG02647_mat_hprc_r2_v1.0.1	HG02647_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG02668				HG02668_mat_hprc_r2_v1.0.1	HG02668_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG02698				HG02698_mat_hprc_r2_v1.0.1	HG02698_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG02735				HG02735_mat_hprc_r2_v1.0.1	HG02735_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG02738				HG02738_mat_hprc_r2_v1.0.1	HG02738_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG02809				HG02809_mat_hprc_r2_v1.0.1	HG02809_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG02841				HG02841_mat_hprc_r2_v1.0.1	HG02841_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG02922				HG02922_hap2_hprc_r2_v1.0.1	HG02922_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG02965				HG02965_hap2_hprc_r2_v1.0.1	HG02965_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+HG02976				HG02976_hap2_hprc_r2_v1.0.1	HG02976_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG02984				HG02984_mat_hprc_r2_v1.0.1	HG02984_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG03017				HG03017_mat_hprc_r2_v1.0.1	HG03017_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG03041				HG03041_mat_hprc_r2_v1.0.1	HG03041_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG03050				HG03050_mat_hprc_r2_v1.0.1	HG03050_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG03130				HG03130_hap2_hprc_r2_v1.0.1	HG03130_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+HG03139				HG03139_hap2_hprc_r2_v1.0.1	HG03139_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+HG03195				HG03195_hap2_hprc_r2_v1.0.1	HG03195_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG03209				HG03209_hap2_hprc_r2_v1.0.1	HG03209_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+HG03225				HG03225_hap2_hprc_r2_v1.0.1	HG03225_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+HG03239				HG03239_mat_hprc_r2_v1.0.1	HG03239_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG03270				HG03270_hap2_hprc_r2_v1.0.1	HG03270_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG03369				HG03369_hap2_hprc_r2_v1.0.1	HG03369_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG03470				HG03470_hap2_hprc_r2_v1.0.1	HG03470_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG03471				HG03471_hap2_hprc_r2_v1.0.1	HG03471_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+HG03521				HG03521_hap2_hprc_r2_v1.0.1	HG03521_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+HG03583				HG03583_hap2_hprc_r2_v1.0.1	HG03583_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG03654				HG03654_mat_hprc_r2_v1.0.1	HG03654_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG03669				HG03669_mat_hprc_r2_v1.0.1	HG03669_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG03688				HG03688_mat_hprc_r2_v1.0.1	HG03688_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG03704				HG03704_mat_hprc_r2_v1.0.1	HG03704_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG03710				HG03710_mat_hprc_r2_v1.0.1	HG03710_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG03742				HG03742_hap2_hprc_r2_v1.0.1	HG03742_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+HG03784				HG03784_hap2_hprc_r2_v1.0.1	HG03784_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG03804				HG03804_mat_hprc_r2_v1.0.1	HG03804_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG03816				HG03816_mat_hprc_r2_v1.0.1	HG03816_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG03831				HG03831_mat_hprc_r2_v1.0.1	HG03831_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG03834				HG03834_mat_hprc_r2_v1.0.1	HG03834_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG03874				HG03874_hap2_hprc_r2_v1.0.1	HG03874_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+HG03927				HG03927_mat_hprc_r2_v1.0.1	HG03927_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG03942				HG03942_mat_hprc_r2_v1.0.1	HG03942_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG04115				HG04115_mat_hprc_r2_v1.0.1	HG04115_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG04157				HG04157_mat_hprc_r2_v1.0.1	HG04157_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG04160				HG04160_mat_hprc_r2_v1.0.1	HG04160_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG04184				HG04184_mat_hprc_r2_v1.0.1	HG04184_pat_hprc_r2_v1.0.1	female	HPRC_release2
+HG04187				HG04187_mat_hprc_r2_v1.0.1	HG04187_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG04199				HG04199_mat_hprc_r2_v1.0.1	HG04199_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG04204				HG04204_mat_hprc_r2_v1.0.1	HG04204_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG04228				HG04228_mat_hprc_r2_v1.0.1	HG04228_pat_hprc_r2_v1.0.1	male	HPRC_release2
+HG06807				HG06807_mat_v1	HG06807_pat_v1	male	HPRC_release2
+NA18505				NA18505_hap2_hprc_r2_v1.0.1	NA18505_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+NA18508				NA18508_hap2_hprc_r2_v1.0.1	NA18508_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+NA18522				NA18522_hap2_hprc_r2_v1.0.1	NA18522_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA18565				NA18565_hap2_hprc_r2_v1.0.1	NA18565_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+NA18570				NA18570_hap2_hprc_r2_v1.0.1	NA18570_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+NA18608				NA18608_hap2_hprc_r2_v1.0.1	NA18608_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA18620				NA18620_hap2_hprc_r2_v1.0.1	NA18620_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA18747				NA18747_hap2_hprc_r2_v1.0.1	NA18747_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA18879				NA18879_hap2_hprc_r2_v1.0.1	NA18879_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA18940				NA18940_hap2_hprc_r2_v1.0.1	NA18940_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA18943				NA18943_hap2_hprc_r2_v1.0.1	NA18943_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA18944				NA18944_hap2_hprc_r2_v1.0.1	NA18944_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA18945				NA18945_hap2_hprc_r2_v1.0.1	NA18945_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA18948				NA18948_hap2_hprc_r2_v1.0.1	NA18948_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA18952				NA18952_hap2_hprc_r2_v1.0.1	NA18952_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA18959				NA18959_hap2_hprc_r2_v1.0.1	NA18959_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA18960				NA18960_hap2_hprc_r2_v1.0.1	NA18960_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA18967				NA18967_hap2_hprc_r2_v1.0.1	NA18967_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA18970				NA18970_hap2_hprc_r2_v1.0.1	NA18970_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA18971				NA18971_hap2_hprc_r2_v1.0.1	NA18971_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA18974				NA18974_hap2_hprc_r2_v1.0.1	NA18974_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA18976				NA18976_hap2_hprc_r2_v1.0.1	NA18976_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+NA18982				NA18982_hap2_hprc_r2_v1.0.1	NA18982_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA18983				NA18983_hap2_hprc_r2_v1.0.1	NA18983_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA19036				NA19036_hap2_hprc_r2_v1.0.1	NA19036_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+NA19043				NA19043_hap2_hprc_r2_v1.0.1	NA19043_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA19087				NA19087_hap2_hprc_r2_v1.0.1	NA19087_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+NA19159				NA19159_hap2_hprc_r2_v1.0.1	NA19159_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+NA19185				NA19185_hap2_hprc_r2_v1.0.1	NA19185_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+NA19338				NA19338_hap2_hprc_r2_v1.0.1	NA19338_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+NA19391				NA19391_hap2_hprc_r2_v1.0.1	NA19391_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+NA19443				NA19443_hap2_hprc_r2_v1.0.1	NA19443_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA19468				NA19468_hap2_hprc_r2_v1.0.1	NA19468_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+NA19682				NA19682_hap2_hprc_r2_v1.0.1	NA19682_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA19700				NA19700_hap2_hprc_r2_v1.0.1	NA19700_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA19776				NA19776_hap2_hprc_r2_v1.0.1	NA19776_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+NA19835				NA19835_hap2_hprc_r2_v1.0.1	NA19835_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+NA19909				NA19909_hap2_hprc_r2_v1.0.1	NA19909_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+NA20282				NA20282_hap2_hprc_r2_v1.0.1	NA20282_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+NA20346				NA20346_hap2_hprc_r2_v1.0.1	NA20346_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA20503				NA20503_hap2_hprc_r2_v1.0.1	NA20503_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+NA20752				NA20752_hap2_hprc_r2_v1.0.1	NA20752_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA20762				NA20762_hap2_hprc_r2_v1.0.1	NA20762_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA20799				NA20799_hap2_hprc_r2_v1.0.1	NA20799_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+NA20805				NA20805_hap2_hprc_r2_v1.0.1	NA20805_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA20806				NA20806_hap2_hprc_r2_v1.0.1	NA20806_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA20809				NA20809_hap2_hprc_r2_v1.0.1	NA20809_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA20827				NA20827_hap2_hprc_r2_v1.0.1	NA20827_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA20850				NA20850_hap2_hprc_r2_v1.0.1	NA20850_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA20870				NA20870_hap2_hprc_r2_v1.0.1	NA20870_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA20905				NA20905_hap2_hprc_r2_v1.0.1	NA20905_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA21093				NA21093_hap2_hprc_r2_v1.0.1	NA21093_hap1_hprc_r2_v1.0.1	male	HPRC_release2
+NA21102				NA21102_hap2_hprc_r2_v1.0.1	NA21102_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+NA21106				NA21106_hap2_hprc_r2_v1.0.1	NA21106_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+NA21110				NA21110_hap2_hprc_r2_v1.0.1	NA21110_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+NA21144				NA21144_hap2_hprc_r2_v1.0.1	NA21144_hap1_hprc_r2_v1.0.1	female	HPRC_release2
+APR-F	210002_APR-F.hap2	210001_APR-F.hap1	MiddleEast			male	human579_assemblies
+APR-M	210004_APR-M.hap2	210003_APR-M.hap1	MiddleEast			female	human579_assemblies
+APR001	210006_APR001.hap2	210005_APR001.hap1	MiddleEast			female	human579_assemblies
+APR002	210008_APR002.hap2	210007_APR002.hap1	MiddleEast			female	human579_assemblies
+APR003	210010_APR003.hap2	210009_APR003.hap1	MiddleEast			male	human579_assemblies
+APR004	210012_APR004.hap2	210011_APR004.hap1	MiddleEast			female	human579_assemblies
+APR005	210014_APR005.hap2	210013_APR005.hap1	MiddleEast			male	human579_assemblies
+APR006	210016_APR006.hap2	210015_APR006.hap1	MiddleEast			male	human579_assemblies
+APR007	210018_APR007.hap2	210017_APR007.hap1	MiddleEast			female	human579_assemblies
+APR008	210020_APR008.hap2	210019_APR008.hap1	MiddleEast			female	human579_assemblies
+APR009	210022_APR009.hap2	210021_APR009.hap1	MiddleEast			female	human579_assemblies
+APR010	210024_APR010.hap2	210023_APR010.hap1	MiddleEast			male	human579_assemblies
+APR011	210026_APR011.hap2	210025_APR011.hap1	MiddleEast			female	human579_assemblies
+APR012	210028_APR012.hap2	210027_APR012.hap1	MiddleEast			male	human579_assemblies
+APR013	210030_APR013.hap2	210029_APR013.hap1	MiddleEast			male	human579_assemblies
+APR014	210032_APR014.hap2	210031_APR014.hap1	MiddleEast			female	human579_assemblies
+APR015	210034_APR015.hap2	210033_APR015.hap1	MiddleEast			female	human579_assemblies
+APR016	210036_APR016.hap2	210035_APR016.hap1	MiddleEast			female	human579_assemblies
+APR018	210038_APR018.hap2	210037_APR018.hap1	MiddleEast			female	human579_assemblies
+APR019	210040_APR019.hap2	210039_APR019.hap1	MiddleEast			female	human579_assemblies
+APR020	210042_APR020.hap2	210041_APR020.hap1	MiddleEast			female	human579_assemblies
+APR021	210044_APR021.hap2	210043_APR021.hap1	MiddleEast			female	human579_assemblies
+APR022	210046_APR022.hap2	210045_APR022.hap1	MiddleEast			female	human579_assemblies
+APR023	210048_APR023.hap2	210047_APR023.hap1	MiddleEast			male	human579_assemblies
+APR024	210050_APR024.hap2	210049_APR024.hap1	MiddleEast			male	human579_assemblies
+APR025	210052_APR025.hap2	210051_APR025.hap1	MiddleEast			male	human579_assemblies
+APR026	210054_APR026.hap2	210053_APR026.hap1	MiddleEast			male	human579_assemblies
+APR027	210056_APR027.hap2	210055_APR027.hap1	MiddleEast			female	human579_assemblies
+APR029	210058_APR029.hap2	210057_APR029.hap1	MiddleEast			female	human579_assemblies
+APR030	210060_APR030.hap2	210059_APR030.hap1	MiddleEast			female	human579_assemblies
+APR031	210062_APR031.hap2	210061_APR031.hap1	MiddleEast			female	human579_assemblies
+APR032	210064_APR032.hap2	210063_APR032.hap1	MiddleEast			female	human579_assemblies
+APR033	210066_APR033.hap2	210065_APR033.hap1	MiddleEast			male	human579_assemblies
+APR034	210068_APR034.hap2	210067_APR034.hap1	MiddleEast			female	human579_assemblies
+APR035	210070_APR035.hap2	210069_APR035.hap1	MiddleEast			female	human579_assemblies
+APR036	210072_APR036.hap2	210071_APR036.hap1	MiddleEast			male	human579_assemblies
+APR037	210074_APR037.hap2	210073_APR037.hap1	MiddleEast			female	human579_assemblies
+APR038	210076_APR038.hap2	210075_APR038.hap1	MiddleEast			male	human579_assemblies
+APR039	210078_APR039.hap2	210077_APR039.hap1	MiddleEast			male	human579_assemblies
+APR040	210080_APR040.hap2	210079_APR040.hap1	MiddleEast			female	human579_assemblies
+APR041	210082_APR041.hap2	210081_APR041.hap1	MiddleEast			male	human579_assemblies
+APR042	210084_APR042.hap2	210083_APR042.hap1	MiddleEast			male	human579_assemblies
+APR043	210086_APR043.hap2	210085_APR043.hap1	MiddleEast			female	human579_assemblies
+APR044	210088_APR044.hap2	210087_APR044.hap1	MiddleEast			female	human579_assemblies
+APR045	210090_APR045.hap2	210089_APR045.hap1	MiddleEast			male	human579_assemblies
+APR046	210092_APR046.hap2	210091_APR046.hap1	MiddleEast			male	human579_assemblies
+APR047	210094_APR047.hap2	210093_APR047.hap1	MiddleEast			female	human579_assemblies
+APR048	210096_APR048.hap2	210095_APR048.hap1	MiddleEast			female	human579_assemblies
+APR049	210098_APR049.hap2	210097_APR049.hap1	MiddleEast			male	human579_assemblies
+APR050	210100_APR050.hap2	210099_APR050.hap1	MiddleEast			male	human579_assemblies
+APR051	210102_APR051.hap2	210101_APR051.hap1	MiddleEast			male	human579_assemblies
+APR052	210104_APR052.hap2	210103_APR052.hap1	MiddleEast			female	human579_assemblies
+CN1	120002_CN1.mat	120001_CN1.pat	EastAsia			male	human579_assemblies
+I002C	120008_I002C.mat	120007_I002C.pat	SouthAsia			male	human579_assemblies
+KOREF1	120010_KOREF1.mat	120009_KOREF1.pat	EastAsia			male	human579_assemblies
+KSA001	120006_KSA001.mat	120005_KSA001.pat	MiddleEast			female	human579_assemblies
+YAO	120012_YAO.mat	120011_YAO.pat	EastAsia			male	human579_assemblies
