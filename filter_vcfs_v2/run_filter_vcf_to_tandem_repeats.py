@@ -7,7 +7,8 @@ import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
-DOCKER_IMAGE = "weisburd/str-analysis@sha256:53b7340cf0446dc1f5ce4652a23e412d30d7382fff21c509248d2fe4075a04b4"
+DOCKER_IMAGE = "weisburd/str-analysis@sha256:34d2d0da1df9a057773c8bd38c044b256482ff8b49962c7e0d80d5400d58837b"
+#DOCKER_IMAGE = "us-central1-docker.pkg.dev/cmg-analysis/docker-repo/str-analysis@sha256:16191eb046706d19f2cc031f06e12c4da65e3e5f2e6d2a606b1aa8331bc2acae"
 
 def parse_args(bp):
     parser = bp.get_config_arg_parser()
@@ -20,7 +21,7 @@ def parse_args(bp):
     parser.add_argument("--metadata-tsv", default="../dipcall_pipeline/all_assemblies.tsv")
     parser.add_argument("--input-dir", default="gs://str-truth-set-v2/dipcall_pipeline")
     parser.add_argument("--output-dir", default="gs://str-truth-set-v2/filter_vcf_v2")
-    parser.add_argument("--cpu", type=int, default=4)
+    parser.add_argument("--cpu", type=float, default=4)
     parser.add_argument("--memory", default="standard", choices=["lowmem", "standard", "highmem"])
     args = bp.parse_known_args()
 
@@ -40,13 +41,14 @@ def create_filter_step(bp, row, input_dir, output_dir,
         arg_suffix="filter-step",
         preemptible=use_preemptibles,
         cpu=cpu,
+        storage="10G",
         memory=memory,
+        localize_by=Localize.GSUTIL_COPY,
         output_dir=output_dir)
 
     hg38_fasta_input, _ = filter_step.inputs(
         "gs://str-truth-set/hg38/ref/hg38.fa",
-        "gs://str-truth-set/hg38/ref/hg38.fa.fai",
-        localize_by=Localize.GSUTIL_COPY)
+        "gs://str-truth-set/hg38/ref/hg38.fa.fai")
 
     dipcall_input_dir = input_dir
     if row.get("subdirectory") and not pd.isna(row.get("subdirectory")):
@@ -55,8 +57,7 @@ def create_filter_step(bp, row, input_dir, output_dir,
 
     dipcall_vcf_input, dipcall_high_confidence_regions_bed_input = filter_step.inputs(
         os.path.join(dipcall_input_dir, f"{row.sample_id}.dip.vcf.gz"),
-        os.path.join(dipcall_input_dir, f"{row.sample_id}.dip.bed.gz"),
-    )
+        os.path.join(dipcall_input_dir, f"{row.sample_id}.dip.bed.gz"))
 
     filter_step.command("set -exuo pipefail")
 
@@ -80,8 +81,10 @@ def create_filter_step(bp, row, input_dir, output_dir,
             --min-repeats 3 \
             --min-tandem-repeat-length 9 \
             --min-indel-size-to-run-trf 7 \
+            --trf-min-repeats-in-reference 2 \
+            --trf-min-purity 0.2 \
             --trf-executable-path /usr/bin/trf \
-            --trf-threads {2*cpu} \
+            --trf-threads {int(2*cpu)} \
             --write-detailed-bed \
             --write-tsv \
             --write-vcf \
@@ -112,9 +115,10 @@ def create_combine_step(bp, filter_steps, data_dir, cpu=2, memory="highmem"):
         f"combine (cpu={cpu}): {len(filter_steps):,d} catalogs",
         image=DOCKER_IMAGE,
         arg_suffix="combine-step",
-        localize_by=Localize.GSUTIL_COPY,
+        localize_by=Localize.COPY,
         cpu=cpu,
         memory=memory,
+        storage="20G",
         output_dir=data_dir)
 
     catalog_bed_files = []
@@ -129,8 +133,12 @@ def create_combine_step(bp, filter_steps, data_dir, cpu=2, memory="highmem"):
 
     combine_step.command(f"python3 -m pip uninstall -y str-analysis")
     combine_step.command(f"python3 -m pip install --upgrade --no-cache-dir git+https://github.com/broadinstitute/str-analysis")
+    hg38_fasta_input, _ = combine_step.inputs(
+        "gs://str-truth-set/hg38/ref/hg38.fa",
+        "gs://str-truth-set/hg38/ref/hg38.fa.fai")
 
     combine_step.command(f"python3 -u -m str_analysis.filter_vcf_to_tandem_repeats merge \
+            -R {hg38_fasta_input} \
             --write-detailed-bed \
             --verbose \
             --output-prefix {output_prefix} \
@@ -140,12 +148,11 @@ def create_combine_step(bp, filter_steps, data_dir, cpu=2, memory="highmem"):
 
     combine_step.output(f"{output_prefix}.tandem_repeats.bed.gz")
     combine_step.output(f"{output_prefix}.tandem_repeats.bed.gz.tbi")
-    combine_step.output(f"{output_prefix}.tandem_repeats.detailed.bed.gz")
-    combine_step.output(f"{output_prefix}.tandem_repeats.detailed.bed.gz.tbi")
+    combine_step.output(f"{output_prefix}.tandem_repeats.detailed.bed.gz", download_to_dir="results")
+    combine_step.output(f"{output_prefix}.tandem_repeats.detailed.bed.gz.tbi", download_to_dir="results")
     combine_step.output(f"{output_prefix}.log")
 
     return combine_step
-
 
 
 def main():
