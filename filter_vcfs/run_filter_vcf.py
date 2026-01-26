@@ -6,7 +6,7 @@ from step_pipeline import pipeline, Backend, Localize, Delocalize
 
 FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:037205c4f65fc2cf80b82cfb6196e3d951e6061c44fbf535afb551bb06751ee9"
 
-EXPANSION_HUNTER_LOCI_PER_RUN = 10_000 # if exclude_homopolymers else 100000
+EXPANSION_HUNTER_LOCI_PER_RUN = 1_000_000 # if exclude_homopolymers else 100_000
 GANGSTR_LOCI_PER_RUN = 1_000_000
 STRAGLR_LOCI_PER_RUN = 200_000
 
@@ -489,7 +489,6 @@ def create_combine_results_step(
                 combine_step.storage("20G")
             combine_step.command(
                 f"python3 -u -m str_analysis.merge_loci  "
-                    f"--add-source-field "
                     f"--output-format JSON "
                     f"--overlapping-loci-action keep-first "
                     "--write-merge-stats-tsv "

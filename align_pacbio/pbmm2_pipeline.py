@@ -8,7 +8,7 @@ from step_pipeline import pipeline, Backend, Localize, Delocalize, files_exist
 DOCKER_IMAGE = "weisburd/long-reads@sha256:cff73666379fdf0ab122ee66f614d13dfdff97f99297a563eda74a3f5d08266f"
 GATK_DOCKER_IMAGE = "weisburd/gatk:4.3.0.0"
 
-REFERENCE_FASTA = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
+REFERENCE_FASTA = "gs://str-truth-set/hg38/ref/hg38.fa"
 
 #TEMP_DIR = "gs://bw2-delete-after-60-days/long-reads"
 TEMP_DIR = "gs://bw2-delete-after-60-days/raw_data/pacbio"

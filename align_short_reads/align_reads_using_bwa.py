@@ -9,13 +9,13 @@ DOCKER_IMAGE = "weisburd/bwa@sha256:f0457b9fd9b6ad6ba1337cfad07fcc3bd6af241f5842
 
 REFERENCE_FASTA_PATH = {
     "37": "gs://gcp-public-data--broad-references/hg19/v0/Homo_sapiens_assembly19.fasta",
-    #"38": "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta",
+    #"38": "gs://str-truth-set/hg38/ref/hg38.fa",
     "38": "gs://str-truth-set/hg38/ref/hg38.fa",
     "t2t": "gs://gcp-public-data--broad-references/t2t/v2/chm13v2.0.maskedY.fasta",
 }
 REFERENCE_FASTA_FAI_PATH = {
     "37": "gs://gcp-public-data--broad-references/hg19/v0/Homo_sapiens_assembly19.fasta.fai",
-    #"38": "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta.fai",
+    #"38": "gs://str-truth-set/hg38/ref/hg38.fa.fai",
     "38": "gs://str-truth-set/hg38/ref/hg38.fa.fai",
     "t2t": "gs://gcp-public-data--broad-references/t2t/v2/chm13v2.0.maskedY.fasta.fai",
 }

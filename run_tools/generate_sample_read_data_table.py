@@ -15,8 +15,8 @@ from str_analysis.utils.file_utils import open_file
 
 FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:abd6c125b1ae84cedae88395739b573ef29d8452d8e2fc86a2ae9b769bb5cecd"
 
-REFERENCE_FASTA_PATH = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
-REFERENCE_FASTA_INDEX_PATH = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta.fai"
+REFERENCE_FASTA_PATH = "gs://str-truth-set/hg38/ref/hg38.fa"
+REFERENCE_FASTA_INDEX_PATH = "gs://str-truth-set/hg38/ref/hg38.fa.fai"
 
 if not os.getcwd().endswith("run_tools"):
 	os.chdir("run_tools/")

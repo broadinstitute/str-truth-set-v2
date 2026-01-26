@@ -25,8 +25,8 @@ from straglr_pipeline import create_straglr_steps
 
 
 SHORT_READ_TOOLS = {
+    "IlluminaEHv5",
     "EHv5",
-    "EHv5-dev",
     "GangSTR",
     "HipSTR",
     "constrain"
@@ -50,8 +50,8 @@ LONG_READ_DATA_TYPES = {
     "ONT",
 }
 
-REFERENCE_FASTA_PATH = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta"
-REFERENCE_FASTA_FAI_PATH = "gs://gcp-public-data--broad-references/hg38/v0/Homo_sapiens_assembly38.fasta.fai"
+REFERENCE_FASTA_PATH = "gs://str-truth-set/hg38/ref/hg38.fa"
+REFERENCE_FASTA_FAI_PATH = "gs://str-truth-set/hg38/ref/hg38.fa.fai"
 
 FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:752d871fff73b612c6e2ede9a3c778e756abafb407c022e1c887e8312efd000f"
 
@@ -128,10 +128,7 @@ def main():
             if args.custom_catalog_path:
                 repeat_catalog_paths = args.custom_catalog_path
             else:
-                if tool == "EHv5-dev":
-                    catalog_path_suffix = "EHv5"
-                else:
-                    catalog_path_suffix = tool
+                catalog_path_suffix = tool
 
                 repeat_catalog_paths = os.path.join(args.filter_vcf_dir, output_dir_suffix, row.sample_id,
                     f"{row.sample_id}.STRs{excluding_homopolymers_string}.positive_loci.{catalog_path_suffix}*")
@@ -139,7 +136,14 @@ def main():
             print(f"Listing catalogs {repeat_catalog_paths}")
             repeat_catalog_paths = [x.path for x in hfs.ls(repeat_catalog_paths)]
             output_dir = os.path.join(args.output_dir, output_dir_suffix, row.sample_id, row.sequencing_data_type, tool, f"{coverage}x_coverage")
-            if tool == "EHv5":
+            if tool == "EHv5" or tool == "IlluminaEHv5":
+                if tool == "EHv5":
+                    variant_catalog_file_paths = [p for p in repeat_catalog_paths if "001_of_001" in p]      # use the unsharded catalog
+                    use_illumina_expansion_hunter = False
+                elif tool == "IlluminaEHv5":
+                    variant_catalog_file_paths = [p for p in repeat_catalog_paths if "001_of_001" not in p]  # use the sharded catalog
+                    use_illumina_expansion_hunter = True
+
                 current_step = create_expansion_hunter_steps(
                     bp,
                     reference_fasta=REFERENCE_FASTA_PATH,
@@ -147,25 +151,13 @@ def main():
                     input_bam=row.read_data_path,
                     input_bai=row.read_data_index_path,
                     male_or_female=row.male_or_female,
-                    variant_catalog_file_paths=[p for p in repeat_catalog_paths if "001_of_001" not in p], # exclude the unsharded catalog
+                    variant_catalog_file_paths=variant_catalog_file_paths,
                     output_dir=output_dir,
                     output_prefix= f"{row.sample_id}.STRs.positive_loci.{tool}",
-                    use_streaming_mode=False,
+                    analysis_mode="optimized-streaming",
                     loci_to_exclude=None,
                     min_locus_coverage=None,
-                    use_illumina_expansion_hunter=False)
-            elif tool == "EHv5-dev":
-                current_step = create_expansion_hunter_dev_steps(
-                    bp,
-                    reference_fasta=REFERENCE_FASTA_PATH,
-                    reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
-                    input_bam=row.read_data_path,
-                    input_bai=row.read_data_index_path,
-                    male_or_female=row.male_or_female,
-                    variant_catalog_file_paths=[p for p in repeat_catalog_paths if "001_of_001" not in p], # exclude the unsharded catalog
-                    output_dir=output_dir,
-                    output_prefix= f"{row.sample_id}.STRs.positive_loci.{tool}",
-                    analysis_mode="fast-low-mem-streaming")
+                    use_illumina_expansion_hunter=use_illumina_expansion_hunter)
             elif tool == "GangSTR":
                 if row.sequencing_data_type == "ultima":
                     # for some reason GangSTR never completes on ultima data
@@ -273,10 +265,7 @@ def main():
 
 
 def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage, sample_id, output_dir, filter_vcf_dir, suffix, tool2="Truth", download_to_dir=None):
-    if tool == "EHv5":
-        tool = "ExpansionHunter"
-    elif tool == "EHv5-dev":
-        tool = "ExpansionHunter-dev"
+    tool = "ExpansionHunter"
 
     tool_results_path = None
     for output_spec in tool_results_step.get_outputs():
@@ -294,6 +283,7 @@ def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage, s
         cpu=2,
         memory="highmem",
         storage="20Gi",
+        localize_by=Localize.GSUTIL_COPY,
         output_dir=output_dir)
 
     add_columns_step.depends_on(tool_results_step)
@@ -338,10 +328,7 @@ EOF
 
 
 def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage, sample_id, output_dir, download_to_dir=None):
-    if tool == "EHv5":
-        tool = "ExpansionHunter"
-    elif tool == "EHv5-dev":
-        tool = "ExpansionHunter-dev"
+    tool = "ExpansionHunter"
 
 
     plot_tool_accuracy_step = bp.new_step(
