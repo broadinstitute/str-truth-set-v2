@@ -140,9 +140,11 @@ def main():
                 if tool == "EHv5":
                     variant_catalog_file_paths = [p for p in repeat_catalog_paths if "001_of_001" in p]      # use the unsharded catalog
                     use_illumina_expansion_hunter = False
+                    analysis_mode = "optimized-streaming"
                 elif tool == "IlluminaEHv5":
                     variant_catalog_file_paths = [p for p in repeat_catalog_paths if "001_of_001" not in p]  # use the sharded catalog
                     use_illumina_expansion_hunter = True
+                    analysis_mode = "streaming"
 
                 current_step = create_expansion_hunter_steps(
                     bp,
@@ -154,7 +156,7 @@ def main():
                     variant_catalog_file_paths=variant_catalog_file_paths,
                     output_dir=output_dir,
                     output_prefix= f"{row.sample_id}.STRs.positive_loci.{tool}",
-                    analysis_mode="optimized-streaming",
+                    analysis_mode=analysis_mode,
                     loci_to_exclude=None,
                     min_locus_coverage=None,
                     use_illumina_expansion_hunter=use_illumina_expansion_hunter)
@@ -265,8 +267,6 @@ def main():
 
 
 def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage, sample_id, output_dir, filter_vcf_dir, suffix, tool2="Truth", download_to_dir=None):
-    tool = "ExpansionHunter"
-
     tool_results_path = None
     for output_spec in tool_results_step.get_outputs():
         if output_spec.output_path.endswith(".variants.tsv.gz"):
@@ -328,9 +328,6 @@ EOF
 
 
 def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage, sample_id, output_dir, download_to_dir=None):
-    tool = "ExpansionHunter"
-
-
     plot_tool_accuracy_step = bp.new_step(
         name=f"Plot {sample_id} {tool} accuracy for {os.path.basename(output_dir)}",
         arg_suffix=f"plot-accuracy-step",
