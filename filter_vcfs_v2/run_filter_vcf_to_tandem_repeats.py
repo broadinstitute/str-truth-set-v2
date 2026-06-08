@@ -7,7 +7,7 @@ import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
-DOCKER_IMAGE = "weisburd/str-analysis@sha256:34d2d0da1df9a057773c8bd38c044b256482ff8b49962c7e0d80d5400d58837b"
+DOCKER_IMAGE = "weisburd/str-analysis@sha256:d3ceea6a51138ba1be52cc16cf62d3126ecc377d21153cd0def97f21af1161b3"
 #DOCKER_IMAGE = "us-central1-docker.pkg.dev/cmg-analysis/docker-repo/str-analysis@sha256:16191eb046706d19f2cc031f06e12c4da65e3e5f2e6d2a606b1aa8331bc2acae"
 
 def parse_args(bp):
@@ -16,6 +16,9 @@ def parse_args(bp):
     parser.add_argument("--skip-combine-steps", action="store_true")
     parser.add_argument("--use-nonpreemptibles", action="store_true")
     parser.add_argument("--allow-multiple-trf-results-per-locus", action="store_true")
+    parser.add_argument("--genotype-catalog", help="If specified, genotype each sample against this catalog BED instead "
+                        "of the combined catalog produced by the merge step. Lets you --skip-filter-step --skip-combine-step "
+                        "and genotype a subset of samples (via -s) against an existing catalog.")
     parser.add_argument("-n", type=int, help="Number of samples to process")
     parser.add_argument("-s", "--sample-id", action="append", help="Process only this sample. Can be specified more than once.")
     parser.add_argument("--metadata-tsv", default="../dipcall_pipeline/all_assemblies.tsv")
@@ -155,6 +158,56 @@ def create_combine_step(bp, filter_steps, data_dir, cpu=2, memory="highmem"):
     return combine_step
 
 
+def create_genotype_step(bp, row, combined_catalog_bed_path, filter_step, combine_step, output_dir,
+                         cpu=4, memory="standard", use_preemptibles=True):
+
+    genotype_step = bp.new_step(
+        f"genotype (cpu={cpu}): {row.sample_id}",
+        image=DOCKER_IMAGE,
+        arg_suffix="genotype-step",
+        preemptible=use_preemptibles,
+        cpu=cpu,
+        storage="10G",
+        memory=memory,
+        localize_by=Localize.GSUTIL_COPY,
+        output_dir=output_dir)
+
+    genotype_step.depends_on(filter_step)
+    if combine_step is not None:
+        genotype_step.depends_on(combine_step)
+
+    hg38_fasta_input, _ = genotype_step.inputs(
+        "gs://str-truth-set/hg38/ref/hg38.fa",
+        "gs://str-truth-set/hg38/ref/hg38.fa.fai")
+
+    catalog_bed_input = genotype_step.input(combined_catalog_bed_path)
+    high_confidence_regions_vcf_input, _ = genotype_step.inputs(
+        os.path.join(output_dir, f"{row.sample_id}.high_confidence_regions.vcf.gz"),
+        os.path.join(output_dir, f"{row.sample_id}.high_confidence_regions.vcf.gz.tbi"))
+
+    genotype_step.command("set -exuo pipefail")
+
+    genotype_step.command(f"python3 -m pip uninstall -y str-analysis")
+    genotype_step.command(f"python3 -m pip install --upgrade --no-cache-dir git+https://github.com/broadinstitute/str-analysis")
+
+    genotype_step.command(f"python3 -u -m str_analysis.filter_vcf_to_tandem_repeats genotype \
+            -R {hg38_fasta_input} \
+            --catalog-bed {catalog_bed_input} \
+            --write-json \
+            --add-motif-composition trf \
+            --trf-executable-path /usr/bin/trf \
+            --output-prefix {row.sample_id} \
+            {high_confidence_regions_vcf_input} |& tee {row.sample_id}.genotype.log")
+
+    genotype_step.command("ls -lhtr")
+
+    genotype_step.output(f"{row.sample_id}.tandem_repeat_genotypes.tsv.gz")
+    genotype_step.output(f"{row.sample_id}.tandem_repeat_genotypes.json.gz")
+    genotype_step.output(f"{row.sample_id}.genotype.log")
+
+    return genotype_step
+
+
 def main():
     bp = pipeline("filter_vcf_to_tandem_repeats", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline")
 
@@ -182,6 +235,15 @@ def main():
 
 
     combine_step = create_combine_step(bp, filter_steps, args.output_dir)
+
+    genotype_catalog_bed_path = args.genotype_catalog or combine_step.get_outputs()[0].output_path
+    for (_, row), filter_step in zip(df.iterrows(), filter_steps):
+        create_genotype_step(bp, row, genotype_catalog_bed_path, filter_step,
+                             None if args.genotype_catalog else combine_step,
+                             output_dir=os.path.join(args.output_dir, row.sample_id),
+                             cpu=args.cpu,
+                             memory=args.memory,
+                             use_preemptibles=not args.use_nonpreemptibles)
 
     bp.run()
 
