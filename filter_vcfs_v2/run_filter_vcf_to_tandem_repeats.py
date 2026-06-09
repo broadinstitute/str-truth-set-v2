@@ -168,7 +168,7 @@ def create_genotype_step(bp, row, combined_catalog_bed_path, filter_step, combin
         arg_suffix="genotype-step",
         preemptible=use_preemptibles,
         cpu=cpu,
-        storage="10G",
+        storage="30G",
         memory=memory,
         localize_by=Localize.GSUTIL_COPY,
         output_dir=output_dir)
