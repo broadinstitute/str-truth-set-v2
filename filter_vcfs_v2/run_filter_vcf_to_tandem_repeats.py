@@ -7,7 +7,7 @@ import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
-DOCKER_IMAGE = "weisburd/str-analysis@sha256:d3ceea6a51138ba1be52cc16cf62d3126ecc377d21153cd0def97f21af1161b3"
+DOCKER_IMAGE = "weisburd/str-analysis@sha256:477380c41637a26f5e19d3c4ff6bae60de0cf1db620ebba8549c44df48d586b8"
 #DOCKER_IMAGE = "us-central1-docker.pkg.dev/cmg-analysis/docker-repo/str-analysis@sha256:16191eb046706d19f2cc031f06e12c4da65e3e5f2e6d2a606b1aa8331bc2acae"
 
 def parse_args(bp):
@@ -19,6 +19,7 @@ def parse_args(bp):
     parser.add_argument("--genotype-catalog", help="If specified, genotype each sample against this catalog BED instead "
                         "of the combined catalog produced by the merge step. Lets you --skip-filter-step --skip-combine-step "
                         "and genotype a subset of samples (via -s) against an existing catalog.")
+    parser.add_argument("--show-progress-bar", action="store_true", help="Show a progress bar in the genotype step.")
     parser.add_argument("-n", type=int, help="Number of samples to process")
     parser.add_argument("-s", "--sample-id", action="append", help="Process only this sample. Can be specified more than once.")
     parser.add_argument("--metadata-tsv", default="../dipcall_pipeline/all_assemblies.tsv")
@@ -159,7 +160,7 @@ def create_combine_step(bp, filter_steps, data_dir, cpu=2, memory="highmem"):
 
 
 def create_genotype_step(bp, row, combined_catalog_bed_path, filter_step, combine_step, output_dir,
-                         cpu=4, memory="standard", use_preemptibles=True):
+                         cpu=4, memory="standard", use_preemptibles=True, show_progress_bar=False):
 
     genotype_step = bp.new_step(
         f"genotype (cpu={cpu}): {row.sample_id}",
@@ -196,6 +197,8 @@ def create_genotype_step(bp, row, combined_catalog_bed_path, filter_step, combin
             --write-json \
             --add-motif-composition trf \
             --trf-executable-path /usr/bin/trf \
+            --trf-threads {int(2*cpu)} \
+            {'--show-progress-bar' if show_progress_bar else ''} \
             --output-prefix {row.sample_id} \
             {high_confidence_regions_vcf_input} |& tee {row.sample_id}.genotype.log")
 
@@ -243,7 +246,8 @@ def main():
                              output_dir=os.path.join(args.output_dir, row.sample_id),
                              cpu=args.cpu,
                              memory=args.memory,
-                             use_preemptibles=not args.use_nonpreemptibles)
+                             use_preemptibles=not args.use_nonpreemptibles,
+                             show_progress_bar=args.show_progress_bar)
 
     bp.run()
 
