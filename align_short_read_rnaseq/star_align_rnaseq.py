@@ -15,20 +15,7 @@ There is no public hg38 BAM for SRR29437757 (SRA/ENA host raw FASTQ only), so it
 
 import os
 
-import hailtop.batch as hb
 from step_pipeline import pipeline, Backend, Localize, files_exist
-
-# step_pipeline calls Batch.run(wait=True, disable_progress_bar=False), which deadlocks under
-# hailtop's nest_asyncio event loop (the submit hangs in select() forever). A plain non-blocking
-# hailtop submit works, so force wait=False here: the batch is still submitted and runs in the
-# cloud; we just don't block the local process waiting for it to finish.
-_orig_batch_run = hb.Batch.run
-def _nonblocking_batch_run(self, *args, **kwargs):
-    kwargs["wait"] = False
-    kwargs["disable_progress_bar"] = True
-    kwargs["open"] = False
-    return _orig_batch_run(self, *args, **kwargs)
-hb.Batch.run = _nonblocking_batch_run
 
 # STAR 2.7.10b + samtools (see tgg-rnaseq-pipelines/star/docker/Dockerfile).
 DOCKER_IMAGE = "weisburd/star@sha256:6c0da40e33f50341e4dc3dc428df23b8036f25be488999665f004ac8b39007c9"

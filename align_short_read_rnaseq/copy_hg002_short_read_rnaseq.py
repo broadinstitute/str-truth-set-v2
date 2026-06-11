@@ -7,20 +7,7 @@ lymphoblastoid (LCL) bulk RNA-seq, Illumina NovaSeq X (BioProject PRJNA1124992).
 
 import os
 
-import hailtop.batch as hb
 from step_pipeline import pipeline, Backend, files_exist
-
-# step_pipeline calls Batch.run(wait=True, disable_progress_bar=False), which deadlocks under
-# hailtop's nest_asyncio event loop (the submit hangs in select() forever). A plain non-blocking
-# hailtop submit works, so force wait=False here: the batch is still submitted and runs in the
-# cloud; we just don't block the local process waiting for it to finish.
-_orig_batch_run = hb.Batch.run
-def _nonblocking_batch_run(self, *args, **kwargs):
-    kwargs["wait"] = False
-    kwargs["disable_progress_bar"] = True
-    kwargs["open"] = False
-    return _orig_batch_run(self, *args, **kwargs)
-hb.Batch.run = _nonblocking_batch_run
 
 # long-reads image (has wget + coreutils md5sum); same digest as the Iso-Seq alignment pipeline.
 DOCKER_IMAGE = "weisburd/long-reads@sha256:99cfef9b5ff7562ddfb57986a966aa7c63be42c93d6c49b5ca3444db23668ac2"
