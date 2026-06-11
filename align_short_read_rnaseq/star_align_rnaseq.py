@@ -122,7 +122,7 @@ def add_star_align_step(bp, index_dir, index_step):
         "--alignIntronMin 20 "
         "--alignIntronMax 1000000 "
         "--alignMatesGapMax 1000000 "
-        "--limitBAMsortRAM 50000000000"
+        "--limitBAMsortRAM 64000000000"
     )
     s.command(f"samtools index {SAMPLE_ID}.Aligned.sortedByCoord.out.bam")
     s.command(f"gzip {SAMPLE_ID}.SJ.out.tab {SAMPLE_ID}.ReadsPerGene.out.tab")
