@@ -45,7 +45,7 @@ LONG_READ_TOOLS = {
 # update its digest to pick up new str-truth-set scripts).
 
 # Motif size bins (min, max) used to stratify the accuracy plots.
-MOTIF_SIZE_BINS = [(1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (2, 6), (7, 24), (25, 1000)]
+MOTIF_SIZE_BINS = [(1, 1), (2, 2), (3, 6), (7, 24), (25, 1000)]
 
 SHORT_READ_DATA_TYPES = {
     "illumina",
