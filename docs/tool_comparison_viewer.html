@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<!--
+  STR Truth Set v2 — Tool Comparison Viewer (HG002)
+  =================================================
+  SCAFFOLD. The plots this page references are produced by
+  run_tools/run_genotyping_tools.py and written to:
+
+    gs://str-truth-set-v2/tool_results/all_repeats_excluding_homopolymers/HG002/
+        {data_type}/{tool_dir}/{coverage}x_coverage/{filename}
+
+  served publicly as https://storage.googleapis.com/str-truth-set-v2/...
+
+  Facets (per request): Motif Size, Genotype, Coverage, Purity, Tool.
+  Dropped vs the v1 viewer: "Q threshold" and "Pure / Interrupted".
+  Added: "Purity" (7 truth-allele FractionPureRepeats bins + all).
+
+  ⚠ Before publishing, lock buildImageUrl() to ONE real SVG filename. Two
+  schema points are still in flux on the inquistr-integration branch (see
+  docs/PLAN_tool_comparison_viewer.md): the EHv5→ExpansionHunter filename
+  token, and whether per-genotype (HET/HOM/MULTI) plots are emitted at all.
+-->
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>STR Truth Set v2 — Tool Comparison Viewer (HG002)</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.4.1/semantic.min.css" />
+    <style>
+        body { font-family: Lato, Helvetica, Arial, sans-serif; margin: 20px 30px; }
+        ul.facets { list-style: none; padding-left: 0; }
+        ul.facets > li { margin-bottom: 8px; }
+        .facet-label { display: inline-block; min-width: 150px; font-weight: bold; }
+        .navlinks { min-width: 70px; display: inline-block; }
+        .field { display: inline-block; margin-right: 14px; }
+        #plot-wrap { margin-top: 10px; }
+        #plot-status { color: #b00; padding: 8px 0; min-height: 1.2em; }
+        .legend { padding: 20px 0 0 20px; max-width: 850px; }
+    </style>
+</head>
+<body>
+    <h2>STR Truth Set v2 — Tool Comparison Viewer &nbsp;<small style="color:#888">HG002 · Accuracy by allele size</small></h2>
+
+    <div class="ui form">
+        <ul class="facets">
+            <li>
+                <span class="facet-label">Tool:</span>
+                <span class="navlinks">[<a class="prev-button" id="prev-tool" href="#">←</a> <a class="next-button" id="next-tool" href="#">→</a>]</span>
+                <span id="tool-radios"></span>
+                <span style="padding-left:15px">
+                    <span class="ui checkbox"><input type="checkbox" id="exclude-tool-no-call-loci" name="exclude-tool-no-call-loci"><label>Hide "No Call" loci</label></span>
+                </span>
+            </li>
+            <li>
+                <span class="facet-label">Sequencing data:</span>
+                <span class="navlinks">[<a class="prev-button" id="prev-datatype" href="#">←</a> <a class="next-button" id="next-datatype" href="#">→</a>]</span>
+                <span id="datatype-radios"></span>
+            </li>
+            <li>
+                <span class="facet-label">Coverage:</span>
+                <span class="navlinks">[<a class="prev-button" id="prev-coverage" href="#">←</a> <a class="next-button" id="next-coverage" href="#">→</a>]</span>
+                <span id="coverage-radios"></span>
+            </li>
+            <li>
+                <span class="facet-label">Motif size:</span>
+                <span class="navlinks">[<a class="prev-button" id="prev-motif" href="#">←</a> <a class="next-button" id="next-motif" href="#">→</a>]</span>
+                <span id="motif-radios"></span>
+            </li>
+            <li>
+                <span class="facet-label">Genotype:</span>
+                <span class="navlinks">[<a class="prev-button" id="prev-genotype" href="#">←</a> <a class="next-button" id="next-genotype" href="#">→</a>]</span>
+                <span id="genotype-radios"></span>
+            </li>
+            <li>
+                <span class="facet-label">Purity (truth allele):</span>
+                <span class="navlinks">[<a class="prev-button" id="prev-purity" href="#">←</a> <a class="next-button" id="next-purity" href="#">→</a>]</span>
+                <span id="purity-radios"></span>
+            </li>
+        </ul>
+    </div>
+
+    <div class="legend">
+        <b>x-axis:</b> true allele size — positive = expansion, negative = contraction.<br/>
+        <b>Gray</b>: tool produced no genotype. &nbsp;<b>Red</b>: called hom-ref (missed the variant). &nbsp;<b>Brown</b>: called het-ref.<br/>
+        <b>Teal</b>: called the wrong direction. &nbsp;<b>Blue</b>: underestimated. &nbsp;<b>Green</b>: exact match. &nbsp;<b>Orange</b>: overestimated.<br/>
+        <b>Purity</b> = fraction of the truth allele's bases inside a perfect repeat (<code>FractionPureRepeats</code>).
+    </div>
+
+    <div id="plot-wrap">
+        <div id="plot-status"></div>
+        <img id="plot" style="max-width:90%" alt="" />
+    </div>
+
+<script src="https://code.jquery.com/jquery-3.1.1.min.js"></script>
+<script>
+// ----------------------------------------------------------------------------
+// Config — the only place that knows the GCS layout. Update once, not in HTML.
+// ----------------------------------------------------------------------------
+const BASE_URL = "https://storage.googleapis.com/str-truth-set-v2/tool_results"
+               + "/all_repeats_excluding_homopolymers/HG002";
+
+// tool -> { label, dir (GCS path segment), fileToken (filename .{tool} segment),
+//           dataTypes: { dataType -> [ {cov, label} ] } }
+// Coverages are int(round(depth_of_coverage)) from the sample table (rows 44-56).
+// ⚠ fileToken for EHv5 is the plot-script tool name; verify against a real SVG.
+const TOOLS = {
+    EHv5:     { label: "ExpansionHunter", dir: "EHv5",     fileToken: "ExpansionHunter",
+                dataTypes: { illumina: [{cov:31,label:"31x"},{cov:20,label:"20x"},{cov:10,label:"10x"}],
+                             element:  [{cov:30,label:"30x"}],
+                             ultima:   [{cov:36,label:"36x"}],
+                             illumina_exome: [{cov:3,label:"exome"}] } },
+    // EHv5 in optimized-streaming mode + --improved-genotyping. Distinct dir + fileToken
+    // so its plots don't collide with plain EHv5. ⚠ fileToken TBD — must match whatever
+    // --tool string the pipeline passes to the plot script (see PLAN).
+    "EHv5-bw2-optimized": { label: "EHv5 (bw2-optimized)", dir: "EHv5-bw2-optimized", fileToken: "EHv5-bw2-optimized",
+                dataTypes: { illumina: [{cov:31,label:"31x"},{cov:20,label:"20x"},{cov:10,label:"10x"}],
+                             element:  [{cov:30,label:"30x"}],
+                             ultima:   [{cov:36,label:"36x"}],
+                             illumina_exome: [{cov:3,label:"exome"}] } },
+    GangSTR:  { label: "GangSTR", dir: "GangSTR", fileToken: "GangSTR",
+                dataTypes: { illumina: [{cov:31,label:"31x"},{cov:20,label:"20x"},{cov:10,label:"10x"}],
+                             element:  [{cov:30,label:"30x"}],
+                             illumina_exome: [{cov:3,label:"exome"}] } },   // GangSTR skips ultima
+    HipSTR:   { label: "HipSTR", dir: "HipSTR", fileToken: "HipSTR",
+                dataTypes: { illumina: [{cov:31,label:"31x"},{cov:20,label:"20x"},{cov:10,label:"10x"}],
+                             element:  [{cov:30,label:"30x"}],
+                             ultima:   [{cov:36,label:"36x"}],
+                             illumina_exome: [{cov:3,label:"exome"}] } },
+    TRGT:     { label: "TRGT", dir: "TRGT", fileToken: "TRGT",
+                dataTypes: { pacbio: [{cov:37,label:"37x"},{cov:30,label:"30x"},{cov:20,label:"20x"},{cov:8,label:"8x"}] } },
+    LongTR:   { label: "LongTR", dir: "LongTR", fileToken: "LongTR",
+                dataTypes: { pacbio: [{cov:37,label:"37x"},{cov:30,label:"30x"},{cov:20,label:"20x"},{cov:8,label:"8x"}],
+                             ONT:    [{cov:26,label:"26x"},{cov:20,label:"20x"},{cov:8,label:"8x"}] } },
+    inquiSTR: { label: "inquiSTR", dir: "inquiSTR", fileToken: "inquiSTR",
+                dataTypes: { pacbio: [{cov:37,label:"37x"},{cov:30,label:"30x"},{cov:20,label:"20x"},{cov:8,label:"8x"}],
+                             ONT:    [{cov:26,label:"26x"},{cov:20,label:"20x"},{cov:8,label:"8x"}] } },
+};
+
+const DATATYPE_LABELS = { illumina:"Illumina", illumina_exome:"Illumina exome",
+                          element:"Element", ultima:"Ultima", pacbio:"PacBio", ONT:"ONT" };
+
+// Motif-size bins == run_genotyping_tools.py MOTIF_SIZE_BINS.
+// token is the ".{...}_motifs" filename segment. ⚠ verify token form vs a real SVG.
+const MOTIFS = [
+    { label:"2bp",      token:"2to2_motifs" },
+    { label:"3bp",      token:"3to3_motifs" },
+    { label:"4bp",      token:"4to4_motifs" },
+    { label:"5bp",      token:"5to5_motifs" },
+    { label:"6bp",      token:"6to6_motifs" },
+    { label:"2-6bp",    token:"2to6_motifs" },
+    { label:"7-24bp",   token:"7to24_motifs" },
+    { label:"25-1000bp",token:"25to1000_motifs" },
+];
+
+// Genotype subset -> filename ".{...}" segment.
+// ⚠ Pipeline currently passes --genotype all, so only ".all_genotypes" SVGs exist.
+//   HET/HOM/MULTI require dropping that flag in the plot step (see PLAN).
+const GENOTYPES = [
+    { label:"all",          token:"all_genotypes" },
+    { label:"heterozygous", token:"HET" },
+    { label:"homozygous",   token:"HOM" },
+    { label:"multi-allelic",token:"MULTI" },
+];
+
+// Purity bins == plot_tool_accuracy_by_allele_size.py PURITY_BINS.
+// "all" => no ".purity_*" token; others => ".purity_{token}".
+const PURITIES = [
+    { label:"all",        token:null },
+    { label:"<0.65",      token:"below_0.65" },
+    { label:"0.65–0.70",  token:"0.65_to_0.70" },
+    { label:"0.70–0.75",  token:"0.70_to_0.75" },
+    { label:"0.75–0.80",  token:"0.75_to_0.80" },
+    { label:"0.80–0.85",  token:"0.80_to_0.85" },
+    { label:"0.85–0.90",  token:"0.85_to_0.90" },
+    { label:"0.90–0.95",  token:"0.90_to_0.95" },
+    { label:"0.95–1.00",  token:"0.95_to_1.00" },
+];
+
+// ----------------------------------------------------------------------------
+// Filename schema (from plot_tool_accuracy_by_allele_size.py output_image_filename):
+//   tool_accuracy_by_true_allele_size
+//     .{motif}_motifs .{genotype} [.{cov}x] [.purity_{p}] [.exclude_no_call_loci] .{tool} .svg
+// We always use the "both" pure/interrupt variant (no token) and Q0 (no token).
+// ----------------------------------------------------------------------------
+function buildImageUrl() {
+    const tool   = $('input[name="tool"]:checked').val();
+    const dtype  = $('input[name="datatype"]:checked').val();
+    const cov    = $('input[name="coverage"]:checked').val();
+    const motif  = $('input[name="motif"]:checked').val();
+    const geno   = $('input[name="genotype"]:checked').val();
+    const purity = $('input[name="purity"]:checked').val();   // "" for all
+    const hideNoCall = $('#exclude-tool-no-call-loci').is(':checked');
+
+    const t = TOOLS[tool];
+    let name = "tool_accuracy_by_true_allele_size";
+    name += "." + motif;
+    name += "." + geno;
+    name += "." + cov + "x";
+    if (purity) name += ".purity_" + purity;
+    if (hideNoCall) name += ".exclude_no_call_loci";
+    name += "." + t.fileToken;
+    name += ".svg";
+
+    return `${BASE_URL}/${dtype}/${t.dir}/${cov}x_coverage/${name}`;
+}
+
+// ----------------------------------------------------------------------------
+// Cascading radio rendering: Tool -> Sequencing data -> Coverage.
+// Motif / Genotype / Purity are static.
+// ----------------------------------------------------------------------------
+function radio(name, value, label, checked) {
+    return `<span class="field"><div class="ui radio checkbox">`
+         + `<input type="radio" name="${name}" value="${value}" ${checked?'checked':''}>`
+         + `<label>${label}</label></div></span>`;
+}
+function checkedVal(name) { return $(`input[name="${name}"]:checked`).val(); }
+
+function renderTools() {
+    $('#tool-radios').html(Object.keys(TOOLS).map((k,i)=>radio("tool",k,TOOLS[k].label,i===0)).join(''));
+}
+function renderDataTypes() {
+    const dts = Object.keys(TOOLS[checkedVal("tool")].dataTypes);
+    $('#datatype-radios').html(dts.map((d,i)=>radio("datatype",d,DATATYPE_LABELS[d]||d,i===0)).join(''));
+}
+function renderCoverages() {
+    const covs = TOOLS[checkedVal("tool")].dataTypes[checkedVal("datatype")];
+    $('#coverage-radios').html(covs.map((c,i)=>radio("coverage",c.cov,c.label,i===0)).join(''));
+}
+function renderStatic() {
+    $('#motif-radios').html(MOTIFS.map((m,i)=>radio("motif",m.token,m.label,i===5)).join(''));      // default 2-6bp
+    $('#genotype-radios').html(GENOTYPES.map((g,i)=>radio("genotype",g.token,g.label,i===0)).join(''));
+    $('#purity-radios').html(PURITIES.map((p,i)=>radio("purity",p.token||"",p.label,i===0)).join(''));
+}
+
+function refreshImage() {
+    const url = buildImageUrl();
+    $('#plot-status').text("");
+    $('#plot').attr('src', url).attr('alt', url);
+}
+
+// rebuild downstream radios when an upstream facet changes, then refresh image
+function onToolChange()     { renderDataTypes(); renderCoverages(); refreshImage(); }
+function onDataTypeChange() { renderCoverages(); refreshImage(); }
+
+$(function() {
+    renderTools(); renderStatic(); renderDataTypes(); renderCoverages();
+    $('.ui.checkbox').checkbox();
+
+    $(document).on('change', 'input[name="tool"]',     onToolChange);
+    $(document).on('change', 'input[name="datatype"]', onDataTypeChange);
+    $(document).on('change', 'input[name="coverage"],input[name="motif"],input[name="genotype"],input[name="purity"],#exclude-tool-no-call-loci', refreshImage);
+
+    // prev / next arrows step through the radios of the matching group
+    $(document).on('click', '.prev-button,.next-button', function(e) {
+        e.preventDefault();
+        const dir  = this.id.startsWith('next') ? 1 : -1;
+        const name = this.id.replace(/^(next|prev)-/, '')
+                            .replace('datatype','datatype').replace('motif','motif').replace('tool','tool');
+        const btns = [...document.querySelectorAll(`input[name="${name}"]`)];
+        if (!btns.length) return;
+        let cur = btns.findIndex(b=>b.checked);
+        btns[(cur + dir + btns.length) % btns.length].click();
+    });
+
+    $('#plot').on('error', function() {
+        $('#plot-status').text("No plot at this combination yet: " + this.alt);
+    });
+
+    refreshImage();
+});
+</script>
+</body>
+</html>
