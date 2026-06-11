@@ -1,7 +1,11 @@
 # Image for aligning PacBio Iso-Seq reads to hg38 with a current pbmm2.
-# Reuses the existing long-reads toolchain (gcloud, htslib/samtools 1.20, mosdepth) but
-# replaces the base pbmm2 1.10.0 with pbmm2 26.1.0 installed from bioconda via micromamba.
-FROM pacificbiosciences/pbmm2:1.10.0
+# Reuses the existing long-reads toolchain (gcloud, htslib/samtools 1.20, mosdepth) and installs
+# pbmm2 26.1.0 from bioconda via micromamba. The original long-reads image was based on
+# pacificbiosciences/pbmm2:1.10.0, but that Docker Hub repository is no longer pullable, so this
+# builds on ubuntu and gets pbmm2 entirely from micromamba (which replaced the base pbmm2 anyway).
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt update && apt-get install --no-install-recommends -y \
     ca-certificates \
