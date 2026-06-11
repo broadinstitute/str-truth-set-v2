@@ -40,10 +40,9 @@ LONG_READ_TOOLS = {
     "inquiSTR",
 }
 
-# Branches of broadinstitute/str-truth-set and broadinstitute/str-analysis that contain the inquiSTR integration and
-# the purity / motif-size plotting changes. The add-columns and plot steps refresh /str-truth-set from this branch at
-# runtime until the FILTER_VCFS_DOCKER_IMAGE is rebuilt to include these changes.
-STR_TRUTH_SET_BRANCH = "inquistr-integration"
+# The add-columns and plot steps refresh /str-truth-set from this branch at runtime until the
+# FILTER_VCFS_DOCKER_IMAGE is rebuilt to include the inquiSTR integration and purity / motif-size plotting changes.
+STR_TRUTH_SET_BRANCH = "main"
 STR_TRUTH_SET_REFRESH_CMD = (
     f"rm -rf /str-truth-set && git clone --quiet --depth 1 --branch {STR_TRUTH_SET_BRANCH} "
     f"https://github.com/broadinstitute/str-truth-set /str-truth-set")
