@@ -52,11 +52,20 @@ SHORT_READ_DATA_TYPES = {
     "illumina_exome",
     "element",
     "ultima",
+    "illumina_rnaseq",
 }
 
 LONG_READ_DATA_TYPES = {
     "pacbio",
     "ONT",
+    "pacbio_isoseq",
+}
+
+# RNA-seq data types are labeled by total bases sequenced (Gbp) rather than genome coverage, since
+# genome-wide depth is meaningless for transcript data (reads only cover expressed loci).
+RNASEQ_DATA_TYPES = {
+    "illumina_rnaseq",
+    "pacbio_isoseq",
 }
 
 REFERENCE_FASTA_PATH = "gs://str-truth-set/hg38/ref/hg38.fa"
@@ -114,6 +123,9 @@ def main():
                 continue
 
         coverage = int(round(float(row.depth_of_coverage)))
+        # RNA-seq rows carry total bases sequenced (Gbp) rather than genome coverage, so label them
+        # "{N}G" (e.g. "24G") instead of "{N}x" in the output dir, plots, and the Coverage column.
+        coverage_label = f"{coverage}G" if row.sequencing_data_type in RNASEQ_DATA_TYPES else f"{coverage}x"
         for tool in args.tool:
             if tool in SHORT_READ_TOOLS and row.sequencing_data_type not in SHORT_READ_DATA_TYPES:
                 print(f"WARNING: Skipping {tool} for {row.sample_id} {row.sequencing_data_type} since {tool} "
@@ -148,7 +160,7 @@ def main():
 
             print(f"Listing catalogs {repeat_catalog_paths}")
             repeat_catalog_paths = [x.path for x in hfs.ls(repeat_catalog_paths)]
-            output_dir = os.path.join(args.output_dir, row.sample_id, row.sequencing_data_type, tool, f"{coverage}x_coverage")
+            output_dir = os.path.join(args.output_dir, row.sample_id, row.sequencing_data_type, tool, f"{coverage_label}_coverage")
             if tool in ("EHv5", "EHv5-bw2-optimized", "IlluminaEHv5"):
                 # Three ExpansionHunter v5 variants, all genotyped with create_expansion_hunter_steps:
                 #   EHv5               - bw2 fork, --analysis-mode low-mem-streaming
@@ -229,11 +241,6 @@ def main():
                     cpu=1,
                 )
             elif tool == "TRGT":
-                if row.sequencing_data_type != "pacbio":
-                    print(f"WARNING: Skipping {tool} for {row.sample_id} {row.sequencing_data_type} since {tool} "
-                          f"doesn't support {row.sequencing_data_type} data")
-                    continue
-
                 current_step = create_trgt_step(
                     bp,
                     reference_fasta=REFERENCE_FASTA_PATH,
@@ -293,7 +300,7 @@ def main():
                 bp,
                 current_step,
                 tool=tool,
-                coverage=coverage,
+                coverage_label=coverage_label,
                 sample_id=row.sample_id,
                 output_dir=output_dir,
                 truth_set_genotypes_path=os.path.join(
@@ -305,13 +312,13 @@ def main():
                 bp,
                 add_columns_step,
                 tool=tool,
-                coverage=coverage,
+                coverage_label=coverage_label,
                 sample_id=row.sample_id,
                 output_dir=output_dir)
     bp.run()
 
 
-def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage, sample_id, output_dir, truth_set_genotypes_path, tool2="Truth", download_to_dir=None):
+def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage_label, sample_id, output_dir, truth_set_genotypes_path, tool2="Truth", download_to_dir=None):
     tool_results_path = None
     for output_spec in tool_results_step.get_outputs():
         if output_spec.output_path.endswith(".variants.tsv.gz"):
@@ -344,7 +351,7 @@ def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage, s
 import pandas as pd
 print("Adding columns to {local_tool_results_input}")
 df = pd.read_table("{local_tool_results_input}", dtype=str)
-df.loc[:, "Coverage"] = "{coverage}x"
+df.loc[:, "Coverage"] = "{coverage_label}"
 print(f"Writing {{len(df):,d}} rows to {local_tool_results_input}")
 df.to_csv("{local_tool_results_input}", sep="\\t", index=False, header=True)
 EOF
@@ -379,7 +386,7 @@ EOF
     return add_columns_step
 
 
-def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage, sample_id, output_dir):
+def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage_label, sample_id, output_dir):
     plot_tool_accuracy_step = bp.new_step(
         name=f"Plot {sample_id} {tool} accuracy for {os.path.basename(output_dir)}",
         arg_suffix=f"plot-accuracy-step",
@@ -400,7 +407,7 @@ def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage, sam
             f"python3 -u /str-truth-set/figures_and_tables/plot_tool_accuracy_by_allele_size.py "
             "--verbose "
             f"--tool {tool} "
-            f"--coverage {coverage}x "
+            f"--coverage {coverage_label} "
             "--q-threshold 0 "
             f"--min-motif-size {min_motif_size} "
             f"--max-motif-size {max_motif_size} "
@@ -437,7 +444,7 @@ def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage, sam
 
     #plot_tool_accuracy_step.command(f"python3 -u /str-truth-set/figures_and_tables/plot_tool_accuracy_vs_Q.py "
     #                                "--verbose "
-    #                                f"--coverage {coverage}x "
+    #                                f"--coverage {coverage_label} "
     #                                f"--min-motif-size {min_motif_size} "
     #                                f"--max-motif-size {max_motif_size} "
     #                                "--genotype all "
