@@ -15,7 +15,7 @@ from step_pipeline import pipeline, Backend, Localize, Delocalize
 import sys
 
 sys.path.append("../str-truth-set/tool_comparison/hail_batch_pipelines")
-from expansion_hunter_pipeline import create_expansion_hunter_steps, create_expansion_hunter_dev_steps
+from expansion_hunter_pipeline import create_expansion_hunter_steps
 from gangstr_pipeline import create_gangstr_steps
 from hipstr_pipeline import create_hipstr_steps
 from constrain_pipeline import create_constrain_step

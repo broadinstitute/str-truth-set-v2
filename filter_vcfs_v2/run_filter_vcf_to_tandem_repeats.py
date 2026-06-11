@@ -228,7 +228,8 @@ def main():
         filter_steps.append(filter_step)
 
 
-    combine_step = create_combine_step(bp, filter_steps, args.output_dir)
+    # Skip the combine step entirely when genotyping against a custom catalog, since its merged output is unused.
+    combine_step = None if args.genotype_catalog else create_combine_step(bp, filter_steps, args.output_dir)
 
     genotype_catalog_bed_path = args.genotype_catalog or combine_step.get_outputs()[0].output_path
     for (_, row), filter_step in zip(df.iterrows(), filter_steps):

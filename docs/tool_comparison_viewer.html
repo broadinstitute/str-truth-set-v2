@@ -89,6 +89,7 @@
     </div>
 
 <script src="https://code.jquery.com/jquery-3.1.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.4.1/semantic.min.js"></script>
 <script>
 // ----------------------------------------------------------------------------
 // Config — the only place that knows the GCS layout. Update once, not in HTML.
@@ -224,7 +225,7 @@ function renderCoverages() {
     $('#coverage-radios').html(covs.map((c,i)=>radio("coverage",c.cov,c.label,i===0)).join(''));
 }
 function renderStatic() {
-    $('#motif-radios').html(MOTIFS.map((m,i)=>radio("motif",m.token,m.label,i===5)).join(''));      // default 2-6bp
+    $('#motif-radios').html(MOTIFS.map((m,i)=>radio("motif",m.token,m.label,i===6)).join(''));      // default 2-6bp
     $('#genotype-radios').html(GENOTYPES.map((g,i)=>radio("genotype",g.token,g.label,i===0)).join(''));
     $('#purity-radios').html(PURITIES.map((p,i)=>radio("purity",p.token||"",p.label,i===0)).join(''));
 }

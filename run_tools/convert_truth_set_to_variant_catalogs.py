@@ -124,8 +124,8 @@ def write_gangstr_hipstr_or_longtr_repeat_specs(locus_set, output_path_prefix, t
     for batch_i, current_repeat_specs in enumerate(batches):
         with open(f"{output_path_prefix}.{batch_i+1:03d}_of_{len(batches):03d}.bed", "wt") as f:
             for chrom, start_0based, end_1based, motif in current_repeat_specs:
-                if (end_1based - start_0based) / len(motif) <= 1:
-                    # only 1 repeat in the reference -> HipSTR/LongTR error out on these
+                if tool in ("hipstr", "longtr") and (end_1based - start_0based) / len(motif) <= 1:
+                    # only 1 repeat in the reference -> HipSTR/LongTR error out on these (GangSTR tolerates them)
                     continue
                 if tool == "gangstr":
                     output_fields = [chrom, start_0based + 1, end_1based, len(motif), motif]
