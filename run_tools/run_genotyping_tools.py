@@ -155,12 +155,11 @@ def main():
                 #   EHv5-bw2-optimized - bw2 fork, --analysis-mode optimized-streaming --improved-genotyping
                 #   IlluminaEHv5       - original Illumina build, --analysis-mode streaming
                 use_illumina_expansion_hunter = (tool == "IlluminaEHv5")
-                improved_genotyping = False
                 if tool == "EHv5":
                     analysis_mode = "low-mem-streaming"
                 elif tool == "EHv5-bw2-optimized":
+                    # optimized-streaming implies --improved-genotyping inside create_expansion_hunter_steps
                     analysis_mode = "optimized-streaming"
-                    improved_genotyping = True
                 else:  # IlluminaEHv5
                     analysis_mode = "streaming"
 
@@ -186,7 +185,6 @@ def main():
                     output_dir=output_dir,
                     output_prefix= f"{row.sample_id}.{tool}",
                     analysis_mode=analysis_mode,
-                    improved_genotyping=improved_genotyping,
                     loci_to_exclude=None,
                     min_locus_coverage=None,
                     use_illumina_expansion_hunter=use_illumina_expansion_hunter)

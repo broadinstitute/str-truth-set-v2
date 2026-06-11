@@ -9,7 +9,7 @@ parser = argparse.ArgumentParser(description="Perform an outer-join on multiple 
 parser.add_argument("-o", "--output-tsv", help="Combined tsv file path")
 parser.add_argument("-n", type=int, help="Number of tables to process")
 parser.add_argument("--discard-impure-genotypes", action="store_true", help="Discard genotypes that are not pure repeats")
-parser.add_argument("--output-stats-tsv", action="store_true", help="If specified, will output a table with stats.")
+parser.add_argument("--output-stats-tsv", help="If specified, output a table with per-sample join stats to this path.")
 parser.add_argument("input_tsvs", nargs="+", help="Input tsv files")
 args = parser.parse_args()
 
@@ -107,9 +107,6 @@ if not args.output_tsv:
 
 if not args.output_tsv.endswith(".gz"):
     args.output_tsv += ".gz"
-
-if args.output_stats_tsv:
-    args.output_stats_tsv = f"combined.{len(args.input_tsvs)}_bed_files.stats.tsv"
 
 
 combined_df = None

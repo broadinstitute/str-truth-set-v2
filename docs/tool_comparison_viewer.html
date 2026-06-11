@@ -14,10 +14,9 @@
   Dropped vs the v1 viewer: "Q threshold" and "Pure / Interrupted".
   Added: "Purity" (7 truth-allele FractionPureRepeats bins + all).
 
-  ⚠ The pipeline currently runs the plot step with --genotype all, so only
-  the ".all_genotypes" SVGs exist; the HET/HOM/MULTI genotype radios will
-  404 until that flag is dropped in the plot step (see
-  docs/PLAN_tool_comparison_viewer.md).
+  The plot step no longer pins --genotype, so the pipeline generates the
+  ".all_genotypes", ".HET", ".HOM", and ".MULTI" SVGs and all four Genotype
+  radios resolve (see docs/PLAN_tool_comparison_viewer.md).
 -->
 <html lang="en">
 <head>
