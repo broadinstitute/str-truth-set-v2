@@ -278,7 +278,12 @@ def main():
                     input_bam=row.read_data_path,
                     input_bai=row.read_data_index_path,
                     male_or_female=row.male_or_female,
-                    expansion_hunter_catalog_paths=[p for p in repeat_catalog_paths if "001_of_001" in p],
+                    # vamos needs the single unsharded EHv5 catalog; pick it out of the filter_vcf catalogs by the
+                    # "001_of_001" shard name, but pass a --custom-catalog-path through unfiltered (its filename
+                    # won't contain that token, so filtering would leave an empty list and crash the vamos step).
+                    expansion_hunter_catalog_paths=(
+                        repeat_catalog_paths if args.custom_catalog_path
+                        else [p for p in repeat_catalog_paths if "001_of_001" in p]),
                     output_dir=output_dir,
                     output_prefix=f"{row.sample_id}.{tool}")
             else:
@@ -402,7 +407,6 @@ def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage, sam
             "--q-threshold 0 "
             f"--min-motif-size {min_motif_size} "
             f"--max-motif-size {max_motif_size} "
-            "--genotype all "
             "--image-type svg "
             "--show-title "
             f"{local_alleles_tsv} ")

@@ -49,7 +49,8 @@ def generate_set_of_positive_loci(df):
     """Return the set of (chrom, start_0based, end_1based, motif) tuples for variant loci.
 
     A locus is positive (variant) when its genotyped short or long allele repeat count differs
-    from the reference repeat count. Rows whose repeat counts can't be parsed as numbers are skipped.
+    from the reference repeat count. Rows whose repeat counts can't be parsed as numbers, or whose
+    genotype is missing (no-call: empty repeat-count cells, read by pandas as NaN), are skipped.
 
     Args:
         df (pandas.DataFrame): rows from a *.tandem_repeat_genotypes.tsv(.gz) table.
@@ -66,6 +67,9 @@ def generate_set_of_positive_loci(df):
             long = float(row.NumRepeatsLongAllele)
         except (ValueError, TypeError):
             skipped += 1
+            continue
+        if pd.isna(ref) or pd.isna(short) or pd.isna(long):
+            skipped += 1  # no-call / missing genotype (empty cells parse to NaN, which float() doesn't reject)
             continue
         if short == ref and long == ref:
             continue  # hom-ref -> not a positive locus

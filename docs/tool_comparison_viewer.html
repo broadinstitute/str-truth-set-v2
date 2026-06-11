@@ -5,8 +5,8 @@
   SCAFFOLD. The plots this page references are produced by
   run_tools/run_genotyping_tools.py and written to:
 
-    gs://str-truth-set-v2/tool_results/all_repeats_excluding_homopolymers/HG002/
-        {data_type}/{tool_dir}/{coverage}x_coverage/{filename}
+    gs://str-truth-set-v2/tool_results/HG002/
+        {data_type}/{tool}/{coverage}x_coverage/{filename}
 
   served publicly as https://storage.googleapis.com/str-truth-set-v2/...
 
@@ -14,10 +14,10 @@
   Dropped vs the v1 viewer: "Q threshold" and "Pure / Interrupted".
   Added: "Purity" (7 truth-allele FractionPureRepeats bins + all).
 
-  ⚠ Before publishing, lock buildImageUrl() to ONE real SVG filename. Two
-  schema points are still in flux on the inquistr-integration branch (see
-  docs/PLAN_tool_comparison_viewer.md): the EHv5→ExpansionHunter filename
-  token, and whether per-genotype (HET/HOM/MULTI) plots are emitted at all.
+  ⚠ The pipeline currently runs the plot step with --genotype all, so only
+  the ".all_genotypes" SVGs exist; the HET/HOM/MULTI genotype radios will
+  404 until that flag is dropped in the plot step (see
+  docs/PLAN_tool_comparison_viewer.md).
 -->
 <html lang="en">
 <head>
@@ -95,14 +95,14 @@
 // Config — the only place that knows the GCS layout. Update once, not in HTML.
 // ----------------------------------------------------------------------------
 const BASE_URL = "https://storage.googleapis.com/str-truth-set-v2/tool_results"
-               + "/all_repeats_excluding_homopolymers/HG002";
+               + "/HG002";
 
 // tool -> { label, dir (GCS path segment), fileToken (filename .{tool} segment),
 //           dataTypes: { dataType -> [ {cov, label} ] } }
 // Coverages are int(round(depth_of_coverage)) from the sample table (rows 44-56).
-// ⚠ fileToken for EHv5 is the plot-script tool name; verify against a real SVG.
+// fileToken is the --tool string the pipeline passes to the plot script (== the tool key).
 const TOOLS = {
-    EHv5:     { label: "ExpansionHunter", dir: "EHv5",     fileToken: "ExpansionHunter",
+    EHv5:     { label: "ExpansionHunter", dir: "EHv5",     fileToken: "EHv5",
                 dataTypes: { illumina: [{cov:31,label:"31x"},{cov:20,label:"20x"},{cov:10,label:"10x"}],
                              element:  [{cov:30,label:"30x"}],
                              ultima:   [{cov:36,label:"36x"}],
@@ -138,21 +138,21 @@ const DATATYPE_LABELS = { illumina:"Illumina", illumina_exome:"Illumina exome",
                           element:"Element", ultima:"Ultima", pacbio:"PacBio", ONT:"ONT" };
 
 // Motif-size bins == run_genotyping_tools.py MOTIF_SIZE_BINS.
-// token is the ".{...}_motifs" filename segment. ⚠ verify token form vs a real SVG.
+// token is the ".{n}to{m}bp_motifs" filename segment from the plot script.
 const MOTIFS = [
-    { label:"2bp",      token:"2to2_motifs" },
-    { label:"3bp",      token:"3to3_motifs" },
-    { label:"4bp",      token:"4to4_motifs" },
-    { label:"5bp",      token:"5to5_motifs" },
-    { label:"6bp",      token:"6to6_motifs" },
-    { label:"2-6bp",    token:"2to6_motifs" },
-    { label:"7-24bp",   token:"7to24_motifs" },
-    { label:"25-1000bp",token:"25to1000_motifs" },
+    { label:"1bp",      token:"1to1bp_motifs" },
+    { label:"2bp",      token:"2to2bp_motifs" },
+    { label:"3bp",      token:"3to3bp_motifs" },
+    { label:"4bp",      token:"4to4bp_motifs" },
+    { label:"5bp",      token:"5to5bp_motifs" },
+    { label:"6bp",      token:"6to6bp_motifs" },
+    { label:"2-6bp",    token:"2to6bp_motifs" },
+    { label:"7-24bp",   token:"7to24bp_motifs" },
+    { label:"25-1000bp",token:"25to1000bp_motifs" },
 ];
 
 // Genotype subset -> filename ".{...}" segment.
-// ⚠ Pipeline currently passes --genotype all, so only ".all_genotypes" SVGs exist.
-//   HET/HOM/MULTI require dropping that flag in the plot step (see PLAN).
+// The plot step no longer pins --genotype, so the pipeline generates the .all_genotypes, .HET, .HOM, and .MULTI SVGs.
 const GENOTYPES = [
     { label:"all",          token:"all_genotypes" },
     { label:"heterozygous", token:"HET" },
