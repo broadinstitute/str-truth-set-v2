@@ -1,4 +1,4 @@
-FROM python:3.9-slim-bullseye
+FROM python:3.10-slim-bullseye
 
 RUN apt update && apt-get install --no-install-recommends -y \
     ca-certificates \
@@ -58,8 +58,8 @@ RUN cp /bin/zcat /bin/gzcat
 # install str-analysis
 RUN python3 -m pip install --no-cache-dir --upgrade cmake pip
 
-ADD "https://www.random.org/cgi-bin/randbyte?nbytes=10&format=h" skipcache
-RUN python3 -m pip install --no-cache-dir git+https://github.com/broadinstitute/str-analysis
+# pinned to a specific str-analysis commit for reproducible builds (previously tracked main HEAD via a randbyte cache-buster)
+RUN python3 -m pip install --no-cache-dir git+https://github.com/broadinstitute/str-analysis@29d7e90969e83c9405de4bcb509f88932ed7f570
 
 
 # install str-truth-set repo
