@@ -13,7 +13,6 @@ DOCKER_IMAGE = "weisburd/str-analysis@sha256:eeb484a0b4fcad3cfe63aa9508784f858a7
 def parse_args(bp):
     parser = bp.get_config_arg_parser()
     parser.add_argument("--exclude-homopolymers", action="store_true")
-    parser.add_argument("--skip-combine-steps", action="store_true")
     parser.add_argument("--use-nonpreemptibles", action="store_true")
     parser.add_argument("--allow-multiple-trf-results-per-locus", action="store_true")
     parser.add_argument("--genotype-catalog", help="If specified, genotype each sample against this catalog BED instead "
