@@ -21,7 +21,6 @@ from hipstr_pipeline import create_hipstr_steps
 from constrain_pipeline import create_constrain_step
 from trgt_pipeline import create_trgt_step
 from longtr_pipeline import create_longtr_steps
-from straglr_pipeline import create_straglr_steps
 from inquistr_pipeline import create_inquistr_steps
 from vamos_pipeline import create_vamos_step
 
@@ -38,17 +37,12 @@ SHORT_READ_TOOLS = {
 LONG_READ_TOOLS = {
     "TRGT",
     "LongTR",
-    "straglr",
     "inquiSTR",
     "vamos",
 }
 
-# The add-columns and plot steps refresh /str-truth-set from this branch at runtime until the
-# FILTER_VCFS_DOCKER_IMAGE is rebuilt to include the inquiSTR integration and purity / motif-size plotting changes.
-STR_TRUTH_SET_BRANCH = "main"
-STR_TRUTH_SET_REFRESH_CMD = (
-    f"rm -rf /str-truth-set && git clone --quiet --depth 1 --branch {STR_TRUTH_SET_BRANCH} "
-    f"https://github.com/broadinstitute/str-truth-set /str-truth-set")
+# The add-columns and plot steps use the /str-truth-set baked into FILTER_VCFS_DOCKER_IMAGE (rebuild that image and
+# update its digest to pick up new str-truth-set scripts).
 
 # Motif size bins (min, max) used to stratify the accuracy plots.
 MOTIF_SIZE_BINS = [(1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (2, 6), (7, 24), (25, 1000)]
@@ -68,7 +62,7 @@ LONG_READ_DATA_TYPES = {
 REFERENCE_FASTA_PATH = "gs://str-truth-set/hg38/ref/hg38.fa"
 REFERENCE_FASTA_FAI_PATH = "gs://str-truth-set/hg38/ref/hg38.fa.fai"
 
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:752d871fff73b612c6e2ede9a3c778e756abafb407c022e1c887e8312efd000f"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:ceea479fcadac72813986411be2fc50549a4e80e3a47f97d431e3a68330956e4"
 
 DEFAULT_OUTPUT_DIR = "gs://str-truth-set-v2/tool_results"
 
@@ -91,7 +85,6 @@ def main():
                              "(it carries the per-allele repeat purity used by the purity-stratified plots)")
     parser.add_argument("--custom-catalog-path", help="If specified, use this catalog instead of the filter_vcf catalogs")
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
-    parser.add_argument("--download-results", action="store_true", help="Download the resulting images to the local ../results directory")
     args = bp.parse_known_args()
 
     if not args.tool:
@@ -173,10 +166,14 @@ def main():
 
                 if args.custom_catalog_path:
                     variant_catalog_file_paths = repeat_catalog_paths
-                elif use_illumina_expansion_hunter:
-                    variant_catalog_file_paths = [p for p in repeat_catalog_paths if "001_of_001" not in p]  # use the sharded catalog
+                elif tool == "IlluminaEHv5":
+                    # the unoptimized official build runs over the sharded catalogs (one parallel step per shard);
+                    # fall back to the unsharded catalog if the converter only wrote a single shard
+                    variant_catalog_file_paths = [p for p in repeat_catalog_paths if "001_of_001" not in p] \
+                        or repeat_catalog_paths
                 else:
-                    variant_catalog_file_paths = [p for p in repeat_catalog_paths if "001_of_001" in p]      # use the unsharded catalog
+                    # the streaming EHv5 / EHv5-bw2-optimized variants use the single unsharded catalog
+                    variant_catalog_file_paths = [p for p in repeat_catalog_paths if "001_of_001" in p]
 
                 current_step = create_expansion_hunter_steps(
                     bp,
@@ -261,17 +258,6 @@ def main():
                     regions_bed_paths=repeat_catalog_paths,
                     output_dir=output_dir,
                     output_prefix=f"{row.sample_id}.{tool}")
-            elif tool == "straglr":
-                current_step = create_straglr_steps(
-                    bp,
-                    reference_fasta=REFERENCE_FASTA_PATH,
-                    reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
-                    input_bam=row.read_data_path,
-                    input_bai=row.read_data_index_path,
-                    male_or_female=row.male_or_female,
-                    straglr_catalog_bed_paths=repeat_catalog_paths,
-                    output_dir=output_dir,
-                    output_prefix=f"{row.sample_id}.{tool}")
             elif tool == "inquiSTR":
                 current_step = create_inquistr_steps(
                     bp,
@@ -319,8 +305,7 @@ def main():
                 tool=tool,
                 coverage=coverage,
                 sample_id=row.sample_id,
-                output_dir=output_dir,
-                download_to_dir=download_to_dir)
+                output_dir=output_dir)
     bp.run()
 
 
@@ -347,7 +332,6 @@ def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage, s
     add_columns_step.depends_on(tool_results_step)
 
     add_columns_step.command("set -ex")
-    add_columns_step.command(STR_TRUTH_SET_REFRESH_CMD)
 
     local_tool_results_input = add_columns_step.input(tool_results_path)
     # the truth set is the v2 genotype table; compute_truth_set_tsv_for_comparisons.py normalizes its columns and
@@ -393,7 +377,7 @@ EOF
     return add_columns_step
 
 
-def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage, sample_id, output_dir, download_to_dir=None):
+def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage, sample_id, output_dir):
     plot_tool_accuracy_step = bp.new_step(
         name=f"Plot {sample_id} {tool} accuracy for {os.path.basename(output_dir)}",
         arg_suffix=f"plot-accuracy-step",
@@ -406,7 +390,6 @@ def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage, sam
     local_variants_tsv, local_alleles_tsv = plot_tool_accuracy_step.use_previous_step_outputs_as_inputs(add_columns_step)
 
     plot_tool_accuracy_step.command("set -ex")
-    plot_tool_accuracy_step.command(STR_TRUTH_SET_REFRESH_CMD)
 
     # The plot script stratifies internally by purity bin, IsPureRepeat, and no-call loci, so each invocation produces
     # many svg files. They're all captured below with a wildcard output.

@@ -7,7 +7,7 @@ import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
-DOCKER_IMAGE = "weisburd/str-analysis@sha256:eeb484a0b4fcad3cfe63aa9508784f858a7395de08bf83e76108ffa28a799a08"
+DOCKER_IMAGE = "weisburd/str-analysis@sha256:ae2500067543ecc08a6319c37a6df136517beb6e3cd53b9b343fcdba3dfaa571"
 #DOCKER_IMAGE = "us-central1-docker.pkg.dev/cmg-analysis/docker-repo/str-analysis@sha256:16191eb046706d19f2cc031f06e12c4da65e3e5f2e6d2a606b1aa8331bc2acae"
 
 def parse_args(bp):
@@ -71,9 +71,6 @@ def create_filter_step(bp, row, input_dir, output_dir,
             -b {dipcall_high_confidence_regions_bed_input} \
             | bgzip > {row.sample_id}.high_confidence_regions.vcf.gz")
     filter_step.command(f"tabix -f {row.sample_id}.high_confidence_regions.vcf.gz")
-
-    filter_step.command(f"python3 -m pip uninstall -y str-analysis")
-    filter_step.command(f"python3 -m pip install --upgrade --no-cache-dir git+https://github.com/broadinstitute/str-analysis")
     #filter_step.command(f"python3 -u -m str_analysis.filter_vcf_to_tandem_repeats catalog -h || true")
 
     min_repeat_unit_length = 2 if exclude_homopolymers else 1
@@ -134,8 +131,6 @@ def create_combine_step(bp, filter_steps, data_dir, cpu=2, memory="highmem"):
 
     combine_step.command("set -exuo pipefail")
 
-    combine_step.command(f"python3 -m pip uninstall -y str-analysis")
-    combine_step.command(f"python3 -m pip install --upgrade --no-cache-dir git+https://github.com/broadinstitute/str-analysis")
     hg38_fasta_input, _ = combine_step.inputs(
         "gs://str-truth-set/hg38/ref/hg38.fa",
         "gs://str-truth-set/hg38/ref/hg38.fa.fai")
@@ -186,9 +181,6 @@ def create_genotype_step(bp, row, combined_catalog_bed_path, filter_step, combin
         os.path.join(output_dir, f"{row.sample_id}.high_confidence_regions.vcf.gz.tbi"))
 
     genotype_step.command("set -exuo pipefail")
-
-    genotype_step.command(f"python3 -m pip uninstall -y str-analysis")
-    genotype_step.command(f"python3 -m pip install --upgrade --no-cache-dir git+https://github.com/broadinstitute/str-analysis")
 
     genotype_step.command(f"python3 -u -m str_analysis.filter_vcf_to_tandem_repeats genotype \
             -R {hg38_fasta_input} \

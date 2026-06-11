@@ -9,7 +9,7 @@ repeat count differs from the reference -- and writes EHv5, GangSTR, HipSTR, TRG
 catalogs plus a plain positive_loci.bed.gz (consumed by inquiSTR). Output filenames match the
 globs that run_genotyping_tools.py expects under --filter-vcf-dir/<sample>/:
 
-    <prefix>.EHv5.001_of_001.json
+    <prefix>.EHv5.{NNN}_of_{NNN}.json
     <prefix>.GangSTR.{NNN}_of_{NNN}.bed
     <prefix>.HipSTR.{NNN}_of_{NNN}.bed
     <prefix>.LongTR.001_of_001.bed
@@ -37,6 +37,9 @@ def parse_args():
                    help="Only generate catalogs for the specified tool(s). Can be repeated.")
     p.add_argument("--gangstr-loci-per-run", type=int, default=100000, help="GangSTR/HipSTR shard size. "
                    "The positive loci are split into bed files of this size.")
+    p.add_argument("--expansion-hunter-loci-per-run", type=int, default=1000, help="ExpansionHunter (IlluminaEHv5) "
+                   "shard size. Positive loci are split into catalog json files of this size; a single unsharded "
+                   "catalog (001_of_001.json) is also written when there is more than one shard.")
     p.add_argument("genotypes_tsv_path", help="Path of a local <sample>.tandem_repeat_genotypes.tsv(.gz) file "
                    "produced by 'filter_vcf_to_tandem_repeats genotype'")
     return p.parse_args()
@@ -75,8 +78,14 @@ def generate_set_of_positive_loci(df):
     return positive_loci
 
 
-def write_expansion_hunter_variant_catalog(locus_set, output_path):
-    """Write a single (unsharded) EHv5 variant catalog json, sorted by canonical motif."""
+def write_expansion_hunter_variant_catalogs(locus_set, output_path_prefix, loci_per_run):
+    """Write EHv5 variant catalog json(s), sorted by canonical motif.
+
+    Writes sharded catalogs `<prefix>.{NNN}_of_{MMM}.json` of up to loci_per_run loci each, used by the
+    unoptimized IlluminaEHv5 build (which needs parallel shards to avoid running out of memory). When there is
+    more than one shard, also writes the single unsharded `<prefix>.001_of_001.json` used by the streaming
+    EHv5 / EHv5-bw2-optimized variants and by vamos. With only one shard the lone `001_of_001` file serves both.
+    """
     variant_catalog = []
     for unmodified_chrom, start_0based, end_1based, motif in sorted(
             locus_set, key=lambda x: compute_canonical_motif(x[3], include_reverse_complement=True)):
@@ -87,9 +96,16 @@ def write_expansion_hunter_variant_catalog(locus_set, output_path):
             "LocusStructure": f"({motif})*",
             "VariantType": "Repeat",
         })
-    with open(output_path, "wt") as f:
-        json.dump(variant_catalog, f, indent=3)
-    print(f"Wrote {len(variant_catalog):,d} loci to {output_path}")
+
+    batches = [variant_catalog[i:i+loci_per_run] for i in range(0, len(variant_catalog), loci_per_run)] or [[]]
+    for batch_i, current_variant_catalog in enumerate(batches):
+        with open(f"{output_path_prefix}.{batch_i+1:03d}_of_{len(batches):03d}.json", "wt") as f:
+            json.dump(current_variant_catalog, f, indent=3)
+    if len(batches) > 1:
+        with open(f"{output_path_prefix}.001_of_001.json", "wt") as f:
+            json.dump(variant_catalog, f, indent=3)
+    print(f"Wrote {len(batches):,d} ExpansionHunter variant catalog shard(s) "
+          f"({len(variant_catalog):,d} loci) to {output_path_prefix}*.json")
 
 
 def write_gangstr_hipstr_or_longtr_repeat_specs(locus_set, output_path_prefix, tool, loci_per_run=None):
@@ -104,7 +120,7 @@ def write_gangstr_hipstr_or_longtr_repeat_specs(locus_set, output_path_prefix, t
     for batch_i, current_repeat_specs in enumerate(batches):
         with open(f"{output_path_prefix}.{batch_i+1:03d}_of_{len(batches):03d}.bed", "wt") as f:
             for chrom, start_0based, end_1based, motif in current_repeat_specs:
-                if end_1based - start_0based <= 1:
+                if (end_1based - start_0based) / len(motif) <= 1:
                     # only 1 repeat in the reference -> HipSTR/LongTR error out on these
                     continue
                 if tool == "gangstr":
@@ -161,7 +177,8 @@ def main():
     out = lambda name: os.path.join(args.output_dir, f"{prefix}.{name}")
 
     if not args.only or "eh" in args.only:
-        write_expansion_hunter_variant_catalog(positive_loci, out("EHv5.001_of_001.json"))
+        write_expansion_hunter_variant_catalogs(positive_loci, out("EHv5"),
+                                                loci_per_run=args.expansion_hunter_loci_per_run)
     if not args.only or "gangstr" in args.only:
         write_gangstr_hipstr_or_longtr_repeat_specs(positive_loci, out("GangSTR"), "gangstr",
                                                     loci_per_run=args.gangstr_loci_per_run)
