@@ -85,6 +85,7 @@ def add_star_align_step(bp, index_dir, index_step):
         cpu=16,
         memory="highmem",
         storage="200Gi",
+        preemptible=False,
         output_dir=OUTPUT_DIR,
     )
 
