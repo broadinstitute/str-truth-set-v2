@@ -23,11 +23,13 @@ from trgt_pipeline import create_trgt_step
 from longtr_pipeline import create_longtr_steps
 from straglr_pipeline import create_straglr_steps
 from inquistr_pipeline import create_inquistr_steps
+from vamos_pipeline import create_vamos_step
 
 
 SHORT_READ_TOOLS = {
     "IlluminaEHv5",
     "EHv5",
+    "EHv5-bw2-optimized",
     "GangSTR",
     "HipSTR",
     "constrain"
@@ -38,6 +40,7 @@ LONG_READ_TOOLS = {
     "LongTR",
     "straglr",
     "inquiSTR",
+    "vamos",
 }
 
 # The add-columns and plot steps refresh /str-truth-set from this branch at runtime until the
@@ -76,7 +79,6 @@ def main():
     bp = pipeline("run_genotyping_tools", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline")
 
     parser = bp.get_config_arg_parser()
-    parser.add_argument("--skip-combine-steps", action="store_true")
     parser.add_argument("-s", "--sample-id", action="append",
                         help="Process only this sample. Can be specified more than once.")
     parser.add_argument("-t", "--tool", action="append", choices=SHORT_READ_TOOLS|LONG_READ_TOOLS, help="The tool to run.")
@@ -136,6 +138,15 @@ def main():
                 # (columns: chrom, start0, end, motif). The inquiSTR step derives its region bed from it.
                 repeat_catalog_paths = os.path.join(args.filter_vcf_dir, row.sample_id,
                     f"{row.sample_id}.bed.gz")
+            elif tool == "vamos":
+                # vamos derives its catalog (inside the step) from the unsharded ExpansionHunter catalog json
+                repeat_catalog_paths = os.path.join(args.filter_vcf_dir, row.sample_id,
+                    f"{row.sample_id}.EHv5*")
+            elif tool in ("EHv5", "EHv5-bw2-optimized", "IlluminaEHv5"):
+                # all three ExpansionHunter v5 variants share the EHv5 catalog set; the branch below picks the
+                # unsharded catalog for EHv5/EHv5-bw2-optimized and the sharded catalog(s) for IlluminaEHv5
+                repeat_catalog_paths = os.path.join(args.filter_vcf_dir, row.sample_id,
+                    f"{row.sample_id}.EHv5*")
             else:
                 catalog_path_suffix = tool
 
@@ -145,15 +156,27 @@ def main():
             print(f"Listing catalogs {repeat_catalog_paths}")
             repeat_catalog_paths = [x.path for x in hfs.ls(repeat_catalog_paths)]
             output_dir = os.path.join(args.output_dir, row.sample_id, row.sequencing_data_type, tool, f"{coverage}x_coverage")
-            if tool == "EHv5" or tool == "IlluminaEHv5":
+            if tool in ("EHv5", "EHv5-bw2-optimized", "IlluminaEHv5"):
+                # Three ExpansionHunter v5 variants, all genotyped with create_expansion_hunter_steps:
+                #   EHv5               - bw2 fork, --analysis-mode low-mem-streaming
+                #   EHv5-bw2-optimized - bw2 fork, --analysis-mode optimized-streaming --improved-genotyping
+                #   IlluminaEHv5       - original Illumina build, --analysis-mode streaming
+                use_illumina_expansion_hunter = (tool == "IlluminaEHv5")
+                improved_genotyping = False
                 if tool == "EHv5":
-                    variant_catalog_file_paths = [p for p in repeat_catalog_paths if "001_of_001" in p]      # use the unsharded catalog
-                    use_illumina_expansion_hunter = False
+                    analysis_mode = "low-mem-streaming"
+                elif tool == "EHv5-bw2-optimized":
                     analysis_mode = "optimized-streaming"
-                elif tool == "IlluminaEHv5":
-                    variant_catalog_file_paths = [p for p in repeat_catalog_paths if "001_of_001" not in p]  # use the sharded catalog
-                    use_illumina_expansion_hunter = True
+                    improved_genotyping = True
+                else:  # IlluminaEHv5
                     analysis_mode = "streaming"
+
+                if args.custom_catalog_path:
+                    variant_catalog_file_paths = repeat_catalog_paths
+                elif use_illumina_expansion_hunter:
+                    variant_catalog_file_paths = [p for p in repeat_catalog_paths if "001_of_001" not in p]  # use the sharded catalog
+                else:
+                    variant_catalog_file_paths = [p for p in repeat_catalog_paths if "001_of_001" in p]      # use the unsharded catalog
 
                 current_step = create_expansion_hunter_steps(
                     bp,
@@ -166,6 +189,7 @@ def main():
                     output_dir=output_dir,
                     output_prefix= f"{row.sample_id}.{tool}",
                     analysis_mode=analysis_mode,
+                    improved_genotyping=improved_genotyping,
                     loci_to_exclude=None,
                     min_locus_coverage=None,
                     use_illumina_expansion_hunter=use_illumina_expansion_hunter)
@@ -259,10 +283,24 @@ def main():
                     inquistr_catalog_bed_paths=repeat_catalog_paths,
                     output_dir=output_dir,
                     output_prefix=f"{row.sample_id}.{tool}")
+            elif tool == "vamos":
+                # use the unsharded ExpansionHunter catalog json; the vamos step converts it to a vamos catalog
+                current_step = create_vamos_step(
+                    bp,
+                    reference_fasta=REFERENCE_FASTA_PATH,
+                    reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
+                    input_bam=row.read_data_path,
+                    input_bai=row.read_data_index_path,
+                    male_or_female=row.male_or_female,
+                    expansion_hunter_catalog_paths=[p for p in repeat_catalog_paths if "001_of_001" in p],
+                    output_dir=output_dir,
+                    output_prefix=f"{row.sample_id}.{tool}")
             else:
                 raise ValueError(f"Unknown tool: {tool}")
 
 
+            # EHv5, EHv5-bw2-optimized, and IlluminaEHv5 each keep their own label downstream (all three are
+            # registered in add_tool_results_columns.py / add_concordance_columns.py / plot_tool_accuracy_by_allele_size.py).
             add_columns_step = add_tool_comparison_columns_step(
                 bp,
                 current_step,
