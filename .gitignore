@@ -176,3 +176,6 @@ cython_debug/
 
 # Local planning docs
 docs/PLAN_tool_comparison_viewer.md
+
+# Generated sample table (produced + uploaded to GCS by run_tools/generate_sample_read_data_table.py)
+run_tools/HPRC_all_aligned_short_read_and_long_read_samples.tsv

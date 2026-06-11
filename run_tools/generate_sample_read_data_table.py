@@ -139,8 +139,25 @@ for sequencing_data_type, downsampled_bam in [
 		"depth_stats_path":     downsampled_bam.replace(".bam", ".total_depth.txt"),
 	}])], ignore_index=True)
 
+# HG002 RNA-seq: short-read (STAR) and long-read (PacBio Iso-Seq), added so STR genotyping tools can be run
+# on RNA-seq read data. depth_of_coverage is set directly to total bases sequenced (Gbp) rather than mosdepth
+# genome coverage, which is meaningless for transcript data; these rows skip the mosdepth step below (their
+# depth_stats_path is None).
+for sequencing_data_type, read_data_path, total_bases_gb in [
+	("illumina_rnaseq", "gs://str-truth-set-v2/raw_data/HG002/rnaseq_short_read/star/SRR29437757.Aligned.sortedByCoord.out.bam", 24),
+	("pacbio_isoseq", "gs://str-truth-set-v2/raw_data/HG002/pacbio_isoseq/HG002-NA24385-LCL.hg38.bam", 9),
+]:
+	df = pd.concat([df, pd.DataFrame([{
+		"sample_id": "HG002",
+		"sequencing_data_type": sequencing_data_type,
+		"read_data_path":       read_data_path,
+		"read_data_index_path": f"{read_data_path}.bai",
+		"depth_stats_path":     None,
+		"depth_of_coverage":    total_bases_gb,
+	}])], ignore_index=True)
+
 bp = pipeline("coverage", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline")
-for _, row in df[~df["depth_stats_path"].apply(lambda p: files_exist([p]))].iterrows():
+for _, row in df[~df["depth_stats_path"].apply(lambda p: files_exist([p]) if pd.notna(p) else True)].iterrows():
 	if not files_exist([row.read_data_path]):
 		print(f"{row.sample_id} read data file {row.read_data_path} not found. Skipping...")
 		continue
@@ -179,7 +196,10 @@ def read_depth_stats(path):
 		depth_of_coverage = df["coverage"].iloc[0]
 		return float(depth_of_coverage)
 
-df["depth_of_coverage"] = df["depth_stats_path"].apply(read_depth_stats)
+# RNA-seq rows already carry depth_of_coverage (total bases in Gbp); only the DNA rows derive it from mosdepth.
+df["depth_of_coverage"] = df.apply(
+	lambda row: read_depth_stats(row["depth_stats_path"]) if pd.notna(row["depth_stats_path"]) else row["depth_of_coverage"],
+	axis=1)
 df["male_or_female"] = df["sample_id"].apply(lambda s: sample_id_sex_lookup.get(s))
 if sum(df["male_or_female"].isna()) > 0:
 	raise ValueError(f"Missing sex metadata for samples {list(df.sample_id)}")
