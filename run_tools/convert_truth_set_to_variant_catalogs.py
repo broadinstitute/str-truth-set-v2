@@ -27,6 +27,10 @@ import pandas as pd
 
 from str_analysis.utils.canonical_repeat_unit import compute_canonical_motif
 
+# Primary assembly contigs kept in the catalogs. Loci on chrEBV and alt/random/unplaced contigs are dropped,
+# since a tool's reference FASTA may not contain them (e.g. ExpansionHunter aborts on "Invalid contig name").
+PRIMARY_CONTIGS = {f"chr{c}" for c in list(range(1, 23)) + ["X", "Y"]}
+
 
 def parse_args():
     p = argparse.ArgumentParser(description=__doc__)
@@ -168,6 +172,13 @@ def main():
 
     df = pd.read_table(args.genotypes_tsv_path, dtype={"Chrom": str, "Motif": str})
     print(f"Parsed {len(df):,d} rows from {args.genotypes_tsv_path}")
+
+    # Drop loci on non-primary contigs (chrEBV, alt/random/unplaced) up front, before any tool catalogs are
+    # written, so downstream genotyping never references a contig that may be absent from a tool's reference.
+    rows_before = len(df)
+    df = df[df.Chrom.isin(PRIMARY_CONTIGS)]
+    if len(df) < rows_before:
+        print(f"Dropped {rows_before - len(df):,d} rows on non-primary contigs; kept {len(df):,d}")
 
     positive_loci = generate_set_of_positive_loci(df)
     print(f"Generated {len(positive_loci):,d} positive (variant) loci")
