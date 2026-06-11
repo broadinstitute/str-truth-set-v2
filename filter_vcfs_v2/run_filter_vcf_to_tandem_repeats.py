@@ -7,7 +7,7 @@ import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
-DOCKER_IMAGE = "weisburd/str-analysis@sha256:477380c41637a26f5e19d3c4ff6bae60de0cf1db620ebba8549c44df48d586b8"
+DOCKER_IMAGE = "weisburd/str-analysis@sha256:eeb484a0b4fcad3cfe63aa9508784f858a7395de08bf83e76108ffa28a799a08"
 #DOCKER_IMAGE = "us-central1-docker.pkg.dev/cmg-analysis/docker-repo/str-analysis@sha256:16191eb046706d19f2cc031f06e12c4da65e3e5f2e6d2a606b1aa8331bc2acae"
 
 def parse_args(bp):
@@ -168,7 +168,7 @@ def create_genotype_step(bp, row, combined_catalog_bed_path, filter_step, combin
         arg_suffix="genotype-step",
         preemptible=use_preemptibles,
         cpu=cpu,
-        storage="30G",
+        storage="50G",
         memory=memory,
         localize_by=Localize.GSUTIL_COPY,
         output_dir=output_dir)

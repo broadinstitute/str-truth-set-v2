@@ -11,7 +11,7 @@ import collections
 import hailtop.fs as hfs
 import os
 import pandas as pd
-from step_pipeline import pipeline, Backend, Localize
+from step_pipeline import pipeline, Backend, Localize, Delocalize
 import sys
 
 sys.path.append("../str-truth-set/tool_comparison/hail_batch_pipelines")
@@ -22,6 +22,7 @@ from constrain_pipeline import create_constrain_step
 from trgt_pipeline import create_trgt_step
 from longtr_pipeline import create_longtr_steps
 from straglr_pipeline import create_straglr_steps
+from inquistr_pipeline import create_inquistr_steps
 
 
 SHORT_READ_TOOLS = {
@@ -36,7 +37,19 @@ LONG_READ_TOOLS = {
     "TRGT",
     "LongTR",
     "straglr",
+    "inquiSTR",
 }
+
+# Branches of broadinstitute/str-truth-set and broadinstitute/str-analysis that contain the inquiSTR integration and
+# the purity / motif-size plotting changes. The add-columns and plot steps refresh /str-truth-set from this branch at
+# runtime until the FILTER_VCFS_DOCKER_IMAGE is rebuilt to include these changes.
+STR_TRUTH_SET_BRANCH = "inquistr-integration"
+STR_TRUTH_SET_REFRESH_CMD = (
+    f"rm -rf /str-truth-set && git clone --quiet --depth 1 --branch {STR_TRUTH_SET_BRANCH} "
+    f"https://github.com/broadinstitute/str-truth-set /str-truth-set")
+
+# Motif size bins (min, max) used to stratify the accuracy plots.
+MOTIF_SIZE_BINS = [(1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (2, 6), (7, 24), (25, 1000)]
 
 SHORT_READ_DATA_TYPES = {
     "illumina",
@@ -64,8 +77,6 @@ def main():
     bp = pipeline("run_genotyping_tools", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline")
 
     parser = bp.get_config_arg_parser()
-    parser.add_argument("--only-pure-repeats", action="store_true")
-    parser.add_argument("--exclude-homopolymers", action="store_true")
     parser.add_argument("--skip-combine-steps", action="store_true")
     parser.add_argument("-s", "--sample-id", action="append",
                         help="Process only this sample. Can be specified more than once.")
@@ -73,6 +84,10 @@ def main():
     parser.add_argument("--data-type", action="append", choices=SHORT_READ_DATA_TYPES|LONG_READ_DATA_TYPES, help="Which data type(s) to process")
     parser.add_argument("-k", "--filename-keyword", help="If specified, only BAM paths that contain this keyword will be processed", action="append")
     parser.add_argument("--filter-vcf-dir", default="gs://str-truth-set-v2/filter_vcf", help="Base dir for filter_vcf pipeline output files")
+    parser.add_argument("--truth-set-genotypes-dir", default="gs://str-truth-set-v2/filter_vcf_v2",
+                        help="Base dir for the filter_vcf_to_tandem_repeats genotype step output "
+                             "({sample_id}/{sample_id}.tandem_repeat_genotypes.tsv.gz), used as the truth set "
+                             "(it carries the per-allele repeat purity used by the purity-stratified plots)")
     parser.add_argument("--custom-catalog-path", help="If specified, use this catalog instead of the filter_vcf catalogs")
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--download-results", action="store_true", help="Download the resulting images to the local ../results directory")
@@ -97,17 +112,7 @@ def main():
     bp.precache_file_paths(os.path.join(args.output_dir, "**/*.*"))
 
 
-    suffix = ".STRs"
-    if args.only_pure_repeats:
-        suffix += ".only_pure"
-    if args.exclude_homopolymers:
-        suffix += ".excluding_homopolymers"
-
-    download_to_dir = "../results_without_homopolymers" if args.exclude_homopolymers else "../results_with_homopolymers"
-    pure_repeats_or_all_repeats = "pure_repeats" if args.only_pure_repeats else "all_repeats"
-    including_or_excluding_homopolymers = "excluding_homopolymers" if args.exclude_homopolymers else "including_homopolymers"
-    excluding_homopolymers_string = ".excluding_homopolymers" if args.exclude_homopolymers else ""
-    output_dir_suffix = f"{pure_repeats_or_all_repeats}_{including_or_excluding_homopolymers}"
+    download_to_dir = "../results"
 
     for row_i, (_, row) in enumerate(df.iterrows()):
         if args.filename_keyword:
@@ -127,15 +132,20 @@ def main():
 
             if args.custom_catalog_path:
                 repeat_catalog_paths = args.custom_catalog_path
+            elif tool == "inquiSTR":
+                # inquiSTR genotypes from a plain region bed, so use the positive_loci.bed.gz catalog
+                # (columns: chrom, start0, end, motif). The inquiSTR step derives its region bed from it.
+                repeat_catalog_paths = os.path.join(args.filter_vcf_dir, row.sample_id,
+                    f"{row.sample_id}.positive_loci.bed.gz")
             else:
                 catalog_path_suffix = tool
 
-                repeat_catalog_paths = os.path.join(args.filter_vcf_dir, output_dir_suffix, row.sample_id,
-                    f"{row.sample_id}.STRs{excluding_homopolymers_string}.positive_loci.{catalog_path_suffix}*")
+                repeat_catalog_paths = os.path.join(args.filter_vcf_dir, row.sample_id,
+                    f"{row.sample_id}.positive_loci.{catalog_path_suffix}*")
 
             print(f"Listing catalogs {repeat_catalog_paths}")
             repeat_catalog_paths = [x.path for x in hfs.ls(repeat_catalog_paths)]
-            output_dir = os.path.join(args.output_dir, output_dir_suffix, row.sample_id, row.sequencing_data_type, tool, f"{coverage}x_coverage")
+            output_dir = os.path.join(args.output_dir, row.sample_id, row.sequencing_data_type, tool, f"{coverage}x_coverage")
             if tool == "EHv5" or tool == "IlluminaEHv5":
                 if tool == "EHv5":
                     variant_catalog_file_paths = [p for p in repeat_catalog_paths if "001_of_001" in p]      # use the unsharded catalog
@@ -155,7 +165,7 @@ def main():
                     male_or_female=row.male_or_female,
                     variant_catalog_file_paths=variant_catalog_file_paths,
                     output_dir=output_dir,
-                    output_prefix= f"{row.sample_id}.STRs.positive_loci.{tool}",
+                    output_prefix= f"{row.sample_id}.positive_loci.{tool}",
                     analysis_mode=analysis_mode,
                     loci_to_exclude=None,
                     min_locus_coverage=None,
@@ -175,7 +185,7 @@ def main():
                     male_or_female=row.male_or_female,
                     repeat_spec_file_paths=repeat_catalog_paths,
                     output_dir=output_dir,
-                    output_prefix=f"{row.sample_id}.STRs.positive_loci.{tool}")
+                    output_prefix=f"{row.sample_id}.positive_loci.{tool}")
             elif tool == "HipSTR":
                 current_step = create_hipstr_steps(
                     bp,
@@ -186,7 +196,7 @@ def main():
                     male_or_female=row.male_or_female,
                     regions_bed_file_paths=repeat_catalog_paths,
                     output_dir=output_dir,
-                    output_prefix=f"{row.sample_id}.STRs.positive_loci.{tool}")
+                    output_prefix=f"{row.sample_id}.positive_loci.{tool}")
             elif tool == "constrain":
                 current_step = create_constrain_step(
                     bp,
@@ -197,7 +207,7 @@ def main():
                     male_or_female=row.male_or_female,
                     constrain_catalog_bed_paths=repeat_catalog_paths,
                     output_dir=output_dir,
-                    output_prefix=f"{row.sample_id}.STRs.positive_loci.{tool}",
+                    output_prefix=f"{row.sample_id}.positive_loci.{tool}",
                     cpu=1,
                 )
             elif tool == "TRGT":
@@ -216,7 +226,7 @@ def main():
                     trgt_catalog_bed_paths=repeat_catalog_paths,
                     parse_reference_region_from_locus_id=True,
                     output_dir=output_dir,
-                    output_prefix= f"{row.sample_id}.STRs.positive_loci.{tool}")
+                    output_prefix= f"{row.sample_id}.positive_loci.{tool}")
             elif tool == "LongTR":
                 current_step = create_longtr_steps(
                     bp,
@@ -227,7 +237,7 @@ def main():
                     male_or_female=row.male_or_female,
                     regions_bed_paths=repeat_catalog_paths,
                     output_dir=output_dir,
-                    output_prefix=f"{row.sample_id}.STRs.positive_loci.{tool}")
+                    output_prefix=f"{row.sample_id}.positive_loci.{tool}")
             elif tool == "straglr":
                 current_step = create_straglr_steps(
                     bp,
@@ -238,7 +248,18 @@ def main():
                     male_or_female=row.male_or_female,
                     straglr_catalog_bed_paths=repeat_catalog_paths,
                     output_dir=output_dir,
-                    output_prefix=f"{row.sample_id}.STRs.positive_loci.{tool}")
+                    output_prefix=f"{row.sample_id}.positive_loci.{tool}")
+            elif tool == "inquiSTR":
+                current_step = create_inquistr_steps(
+                    bp,
+                    reference_fasta=REFERENCE_FASTA_PATH,
+                    reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
+                    input_bam=row.read_data_path,
+                    input_bai=row.read_data_index_path,
+                    male_or_female=row.male_or_female,
+                    inquistr_catalog_bed_paths=repeat_catalog_paths,
+                    output_dir=output_dir,
+                    output_prefix=f"{row.sample_id}.positive_loci.{tool}")
             else:
                 raise ValueError(f"Unknown tool: {tool}")
 
@@ -250,8 +271,8 @@ def main():
                 coverage=coverage,
                 sample_id=row.sample_id,
                 output_dir=output_dir,
-                filter_vcf_dir=os.path.join(args.filter_vcf_dir, output_dir_suffix, row.sample_id),
-                suffix=suffix,
+                truth_set_genotypes_path=os.path.join(
+                    args.truth_set_genotypes_dir, row.sample_id, f"{row.sample_id}.tandem_repeat_genotypes.tsv.gz"),
                 tool2="Truth",
                 download_to_dir=download_to_dir)
 
@@ -266,7 +287,7 @@ def main():
     bp.run()
 
 
-def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage, sample_id, output_dir, filter_vcf_dir, suffix, tool2="Truth", download_to_dir=None):
+def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage, sample_id, output_dir, truth_set_genotypes_path, tool2="Truth", download_to_dir=None):
     tool_results_path = None
     for output_spec in tool_results_step.get_outputs():
         if output_spec.output_path.endswith(".variants.tsv.gz"):
@@ -289,10 +310,12 @@ def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage, s
     add_columns_step.depends_on(tool_results_step)
 
     add_columns_step.command("set -ex")
+    add_columns_step.command(STR_TRUTH_SET_REFRESH_CMD)
 
     local_tool_results_input = add_columns_step.input(tool_results_path)
-    local_truth_set_input = add_columns_step.input(
-        os.path.join(filter_vcf_dir, f"{sample_id}{suffix}.annotated.variants.for_comparison.tsv.gz"))
+    # the truth set is the v2 genotype table; compute_truth_set_tsv_for_comparisons.py normalizes its columns and
+    # carries the per-allele repeat purity (RepeatPurity: Allele 1/2) used by the purity-stratified plots
+    local_truth_set_genotypes = add_columns_step.input(truth_set_genotypes_path)
 
     add_columns_step.command(f"""python3 <<EOF
 import pandas as pd
@@ -304,15 +327,21 @@ df.to_csv("{local_tool_results_input}", sep="\\t", index=False, header=True)
 EOF
 """)
 
+    # matches the output name compute_truth_set_tsv_for_comparisons.py derives from the input basename
+    for_comparison_filename = os.path.basename(truth_set_genotypes_path).replace(".tsv", ".for_comparison.tsv")
+    add_columns_step.command(f"python3 -u /str-truth-set/tool_comparison/scripts/compute_truth_set_tsv_for_comparisons.py "
+               f"--output-dir . "
+               f"{local_truth_set_genotypes}")
+
     add_columns_step.command(f"python3 -u /str-truth-set/tool_comparison/scripts/add_tool_results_columns.py "
                f"--tool {tool} "
-               f"{local_tool_results_input} " 
-               f"{local_truth_set_input} ")
+               f"{local_tool_results_input} "
+               f"{for_comparison_filename} ")
 
     add_columns_step.command("ls -lhrt")
 
-    local_tsv_file_path = str(local_truth_set_input).replace(".tsv.gz", "") + f".with_{tool}_results.tsv.gz"
-    output_filename = local_truth_set_input.filename.replace(".tsv.gz", "") + f".with_{tool}_vs_{tool2}_columns.tsv.gz"
+    local_tsv_file_path = for_comparison_filename.replace(".tsv.gz", "") + f".with_{tool}_results.tsv.gz"
+    output_filename = for_comparison_filename.replace(".tsv.gz", "") + f".with_{tool}_vs_{tool2}_columns.tsv.gz"
     add_columns_step.command(f"python3 -u /str-truth-set/tool_comparison/scripts/add_concordance_columns.py "
                f"--tool {tool} "
                f"--compare-to {tool2} "
@@ -340,36 +369,31 @@ def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage, sam
     local_variants_tsv, local_alleles_tsv = plot_tool_accuracy_step.use_previous_step_outputs_as_inputs(add_columns_step)
 
     plot_tool_accuracy_step.command("set -ex")
+    plot_tool_accuracy_step.command(STR_TRUTH_SET_REFRESH_CMD)
 
-    for min_motif_size, max_motif_size in [(2, 6), (7, 1000)]:
-        for exclude_no_call_loci in [".exclude_no_call_loci", ""]:
-            plot_tool_accuracy_step.command(
-                f"python3 -u /str-truth-set/figures_and_tables/plot_tool_accuracy_by_allele_size.py "
-                "--verbose "
-                f"--tool {tool} "
-                f"--coverage {coverage}x "
-                "--q-threshold 0 "
-                f"--min-motif-size {min_motif_size} " +
-                (f"--max-motif-size {max_motif_size} " if max_motif_size is not None else "") +
-                ("--hide-no-call-loci " if exclude_no_call_loci else "") +
-                "--genotype all "
-                "--image-type svg "
-                "--show-title "
-                f"{local_alleles_tsv} ")
+    # The plot script stratifies internally by purity bin, IsPureRepeat, and no-call loci, so each invocation produces
+    # many svg files. They're all captured below with a wildcard output.
+    for min_motif_size, max_motif_size in MOTIF_SIZE_BINS:
+        plot_tool_accuracy_step.command(
+            f"python3 -u /str-truth-set/figures_and_tables/plot_tool_accuracy_by_allele_size.py "
+            "--verbose "
+            f"--tool {tool} "
+            f"--coverage {coverage}x "
+            "--q-threshold 0 "
+            f"--min-motif-size {min_motif_size} "
+            f"--max-motif-size {max_motif_size} "
+            "--genotype all "
+            "--image-type svg "
+            "--show-title "
+            f"{local_alleles_tsv} ")
+        plot_tool_accuracy_step.command("ls -lhrt")
 
-            plot_tool_accuracy_step.command("ls -lhrt")
-            for output_filename in [
-                f"tool_accuracy_by_true_allele_size.{min_motif_size}to{max_motif_size}bp_motifs.all_genotypes.{coverage}x{exclude_no_call_loci}.{tool}.svg",
-                f"tool_accuracy_by_true_allele_size.{min_motif_size}to{max_motif_size}bp_motifs.all_genotypes.pure_repeats.{coverage}x{exclude_no_call_loci}.{tool}.svg",
-                f"tool_accuracy_by_true_allele_size.{min_motif_size}to{max_motif_size}bp_motifs.all_genotypes.with_interruptions.{coverage}x{exclude_no_call_loci}.{tool}.svg"
-            ]:
-                plot_tool_accuracy_step.command(f"gzip {output_filename}")
-                plot_tool_accuracy_step.command(f"mv {output_filename}.gz {output_filename}")
-                plot_tool_accuracy_step.output(output_filename, download_to_dir=download_to_dir)
+    # gzip each svg in place (keeping the .svg name) and serve it with the right content headers. The plots are
+    # uploaded with a wildcard via gcloud storage cp (Delocalize.GSUTIL_COPY), since Delocalize.COPY needs an explicit
+    # filename per output.
+    plot_tool_accuracy_step.command('for f in tool_accuracy_by_true_allele_size.*.svg; do gzip "$f"; mv "$f.gz" "$f"; done')
+    plot_tool_accuracy_step.output("tool_accuracy_by_true_allele_size.*.svg", delocalize_by=Delocalize.GSUTIL_COPY)
 
-
-    # create step to run gcloud storage objects update --content-type 'image/svg+xml' --content-encoding 'gzip' gs://str-truth-set-v2/tool_results/all_repeats_excluding_homopolymers/HG002/**/*.svg.gz
-    # on each image
     image_headers_step = bp.new_step(
         name=f"Set image headers for {sample_id} {tool} accuracy plots",
         arg_suffix="image-headers-step",
@@ -380,10 +404,15 @@ def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage, sam
     image_headers_step.depends_on(plot_tool_accuracy_step)
 
     image_headers_step.command("set -ex")
-    for previous_step_output in plot_tool_accuracy_step.get_outputs():
-        if previous_step_output.filename.endswith(".svg") or previous_step_output.filename.endswith(".svg.gz"):
-            image_headers_step.command(
-                f"gcloud storage objects update --content-type 'image/svg+xml' --content-encoding 'gzip' {previous_step_output.output_path}")
+    # gcloud storage objects update on a freshly-uploaded set of objects can intermittently return
+    # "HTTPError 409 ... edited during the operation", so retry a few times.
+    svg_glob = os.path.join(output_dir, 'tool_accuracy_by_true_allele_size.*.svg')
+    image_headers_step.command(
+        f"for attempt in 1 2 3 4 5; do "
+        f"if gcloud storage objects update --content-type 'image/svg+xml' --content-encoding 'gzip' {svg_glob}; "
+        f"then break; fi; "
+        f"echo \"image headers update attempt $attempt failed; retrying\"; sleep 15; "
+        f"done")
 
     #plot_tool_accuracy_step.command(f"python3 -u /str-truth-set/figures_and_tables/plot_tool_accuracy_vs_Q.py "
     #                                "--verbose "
