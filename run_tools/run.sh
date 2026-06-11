@@ -23,5 +23,5 @@ exit 0
 # Full run (all tools, all data types), homopolymers included:
 python3 run_genotyping_tools.py \
   --data-type pacbio --data-type ONT --data-type illumina --data-type illumina_exome --data-type element --data-type ultima --data-type illumina_rnaseq --data-type pacbio_isoseq \
-  --tool EHv5 --tool EHv5-bw2-optimized --tool GangSTR --tool HipSTR --tool TRGT --tool LongTR --tool inquiSTR --tool vamos \
+  --tool EHv5 --tool EHv5-bw2-optimized --tool IlluminaEHv5 --tool GangSTR --tool HipSTR --tool TRGT --tool LongTR --tool inquiSTR --tool vamos \
   --sample-id HG002 --sample-id CHM1_CHM13

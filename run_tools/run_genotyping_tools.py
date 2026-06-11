@@ -45,7 +45,7 @@ LONG_READ_TOOLS = {
 # update its digest to pick up new str-truth-set scripts).
 
 # Motif size bins (min, max) used to stratify the accuracy plots.
-MOTIF_SIZE_BINS = [(1, 1), (2, 2), (3, 6), (7, 24), (25, 1000)]
+MOTIF_SIZE_BINS = [(1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (2, 6), (7, 24), (25, 1000)]
 
 SHORT_READ_DATA_TYPES = {
     "illumina",
@@ -107,7 +107,7 @@ def main():
     if args.data_type:
         df = df[df.sequencing_data_type.isin(args.data_type)]
 
-    df = df[df.sample_id.isin({"HG002", "CHM1_CHM13"})]  # only use these samples for tool evaluations
+    df = df[df.sample_id == "HG002"]  # only HG002 is used for tool evaluations (CHM1_CHM13 excluded)
 
     if args.custom_catalog_path and args.output_dir == DEFAULT_OUTPUT_DIR:
         parser.error("--custom-catalog-path is set without also setting --output-dir")
@@ -134,6 +134,19 @@ def main():
             if tool in LONG_READ_TOOLS and row.sequencing_data_type not in LONG_READ_DATA_TYPES:
                 print(f"WARNING: Skipping {tool} for {row.sample_id} {row.sequencing_data_type} since {tool} "
                       f"doesn't support {row.sequencing_data_type} data")
+                continue
+
+            # GangSTR and IlluminaEHv5 are only run on illumina and illumina_exome data (GangSTR never completes on
+            # ultima, and the original Illumina ExpansionHunter build is only meaningful on Illumina WGS/exome data).
+            if tool in ("GangSTR", "IlluminaEHv5") and row.sequencing_data_type not in ("illumina", "illumina_exome"):
+                print(f"WARNING: Skipping {tool} for {row.sample_id} {row.sequencing_data_type} "
+                      f"({tool} is only run on illumina and illumina_exome data)")
+                continue
+
+            # vamos is not run on pacbio_isoseq data.
+            if tool == "vamos" and row.sequencing_data_type == "pacbio_isoseq":
+                print(f"WARNING: Skipping {tool} for {row.sample_id} {row.sequencing_data_type} "
+                      f"(vamos is not run on pacbio_isoseq data)")
                 continue
 
             if args.custom_catalog_path:
@@ -201,11 +214,6 @@ def main():
                     min_locus_coverage=None,
                     use_illumina_expansion_hunter=use_illumina_expansion_hunter)
             elif tool == "GangSTR":
-                if row.sequencing_data_type == "ultima":
-                    # for some reason GangSTR never completes on ultima data
-                    print(f"WARNING: Skipping {tool} for {row.sample_id} {row.sequencing_data_type} since {tool} "
-                          f"doesn't support {row.sequencing_data_type} data")
-                    continue
                 current_step = create_gangstr_steps(
                     bp,
                     reference_fasta=REFERENCE_FASTA_PATH,
