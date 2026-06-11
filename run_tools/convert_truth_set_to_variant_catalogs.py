@@ -9,7 +9,7 @@ repeat count differs from the reference -- and writes EHv5, GangSTR, HipSTR, TRG
 catalogs plus a plain positive_loci.bed.gz (consumed by inquiSTR). Output filenames match the
 globs that run_genotyping_tools.py expects under --filter-vcf-dir/<sample>/:
 
-    <prefix>.EHv5.{NNN}_of_{NNN}.json
+    <prefix>.EHv5.001_of_001.json
     <prefix>.GangSTR.{NNN}_of_{NNN}.bed
     <prefix>.HipSTR.{NNN}_of_{NNN}.bed
     <prefix>.LongTR.001_of_001.bed
@@ -37,9 +37,9 @@ def parse_args():
                    help="Only generate catalogs for the specified tool(s). Can be repeated.")
     p.add_argument("--gangstr-loci-per-run", type=int, default=100000, help="GangSTR/HipSTR shard size. "
                    "The positive loci are split into bed files of this size.")
-    p.add_argument("--expansion-hunter-loci-per-run", type=int, default=1000, help="ExpansionHunter (IlluminaEHv5) "
-                   "shard size. Positive loci are split into catalog json files of this size; a single unsharded "
-                   "catalog (001_of_001.json) is also written when there is more than one shard.")
+    p.add_argument("--expansion-hunter-loci-per-run", type=int, default=1000, help="Deprecated and unused: the "
+                   "ExpansionHunter catalog is no longer sharded -- a single 001_of_001.json is always written. "
+                   "Kept for backward compatibility.")
     p.add_argument("genotypes_tsv_path", help="Path of a local <sample>.tandem_repeat_genotypes.tsv(.gz) file "
                    "produced by 'filter_vcf_to_tandem_repeats genotype'")
     return p.parse_args()
@@ -83,12 +83,11 @@ def generate_set_of_positive_loci(df):
 
 
 def write_expansion_hunter_variant_catalogs(locus_set, output_path_prefix, loci_per_run):
-    """Write EHv5 variant catalog json(s), sorted by canonical motif.
+    """Write the EHv5 variant catalog json, sorted by canonical motif.
 
-    Writes sharded catalogs `<prefix>.{NNN}_of_{MMM}.json` of up to loci_per_run loci each, used by the
-    unoptimized IlluminaEHv5 build (which needs parallel shards to avoid running out of memory). When there is
-    more than one shard, also writes the single unsharded `<prefix>.001_of_001.json` used by the streaming
-    EHv5 / EHv5-bw2-optimized variants and by vamos. With only one shard the lone `001_of_001` file serves both.
+    Writes a single unsharded `<prefix>.001_of_001.json` used by all three ExpansionHunter variants
+    (EHv5, EHv5-bw2-optimized, IlluminaEHv5) and by vamos. Sharding was dropped now that every variant
+    runs 16-threaded on the one catalog. loci_per_run is accepted but unused.
     """
     variant_catalog = []
     for unmodified_chrom, start_0based, end_1based, motif in sorted(
@@ -101,15 +100,11 @@ def write_expansion_hunter_variant_catalogs(locus_set, output_path_prefix, loci_
             "VariantType": "Repeat",
         })
 
-    batches = [variant_catalog[i:i+loci_per_run] for i in range(0, len(variant_catalog), loci_per_run)] or [[]]
-    for batch_i, current_variant_catalog in enumerate(batches):
-        with open(f"{output_path_prefix}.{batch_i+1:03d}_of_{len(batches):03d}.json", "wt") as f:
-            json.dump(current_variant_catalog, f, indent=3)
-    if len(batches) > 1:
-        with open(f"{output_path_prefix}.001_of_001.json", "wt") as f:
-            json.dump(variant_catalog, f, indent=3)
-    print(f"Wrote {len(batches):,d} ExpansionHunter variant catalog shard(s) "
-          f"({len(variant_catalog):,d} loci) to {output_path_prefix}*.json")
+    # All three ExpansionHunter variants now run 16-threaded on this single unsharded catalog, so it is never sharded.
+    with open(f"{output_path_prefix}.001_of_001.json", "wt") as f:
+        json.dump(variant_catalog, f, indent=3)
+    print(f"Wrote 1 ExpansionHunter variant catalog ({len(variant_catalog):,d} loci) to "
+          f"{output_path_prefix}.001_of_001.json")
 
 
 def write_gangstr_hipstr_or_longtr_repeat_specs(locus_set, output_path_prefix, tool, loci_per_run=None):
