@@ -64,7 +64,10 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/broadinstitute/
 
 # install str-truth-set repo
 COPY str-truth-set/requirements.txt /
-RUN python3 -m pip install --no-cache-dir -r /requirements.txt
+# step-pipeline is only used by the pipeline drivers that run locally (not by the analysis/plot scripts baked into
+# this image) and has no PyPI release installable on this Python, so exclude it from the image install
+RUN grep -vE '^step-pipeline([<>=!~ ]|$)' /requirements.txt > /requirements.image.txt \
+    && python3 -m pip install --no-cache-dir -r /requirements.image.txt
 
 COPY str-truth-set /str-truth-set
 COPY filter_vcfs/scripts /filter_vcfs/scripts
