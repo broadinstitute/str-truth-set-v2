@@ -275,7 +275,6 @@ def main():
                     reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
                     input_bam=row.read_data_path,
                     input_bai=row.read_data_index_path,
-                    male_or_female=row.male_or_female,
                     # vamos needs the single unsharded EHv5 catalog; pick it out of the filter_vcf catalogs by the
                     # "001_of_001" shard name, but pass a --custom-catalog-path through unfiltered (its filename
                     # won't contain that token, so filtering would leave an empty list and crash the vamos step).
