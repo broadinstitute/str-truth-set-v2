@@ -35,24 +35,47 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.4.1/semantic.min.css" />
     <style>
         body { font-family: Lato, Helvetica, Arial, sans-serif; margin: 20px 30px; }
-        ul.facets { list-style: none; padding-left: 0; }
-        ul.facets > li { margin-bottom: 8px; }
-        .facet-label { display: inline-block; min-width: 175px; font-weight: bold; }
-        .navlinks { min-width: 70px; display: inline-block; }
-        .field { display: inline-block; margin-right: 14px; }
+        h2 { font-size: 20px; font-weight: bold; margin: 4px 0 18px; }
+        .ui.form { font-size: 16px; }
+        .ui.form label { font-size: 16px; }
+        ul.facets { list-style: disc; padding-left: 22px; }
+        ul.facets > li { margin-bottom: 10px; }
+        .facet-label { display: inline-block; min-width: 175px; font-weight: bold; vertical-align: middle; }
+        .navlinks { min-width: 70px; display: inline-block; vertical-align: middle; }
+        /* match Semantic's ".ui.form .field" specificity so our spacing wins (it zeroes margin-right) */
+        .ui.form .field { display: inline-block; margin: 0 20px 0 0; vertical-align: middle; }
+        /* Semantic selection dropdowns for the individual + technology selectors (styled menu + group headers/divider) */
+        #sample-dropdown, #datatype-dropdown { vertical-align: middle; }
+        /* fixed width so the individual dropdown doesn't resize between "HG002 (male)" and "CHM1_CHM13 (female)" */
+        #sample-dropdown { width: 16em; }
+        #datatype-dropdown { min-width: 13em; }
+        .inline-label { font-weight: bold; margin-left: 30px; margin-right: 8px; vertical-align: middle; }
+        .muted { color: #999; margin-left: 10px; }
         #plot-wrap { margin-top: 10px; }
-        #plot-status { color: #b00; padding: 8px 0; min-height: 1.2em; }
-        .legend { padding: 20px 0 0 20px; max-width: 850px; }
+        #plot-status { color: #b00; padding: 8px 0; min-height: 1.2em; font-size: 15px; }
+        .legend { padding: 20px 0 0 20px; max-width: 850px; font-size: 15px; }
     </style>
 </head>
 <body>
-    <h2>STR Truth Set v2 — Tool Comparison Viewer &nbsp;<small style="color:#888">HG002 · Accuracy by allele size</small></h2>
+    <h2>STR Truth Set v2 — Tool Comparison Viewer &nbsp;<small style="color:#888">Accuracy by allele size</small></h2>
 
     <div class="ui form">
         <ul class="facets">
             <li>
-                <span class="facet-label">Sequencing technology:</span>
-                <select id="datatype-select"></select>
+                <span class="facet-label">Individual:</span>
+                <div class="ui selection dropdown" id="sample-dropdown">
+                    <input type="hidden" name="sample">
+                    <i class="dropdown icon"></i>
+                    <div class="text"></div>
+                    <div class="menu"></div>
+                </div>
+                <span class="inline-label">Sequencing technology:</span>
+                <div class="ui selection dropdown" id="datatype-dropdown">
+                    <input type="hidden" name="datatype">
+                    <i class="dropdown icon"></i>
+                    <div class="text"></div>
+                    <div class="menu"></div>
+                </div>
             </li>
             <li>
                 <span class="facet-label">Tool:</span>
@@ -103,15 +126,21 @@
 // ----------------------------------------------------------------------------
 // Config — the only place that knows the GCS layout. Update once, not in HTML.
 // ----------------------------------------------------------------------------
-const BASE_URL = "https://storage.googleapis.com/str-truth-set-v2/tool_results"
-               + "/HG002";
+const BASE_URL = "https://storage.googleapis.com/str-truth-set-v2/tool_results";
+
+// Samples. NOTE: only HG002 is currently genotyped by the pipeline; CHM1_CHM13 is
+// listed for completeness but has no plots yet (selecting it shows "no plot yet").
+const SAMPLES = [
+    { id: "HG002",      label: 'HG002 <span class="muted">(male)</span>' },
+    { id: "CHM1_CHM13", label: 'CHM1_CHM13 <span class="muted">(female)</span>' },
+];
 
 // dir == fileToken == the --tool string the pipeline passes to the plot script.
 // label is just the friendlier display text for that tool.
 const TOOL_LABELS = {
-    IlluminaEHv5:         "ExpansionHunter (Illumina build)",
-    EHv5:                 "ExpansionHunter v5",
-    "EHv5-bw2-optimized": "ExpansionHunter v5 (bw2-optimized)",
+    IlluminaEHv5:         "EHv5 (Illumina)",
+    EHv5:                 "EHv5 (low-mem-streaming)",
+    "EHv5-bw2-optimized": "EHv5 (optimized-streaming)",
     GangSTR:              "GangSTR",
     HipSTR:               "HipSTR",
     TRGT:                 "TRGT",
@@ -134,7 +163,7 @@ const DATA_TYPES = {
         coverages: [{tok:"31x",label:"31x"},{tok:"20x",label:"20x"},{tok:"10x",label:"10x"}],
     },
     illumina_exome: {
-        label: "Illumina exome",
+        label: "Illumina Exome",
         tools: ["IlluminaEHv5", "EHv5", "EHv5-bw2-optimized", "GangSTR", "HipSTR"],
         coverages: [{tok:"3x",label:"exome (3x)"}],
     },
@@ -169,6 +198,13 @@ const DATA_TYPES = {
         coverages: [{tok:"9G",label:"9G"}],
     },
 };
+
+// Dropdown grouping: short-read vs long-read sequencing technologies, with a header
+// per group and a divider between them.
+const DATATYPE_GROUPS = [
+    ["Short read", ["illumina", "illumina_exome", "illumina_rnaseq", "element", "ultima"]],
+    ["Long read",  ["pacbio", "ONT", "pacbio_isoseq"]],
+];
 
 // Motif-size bins == run_genotyping_tools.py MOTIF_SIZE_BINS.
 // token is the ".{min}to{max}bp_motifs" filename segment from the plot script.
@@ -210,7 +246,7 @@ const PURITIES = [
 // Q threshold is forced to 0 (no token) and the pure/interrupt split is no longer emitted.
 // ----------------------------------------------------------------------------
 function buildImageUrl() {
-    const dtype  = $('#datatype-select').val();
+    const dtype  = currentDataType();
     const tool   = $('input[name="tool"]:checked').val();
     const cov    = $('input[name="coverage"]:checked').val();   // exact token, e.g. "26x" / "24G"
     const motif  = $('input[name="motif"]:checked').val();
@@ -227,7 +263,7 @@ function buildImageUrl() {
     name += "." + tool;
     name += ".svg";
 
-    return `${BASE_URL}/${dtype}/${tool}/${cov}_coverage/${name}`;
+    return `${BASE_URL}/${currentSample()}/${dtype}/${tool}/${cov}_coverage/${name}`;
 }
 
 // ----------------------------------------------------------------------------
@@ -239,10 +275,21 @@ function radio(name, value, label, checked) {
          + `<input type="radio" name="${name}" value="${value}" ${checked?'checked':''}>`
          + `<label>${label}</label></div></span>`;
 }
-function currentDataType() { return $('#datatype-select').val(); }
+function currentSample()   { return $('#sample-dropdown').dropdown('get value'); }
+function currentDataType() { return $('#datatype-dropdown').dropdown('get value'); }
+
+function renderSamples() {
+    $('#sample-dropdown .menu').html(SAMPLES.map(s=>`<div class="item" data-value="${s.id}">${s.label}</div>`).join(''));
+}
 
 function renderDataTypes() {
-    $('#datatype-select').html(Object.keys(DATA_TYPES).map(d=>`<option value="${d}">${DATA_TYPES[d].label}</option>`).join(''));
+    let html = "";
+    for (const [header, keys] of DATATYPE_GROUPS) {
+        if (html) html += `<div class="divider"></div>`;
+        html += `<div class="header">${header}</div>`;
+        html += keys.map(d=>`<div class="item" data-value="${d}">${DATA_TYPES[d].label}</div>`).join('');
+    }
+    $('#datatype-dropdown .menu').html(html);
 }
 function renderTools() {
     const tools = DATA_TYPES[currentDataType()].tools;
@@ -261,17 +308,25 @@ function renderStatic() {
 function refreshImage() {
     const url = buildImageUrl();
     $('#plot-status').text("");
-    $('#plot').attr('src', url).attr('alt', url);
+    $('#plot').show().attr('src', url);
 }
 
 // rebuild downstream radios when the technology changes, then refresh image
 function onDataTypeChange() { renderTools(); renderCoverages(); refreshImage(); }
 
 $(function() {
-    renderDataTypes(); renderStatic(); renderTools(); renderCoverages();
+    renderStatic(); renderSamples(); renderDataTypes();
     $('.ui.checkbox').checkbox();
 
-    $('#datatype-select').on('change', onDataTypeChange);
+    // hide the <img> when the SVG 404s (deleted / not yet regenerated) so no broken-image
+    // icon shows — just the status message; show it again once a real plot loads.
+    // Bound before the dropdown 'set selected' below, which triggers the first refreshImage.
+    $('#plot').on('error', function() {
+        $('#plot-status').text("No plot available for this combination of parameters: " + this.src);
+        $('#plot').hide();
+    });
+    $('#plot').on('load', function() { $('#plot').show(); });
+
     $(document).on('change', 'input[name="tool"],input[name="coverage"],input[name="motif"],input[name="genotype"],input[name="purity"],#exclude-tool-no-call-loci', refreshImage);
 
     // prev / next arrows step through the radios of the matching group
@@ -285,11 +340,13 @@ $(function() {
         btns[(cur + dir + btns.length) % btns.length].click();
     });
 
-    $('#plot').on('error', function() {
-        $('#plot-status').text("No plot at this combination yet: " + this.alt);
-    });
-
-    refreshImage();
+    // dropdown init last; sample change only affects the URL, so it just refreshes the image.
+    // The technology 'set selected' fires onDataTypeChange -> render tools/coverages + refreshImage,
+    // so set the sample first (default) and let the technology drive the initial full render.
+    $('#sample-dropdown').dropdown({ onChange: refreshImage });
+    $('#sample-dropdown').dropdown('set selected', SAMPLES[0].id);                  // default: HG002
+    $('#datatype-dropdown').dropdown({ onChange: onDataTypeChange });
+    $('#datatype-dropdown').dropdown('set selected', Object.keys(DATA_TYPES)[0]);   // default: first technology
 });
 </script>
 </body>
