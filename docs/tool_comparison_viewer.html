@@ -2,21 +2,31 @@
 <!--
   STR Truth Set v2 — Tool Comparison Viewer (HG002)
   =================================================
-  SCAFFOLD. The plots this page references are produced by
+  The plots this page references are produced by
   run_tools/run_genotyping_tools.py and written to:
 
     gs://str-truth-set-v2/tool_results/HG002/
-        {data_type}/{tool}/{coverage}x_coverage/{filename}
+        {data_type}/{tool}/{coverage}_coverage/{filename}
 
   served publicly as https://storage.googleapis.com/str-truth-set-v2/...
 
-  Facets (per request): Motif Size, Genotype, Coverage, Purity, Tool.
-  Dropped vs the v1 viewer: "Q threshold" and "Pure / Interrupted".
-  Added: "Purity" (7 truth-allele FractionPureRepeats bins + all).
+  Form controls mirror what the pipeline actually emits (run_genotyping_tools.py
+  + str-truth-set/figures_and_tables/plot_tool_accuracy_by_allele_size.py):
+    Sequencing technology — every data type the pipeline processes (8)
+    Tool                  — genotyping tools compatible with the chosen technology
+    Coverage              — depths for the chosen technology (from the sample table)
+    Motif size            — run_genotyping_tools.py MOTIF_SIZE_BINS (9 bins)
+    Genotype              — all / HET / HOM (the plot script's genotype_subset loop)
+    Purity                — all + plot_tool_accuracy_by_allele_size.py PURITY_BINS (5 bins)
+    Hide "No Call" loci   — .exclude_no_call_loci filename variant
 
-  The plot step no longer pins --genotype, so the pipeline generates the
-  ".all_genotypes", ".HET", ".HOM", and ".MULTI" SVGs and all four Genotype
-  radios resolve (see docs/PLAN_tool_comparison_viewer.md).
+  Hierarchy is technology -> tool -> coverage: tool compatibility and the coverage
+  list both depend on the technology, so it is the top facet.
+
+  NOT included (the plot step no longer emits these stratifications):
+    Q threshold      (pipeline forces --q-threshold 0)
+    Pure/Interrupted (the IsPureRepeat split was removed)
+    multi-allelic    (genotype_subset loop is ["all", "HET", "HOM"] only)
 -->
 <html lang="en">
 <head>
@@ -27,7 +37,7 @@
         body { font-family: Lato, Helvetica, Arial, sans-serif; margin: 20px 30px; }
         ul.facets { list-style: none; padding-left: 0; }
         ul.facets > li { margin-bottom: 8px; }
-        .facet-label { display: inline-block; min-width: 150px; font-weight: bold; }
+        .facet-label { display: inline-block; min-width: 175px; font-weight: bold; }
         .navlinks { min-width: 70px; display: inline-block; }
         .field { display: inline-block; margin-right: 14px; }
         #plot-wrap { margin-top: 10px; }
@@ -41,17 +51,16 @@
     <div class="ui form">
         <ul class="facets">
             <li>
+                <span class="facet-label">Sequencing technology:</span>
+                <select id="datatype-select"></select>
+            </li>
+            <li>
                 <span class="facet-label">Tool:</span>
                 <span class="navlinks">[<a class="prev-button" id="prev-tool" href="#">←</a> <a class="next-button" id="next-tool" href="#">→</a>]</span>
                 <span id="tool-radios"></span>
                 <span style="padding-left:15px">
                     <span class="ui checkbox"><input type="checkbox" id="exclude-tool-no-call-loci" name="exclude-tool-no-call-loci"><label>Hide "No Call" loci</label></span>
                 </span>
-            </li>
-            <li>
-                <span class="facet-label">Sequencing data:</span>
-                <span class="navlinks">[<a class="prev-button" id="prev-datatype" href="#">←</a> <a class="next-button" id="next-datatype" href="#">→</a>]</span>
-                <span id="datatype-radios"></span>
             </li>
             <li>
                 <span class="facet-label">Coverage:</span>
@@ -80,7 +89,7 @@
         <b>x-axis:</b> true allele size — positive = expansion, negative = contraction.<br/>
         <b>Gray</b>: tool produced no genotype. &nbsp;<b>Red</b>: called hom-ref (missed the variant). &nbsp;<b>Brown</b>: called het-ref.<br/>
         <b>Teal</b>: called the wrong direction. &nbsp;<b>Blue</b>: underestimated. &nbsp;<b>Green</b>: exact match. &nbsp;<b>Orange</b>: overestimated.<br/>
-        <b>Purity</b> = fraction of the truth allele's bases inside a perfect repeat (<code>FractionPureRepeats</code>).
+        <b>Purity</b> = per-allele repeat purity (fraction of the truth allele's bases inside a perfect repeat of the motif; column <code>RepeatPurity</code>).
     </div>
 
     <div id="plot-wrap">
@@ -97,48 +106,72 @@
 const BASE_URL = "https://storage.googleapis.com/str-truth-set-v2/tool_results"
                + "/HG002";
 
-// tool -> { label, dir (GCS path segment), fileToken (filename .{tool} segment),
-//           dataTypes: { dataType -> [ {cov, label} ] } }
-// Coverages are int(round(depth_of_coverage)) from the sample table (rows 44-56).
-// fileToken is the --tool string the pipeline passes to the plot script (== the tool key).
-const TOOLS = {
-    EHv5:     { label: "ExpansionHunter", dir: "EHv5",     fileToken: "EHv5",
-                dataTypes: { illumina: [{cov:31,label:"31x"},{cov:20,label:"20x"},{cov:10,label:"10x"}],
-                             element:  [{cov:30,label:"30x"}],
-                             ultima:   [{cov:36,label:"36x"}],
-                             illumina_exome: [{cov:3,label:"exome"}] } },
-    // EHv5 in optimized-streaming mode + --improved-genotyping. Distinct dir + fileToken
-    // so its plots don't collide with plain EHv5. ⚠ fileToken TBD — must match whatever
-    // --tool string the pipeline passes to the plot script (see PLAN).
-    "EHv5-bw2-optimized": { label: "EHv5 (bw2-optimized)", dir: "EHv5-bw2-optimized", fileToken: "EHv5-bw2-optimized",
-                dataTypes: { illumina: [{cov:31,label:"31x"},{cov:20,label:"20x"},{cov:10,label:"10x"}],
-                             element:  [{cov:30,label:"30x"}],
-                             ultima:   [{cov:36,label:"36x"}],
-                             illumina_exome: [{cov:3,label:"exome"}] } },
-    GangSTR:  { label: "GangSTR", dir: "GangSTR", fileToken: "GangSTR",
-                dataTypes: { illumina: [{cov:31,label:"31x"},{cov:20,label:"20x"},{cov:10,label:"10x"}],
-                             element:  [{cov:30,label:"30x"}],
-                             illumina_exome: [{cov:3,label:"exome"}] } },   // GangSTR skips ultima
-    HipSTR:   { label: "HipSTR", dir: "HipSTR", fileToken: "HipSTR",
-                dataTypes: { illumina: [{cov:31,label:"31x"},{cov:20,label:"20x"},{cov:10,label:"10x"}],
-                             element:  [{cov:30,label:"30x"}],
-                             ultima:   [{cov:36,label:"36x"}],
-                             illumina_exome: [{cov:3,label:"exome"}] } },
-    TRGT:     { label: "TRGT", dir: "TRGT", fileToken: "TRGT",
-                dataTypes: { pacbio: [{cov:37,label:"37x"},{cov:30,label:"30x"},{cov:20,label:"20x"},{cov:8,label:"8x"}] } },
-    LongTR:   { label: "LongTR", dir: "LongTR", fileToken: "LongTR",
-                dataTypes: { pacbio: [{cov:37,label:"37x"},{cov:30,label:"30x"},{cov:20,label:"20x"},{cov:8,label:"8x"}],
-                             ONT:    [{cov:26,label:"26x"},{cov:20,label:"20x"},{cov:8,label:"8x"}] } },
-    inquiSTR: { label: "inquiSTR", dir: "inquiSTR", fileToken: "inquiSTR",
-                dataTypes: { pacbio: [{cov:37,label:"37x"},{cov:30,label:"30x"},{cov:20,label:"20x"},{cov:8,label:"8x"}],
-                             ONT:    [{cov:26,label:"26x"},{cov:20,label:"20x"},{cov:8,label:"8x"}] } },
+// dir == fileToken == the --tool string the pipeline passes to the plot script.
+// label is just the friendlier display text for that tool.
+const TOOL_LABELS = {
+    IlluminaEHv5:         "ExpansionHunter (Illumina build)",
+    EHv5:                 "ExpansionHunter v5",
+    "EHv5-bw2-optimized": "ExpansionHunter v5 (bw2-optimized)",
+    GangSTR:              "GangSTR",
+    HipSTR:               "HipSTR",
+    TRGT:                 "TRGT",
+    LongTR:               "LongTR",
+    inquiSTR:             "inquiSTR",
+    vamos:                "vamos",
 };
 
-const DATATYPE_LABELS = { illumina:"Illumina", illumina_exome:"Illumina exome",
-                          element:"Element", ultima:"Ultima", pacbio:"PacBio", ONT:"ONT" };
+// Sequencing technology (== sequencing_data_type) -> {
+//   label, tools (compatible genotyping tools), coverages [{tok, label}] }.
+// Tool compatibility mirrors run_genotyping_tools.py (SHORT_READ/LONG_READ tool &
+// data-type sets, plus the GangSTR/IlluminaEHv5 illumina-only and vamos no-Iso-Seq rules).
+// cov tok is int(round(depth_of_coverage)) with an "x" suffix for genome data, or
+// "{N}G" for RNA-seq (total Gbp); it is used both in the filename (".{tok}.") and the
+// path ("{tok}_coverage/").
+const DATA_TYPES = {
+    illumina: {
+        label: "Illumina",
+        tools: ["IlluminaEHv5", "EHv5", "EHv5-bw2-optimized", "GangSTR", "HipSTR"],
+        coverages: [{tok:"31x",label:"31x"},{tok:"20x",label:"20x"},{tok:"10x",label:"10x"}],
+    },
+    illumina_exome: {
+        label: "Illumina exome",
+        tools: ["IlluminaEHv5", "EHv5", "EHv5-bw2-optimized", "GangSTR", "HipSTR"],
+        coverages: [{tok:"3x",label:"exome (3x)"}],
+    },
+    element: {
+        label: "Element",
+        tools: ["EHv5", "EHv5-bw2-optimized", "HipSTR"],
+        coverages: [{tok:"30x",label:"30x"}],
+    },
+    ultima: {
+        label: "Ultima",
+        tools: ["EHv5", "EHv5-bw2-optimized", "HipSTR"],
+        coverages: [{tok:"36x",label:"36x"}],
+    },
+    illumina_rnaseq: {
+        label: "Illumina RNA-seq",
+        tools: ["EHv5", "EHv5-bw2-optimized", "HipSTR"],
+        coverages: [{tok:"24G",label:"24G"}],
+    },
+    pacbio: {
+        label: "PacBio",
+        tools: ["TRGT", "LongTR", "inquiSTR", "vamos"],
+        coverages: [{tok:"37x",label:"37x"},{tok:"30x",label:"30x"},{tok:"20x",label:"20x"},{tok:"8x",label:"8x"}],
+    },
+    ONT: {
+        label: "ONT",
+        tools: ["TRGT", "LongTR", "inquiSTR", "vamos"],
+        coverages: [{tok:"26x",label:"26x"},{tok:"20x",label:"20x"},{tok:"8x",label:"8x"}],
+    },
+    pacbio_isoseq: {
+        label: "PacBio Iso-Seq",
+        tools: ["TRGT", "LongTR", "inquiSTR"],
+        coverages: [{tok:"9G",label:"9G"}],
+    },
+};
 
 // Motif-size bins == run_genotyping_tools.py MOTIF_SIZE_BINS.
-// token is the ".{n}to{m}bp_motifs" filename segment from the plot script.
+// token is the ".{min}to{max}bp_motifs" filename segment from the plot script.
 const MOTIFS = [
     { label:"1bp",      token:"1to1bp_motifs" },
     { label:"2bp",      token:"2to2bp_motifs" },
@@ -148,62 +181,57 @@ const MOTIFS = [
     { label:"6bp",      token:"6to6bp_motifs" },
     { label:"2-6bp",    token:"2to6bp_motifs" },
     { label:"7-24bp",   token:"7to24bp_motifs" },
-    { label:"25-1000bp",token:"25to1000bp_motifs" },
+    { label:"25+bp",    token:"25to1000bp_motifs" },
 ];
 
 // Genotype subset -> filename ".{...}" segment.
-// The plot step no longer pins --genotype, so the pipeline generates the .all_genotypes, .HET, .HOM, and .MULTI SVGs.
+// The plot script's genotype_subset loop is ["all", "HET", "HOM"] (no multi-allelic).
 const GENOTYPES = [
     { label:"all",          token:"all_genotypes" },
     { label:"heterozygous", token:"HET" },
     { label:"homozygous",   token:"HOM" },
-    { label:"multi-allelic",token:"MULTI" },
 ];
 
 // Purity bins == plot_tool_accuracy_by_allele_size.py PURITY_BINS.
 // "all" => no ".purity_*" token; others => ".purity_{token}".
 const PURITIES = [
     { label:"all",        token:null },
-    { label:"<0.65",      token:"below_0.65" },
-    { label:"0.65–0.70",  token:"0.65_to_0.70" },
-    { label:"0.70–0.75",  token:"0.70_to_0.75" },
-    { label:"0.75–0.80",  token:"0.75_to_0.80" },
-    { label:"0.80–0.85",  token:"0.80_to_0.85" },
-    { label:"0.85–0.90",  token:"0.85_to_0.90" },
-    { label:"0.90–0.95",  token:"0.90_to_0.95" },
+    { label:"0–0.65",     token:"0_to_0.65" },
+    { label:"0.65–0.75",  token:"0.65_to_0.75" },
+    { label:"0.75–0.85",  token:"0.75_to_0.85" },
+    { label:"0.85–0.95",  token:"0.85_to_0.95" },
     { label:"0.95–1.00",  token:"0.95_to_1.00" },
 ];
 
 // ----------------------------------------------------------------------------
 // Filename schema (from plot_tool_accuracy_by_allele_size.py output_image_filename):
 //   tool_accuracy_by_true_allele_size
-//     .{motif}_motifs .{genotype} [.{cov}x] [.purity_{p}] [.exclude_no_call_loci] .{tool} .svg
-// We always use the "both" pure/interrupt variant (no token) and Q0 (no token).
+//     .{motif}_motifs .{genotype} .{cov} [.purity_{p}] [.exclude_no_call_loci] .{tool} .svg
+// Q threshold is forced to 0 (no token) and the pure/interrupt split is no longer emitted.
 // ----------------------------------------------------------------------------
 function buildImageUrl() {
+    const dtype  = $('#datatype-select').val();
     const tool   = $('input[name="tool"]:checked').val();
-    const dtype  = $('input[name="datatype"]:checked').val();
-    const cov    = $('input[name="coverage"]:checked').val();
+    const cov    = $('input[name="coverage"]:checked').val();   // exact token, e.g. "26x" / "24G"
     const motif  = $('input[name="motif"]:checked').val();
     const geno   = $('input[name="genotype"]:checked').val();
-    const purity = $('input[name="purity"]:checked').val();   // "" for all
+    const purity = $('input[name="purity"]:checked').val();     // "" for all
     const hideNoCall = $('#exclude-tool-no-call-loci').is(':checked');
 
-    const t = TOOLS[tool];
     let name = "tool_accuracy_by_true_allele_size";
     name += "." + motif;
     name += "." + geno;
-    name += "." + cov + "x";
+    name += "." + cov;
     if (purity) name += ".purity_" + purity;
     if (hideNoCall) name += ".exclude_no_call_loci";
-    name += "." + t.fileToken;
+    name += "." + tool;
     name += ".svg";
 
-    return `${BASE_URL}/${dtype}/${t.dir}/${cov}x_coverage/${name}`;
+    return `${BASE_URL}/${dtype}/${tool}/${cov}_coverage/${name}`;
 }
 
 // ----------------------------------------------------------------------------
-// Cascading radio rendering: Tool -> Sequencing data -> Coverage.
+// Cascading radio rendering: Sequencing technology -> Tool / Coverage.
 // Motif / Genotype / Purity are static.
 // ----------------------------------------------------------------------------
 function radio(name, value, label, checked) {
@@ -211,18 +239,18 @@ function radio(name, value, label, checked) {
          + `<input type="radio" name="${name}" value="${value}" ${checked?'checked':''}>`
          + `<label>${label}</label></div></span>`;
 }
-function checkedVal(name) { return $(`input[name="${name}"]:checked`).val(); }
+function currentDataType() { return $('#datatype-select').val(); }
 
-function renderTools() {
-    $('#tool-radios').html(Object.keys(TOOLS).map((k,i)=>radio("tool",k,TOOLS[k].label,i===0)).join(''));
-}
 function renderDataTypes() {
-    const dts = Object.keys(TOOLS[checkedVal("tool")].dataTypes);
-    $('#datatype-radios').html(dts.map((d,i)=>radio("datatype",d,DATATYPE_LABELS[d]||d,i===0)).join(''));
+    $('#datatype-select').html(Object.keys(DATA_TYPES).map(d=>`<option value="${d}">${DATA_TYPES[d].label}</option>`).join(''));
+}
+function renderTools() {
+    const tools = DATA_TYPES[currentDataType()].tools;
+    $('#tool-radios').html(tools.map((t,i)=>radio("tool",t,TOOL_LABELS[t]||t,i===0)).join(''));
 }
 function renderCoverages() {
-    const covs = TOOLS[checkedVal("tool")].dataTypes[checkedVal("datatype")];
-    $('#coverage-radios').html(covs.map((c,i)=>radio("coverage",c.cov,c.label,i===0)).join(''));
+    const covs = DATA_TYPES[currentDataType()].coverages;
+    $('#coverage-radios').html(covs.map((c,i)=>radio("coverage",c.tok,c.label,i===0)).join(''));
 }
 function renderStatic() {
     $('#motif-radios').html(MOTIFS.map((m,i)=>radio("motif",m.token,m.label,i===6)).join(''));      // default 2-6bp
@@ -236,24 +264,21 @@ function refreshImage() {
     $('#plot').attr('src', url).attr('alt', url);
 }
 
-// rebuild downstream radios when an upstream facet changes, then refresh image
-function onToolChange()     { renderDataTypes(); renderCoverages(); refreshImage(); }
-function onDataTypeChange() { renderCoverages(); refreshImage(); }
+// rebuild downstream radios when the technology changes, then refresh image
+function onDataTypeChange() { renderTools(); renderCoverages(); refreshImage(); }
 
 $(function() {
-    renderTools(); renderStatic(); renderDataTypes(); renderCoverages();
+    renderDataTypes(); renderStatic(); renderTools(); renderCoverages();
     $('.ui.checkbox').checkbox();
 
-    $(document).on('change', 'input[name="tool"]',     onToolChange);
-    $(document).on('change', 'input[name="datatype"]', onDataTypeChange);
-    $(document).on('change', 'input[name="coverage"],input[name="motif"],input[name="genotype"],input[name="purity"],#exclude-tool-no-call-loci', refreshImage);
+    $('#datatype-select').on('change', onDataTypeChange);
+    $(document).on('change', 'input[name="tool"],input[name="coverage"],input[name="motif"],input[name="genotype"],input[name="purity"],#exclude-tool-no-call-loci', refreshImage);
 
     // prev / next arrows step through the radios of the matching group
     $(document).on('click', '.prev-button,.next-button', function(e) {
         e.preventDefault();
         const dir  = this.id.startsWith('next') ? 1 : -1;
-        const name = this.id.replace(/^(next|prev)-/, '')
-                            .replace('datatype','datatype').replace('motif','motif').replace('tool','tool');
+        const name = this.id.replace(/^(next|prev)-/, '');
         const btns = [...document.querySelectorAll(`input[name="${name}"]`)];
         if (!btns.length) return;
         let cur = btns.findIndex(b=>b.checked);
