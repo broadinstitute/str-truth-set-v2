@@ -78,14 +78,6 @@
                 </div>
             </li>
             <li>
-                <span class="facet-label">Tool:</span>
-                <span class="navlinks">[<a class="prev-button" id="prev-tool" href="#">←</a> <a class="next-button" id="next-tool" href="#">→</a>]</span>
-                <span id="tool-radios"></span>
-                <span style="padding-left:15px">
-                    <span class="ui checkbox"><input type="checkbox" id="exclude-tool-no-call-loci" name="exclude-tool-no-call-loci"><label>Hide "No Call" loci</label></span>
-                </span>
-            </li>
-            <li>
                 <span class="facet-label">Coverage:</span>
                 <span class="navlinks">[<a class="prev-button" id="prev-coverage" href="#">←</a> <a class="next-button" id="next-coverage" href="#">→</a>]</span>
                 <span id="coverage-radios"></span>
@@ -109,6 +101,14 @@
                 <span class="facet-label">Chromosome:</span>
                 <span class="navlinks">[<a class="prev-button" id="prev-chrom" href="#">←</a> <a class="next-button" id="next-chrom" href="#">→</a>]</span>
                 <span id="chrom-radios"></span>
+            </li>
+            <li>
+                <span class="facet-label">Tool:</span>
+                <span class="navlinks">[<a class="prev-button" id="prev-tool" href="#">←</a> <a class="next-button" id="next-tool" href="#">→</a>]</span>
+                <span id="tool-radios"></span>
+                <span style="padding-left:15px">
+                    <span class="ui checkbox"><input type="checkbox" id="exclude-tool-no-call-loci" name="exclude-tool-no-call-loci"><label>Hide "No Call" loci</label></span>
+                </span>
             </li>
         </ul>
     </div>
@@ -148,7 +148,8 @@ const TOOL_LABELS = {
     "EHv5-bw2-optimized": "EHv5 (optimized-streaming)",
     GangSTR:              "GangSTR",
     HipSTR:               "HipSTR",
-    TRGT:                 "TRGT",
+    TRGTv3:               "TRGT v3.0.0",
+    TRGTv5:               "TRGT v5.0.0",
     LongTR:               "LongTR",
     inquiSTR:             "inquiSTR",
     vamos:                "vamos",
@@ -189,17 +190,17 @@ const DATA_TYPES = {
     },
     pacbio: {
         label: "PacBio",
-        tools: ["TRGT", "inquiSTR", "LongTR", "vamos"],
+        tools: ["TRGTv3", "TRGTv5", "inquiSTR", "LongTR", "vamos"],
         coverages: [{tok:"37x",label:"37x"},{tok:"30x",label:"30x"},{tok:"20x",label:"20x"},{tok:"8x",label:"8x"}],
     },
     ONT: {
         label: "ONT",
-        tools: ["TRGT", "inquiSTR", "LongTR", "vamos"],
+        tools: ["TRGTv3", "TRGTv5", "inquiSTR", "LongTR", "vamos"],
         coverages: [{tok:"26x",label:"26x"},{tok:"20x",label:"20x"},{tok:"8x",label:"8x"}],
     },
     pacbio_isoseq: {
         label: "PacBio Iso-Seq",
-        tools: ["TRGT", "inquiSTR", "LongTR"],
+        tools: ["TRGTv3", "TRGTv5", "inquiSTR", "LongTR"],
         coverages: [{tok:"9G",label:"9G"}],
     },
 };

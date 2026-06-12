@@ -11,15 +11,16 @@ import collections
 import hailtop.fs as hfs
 import os
 import pandas as pd
+import re
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 import sys
 
 sys.path.append("../str-truth-set/tool_comparison/hail_batch_pipelines")
-from expansion_hunter_pipeline import create_expansion_hunter_steps
+from expansion_hunter_pipeline import create_expansion_hunter_steps, DOCKER_IMAGE as EH_DOCKER_IMAGE
 from gangstr_pipeline import create_gangstr_steps
 from hipstr_pipeline import create_hipstr_steps
 from constrain_pipeline import create_constrain_step
-from trgt_pipeline import create_trgt_step
+from trgt_pipeline import create_trgt_step, DOCKER_IMAGE as TRGT_V5_DOCKER_IMAGE, TRGT_V3_DOCKER_IMAGE
 from longtr_pipeline import create_longtr_steps
 from inquistr_pipeline import create_inquistr_steps
 from vamos_pipeline import create_vamos_step
@@ -35,7 +36,8 @@ SHORT_READ_TOOLS = {
 }
 
 LONG_READ_TOOLS = {
-    "TRGT",
+    "TRGTv3",
+    "TRGTv5",
     "LongTR",
     "inquiSTR",
     "vamos",
@@ -75,7 +77,7 @@ RNASEQ_DATA_TYPES = {
 REFERENCE_FASTA_PATH = "gs://str-truth-set/hg38/ref/hg38.fa"
 REFERENCE_FASTA_FAI_PATH = "gs://str-truth-set/hg38/ref/hg38.fa.fai"
 
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:1ff43876d5102ccc403225912fb988dfe025e6162b7d79e8b8566b78a6731b6d"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:251400db5cc8837029e8ecfcb6bdd525f6a7e84c03516769dd05e8e58fe78cc8"
 
 DEFAULT_OUTPUT_DIR = "gs://str-truth-set-v2/tool_results"
 
@@ -101,7 +103,7 @@ def main():
     args = bp.parse_known_args()
 
     if not args.tool:
-        args.tool = ["TRGT"]
+        args.tool = ["TRGTv5"]
     if not args.data_type:
         args.data_type = ["pacbio"]
 
@@ -117,9 +119,15 @@ def main():
         parser.error("--custom-catalog-path is set without also setting --output-dir")
 
     bp.precache_file_paths(os.path.join(args.output_dir, "**/*.*"))
+    # precache the prefiltered IlluminaEHv5 catalog(s) so the prefilter step is skipped once it already exists
+    bp.precache_file_paths(os.path.join(args.filter_vcf_dir, "**/*.without_loci_with_flanking_Ns.json"))
 
 
     download_to_dir = "../results"
+
+    # IlluminaEHv5 prefilter steps, keyed by source EHv5 catalog path so the catalog is filtered once and the step
+    # is reused across all IlluminaEHv5 data types/coverages; values are (step, filtered_catalog_path) tuples.
+    illumina_eh_prefilter_steps = {}
 
     for row_i, (_, row) in enumerate(df.iterrows()):
         if args.filename_keyword:
@@ -169,6 +177,10 @@ def main():
                 # unsharded catalog for EHv5/EHv5-bw2-optimized and the sharded catalog(s) for IlluminaEHv5
                 repeat_catalog_paths = os.path.join(args.filter_vcf_dir, row.sample_id,
                     f"{row.sample_id}.EHv5*")
+            elif tool in ("TRGTv3", "TRGTv5"):
+                # both TRGT versions read the same TRGT BED catalog ({sample_id}.TRGT*)
+                repeat_catalog_paths = os.path.join(args.filter_vcf_dir, row.sample_id,
+                    f"{row.sample_id}.TRGT*")
             else:
                 catalog_path_suffix = tool
 
@@ -192,13 +204,25 @@ def main():
                 else:  # IlluminaEHv5
                     analysis_mode = "streaming"
 
+                catalog_prefilter_step = None
                 if args.custom_catalog_path:
                     variant_catalog_file_paths = repeat_catalog_paths
                 elif tool == "IlluminaEHv5":
-                    # the unoptimized official build runs over the sharded catalogs (one parallel step per shard);
-                    # fall back to the unsharded catalog if the converter only wrote a single shard
-                    variant_catalog_file_paths = [p for p in repeat_catalog_paths if "001_of_001" not in p] \
-                        or repeat_catalog_paths
+                    # The official Illumina ExpansionHunter build aborts on the first catalog locus with >5 Ns in its
+                    # +/-1000bp flanks ("Flanks can contain at most 5 characters N but found x Ns"); the bw2 fork
+                    # tolerates them. So prefilter the single unsharded EHv5 catalog to drop those loci before
+                    # genotyping. The prefilter step is built once per source catalog (cached in
+                    # illumina_eh_prefilter_steps) and reused across all IlluminaEHv5 data types/coverages.
+                    source_eh_catalog_path = next(p for p in repeat_catalog_paths if "001_of_001" in p)
+                    if source_eh_catalog_path not in illumina_eh_prefilter_steps:
+                        illumina_eh_prefilter_steps[source_eh_catalog_path] = create_illumina_eh_catalog_prefilter_step(
+                            bp,
+                            eh_catalog_path=source_eh_catalog_path,
+                            reference_fasta=REFERENCE_FASTA_PATH,
+                            reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
+                            output_dir=os.path.join(args.filter_vcf_dir, row.sample_id))
+                    catalog_prefilter_step, filtered_catalog_path = illumina_eh_prefilter_steps[source_eh_catalog_path]
+                    variant_catalog_file_paths = [filtered_catalog_path]
                 else:
                     # the streaming EHv5 / EHv5-bw2-optimized variants use the single unsharded catalog
                     variant_catalog_file_paths = [p for p in repeat_catalog_paths if "001_of_001" in p]
@@ -217,8 +241,10 @@ def main():
                     loci_to_exclude=None,
                     min_locus_coverage=None,
                     use_illumina_expansion_hunter=use_illumina_expansion_hunter,
+                    # IlluminaEHv5 genotypes the single prefiltered catalog and must wait for the prefilter step
+                    catalog_prefilter_step=catalog_prefilter_step,
                     # EHv5/EHv5-bw2-optimized stream single-threaded, so split the catalog into EHV5_NUM_SHARDS
-                    # parallel 1-cpu jobs (no-op for IlluminaEHv5, which file-shards via its own catalogs)
+                    # parallel 1-cpu jobs (no-op for IlluminaEHv5, which genotypes one prefiltered catalog)
                     num_shards=EHV5_NUM_SHARDS)
             elif tool == "GangSTR":
                 current_step = create_gangstr_steps(
@@ -255,7 +281,7 @@ def main():
                     output_prefix=f"{row.sample_id}.{tool}",
                     cpu=1,
                 )
-            elif tool == "TRGT":
+            elif tool in ("TRGTv3", "TRGTv5"):
                 current_step = create_trgt_step(
                     bp,
                     reference_fasta=REFERENCE_FASTA_PATH,
@@ -266,7 +292,8 @@ def main():
                     trgt_catalog_bed_paths=repeat_catalog_paths,
                     parse_reference_region_from_locus_id=True,
                     output_dir=output_dir,
-                    output_prefix= f"{row.sample_id}.{tool}")
+                    output_prefix= f"{row.sample_id}.{tool}",
+                    docker_image=TRGT_V3_DOCKER_IMAGE if tool == "TRGTv3" else TRGT_V5_DOCKER_IMAGE)
             elif tool == "LongTR":
                 current_step = create_longtr_steps(
                     bp,
@@ -331,6 +358,58 @@ def main():
                 sample_id=row.sample_id,
                 output_dir=output_dir)
     bp.run()
+
+
+def create_illumina_eh_catalog_prefilter_step(bp, *, eh_catalog_path, reference_fasta, reference_fasta_fai, output_dir):
+    """Build a step that drops loci with >5 Ns in their flanks from an ExpansionHunter catalog, for IlluminaEHv5.
+
+    The official Illumina ExpansionHunter v5 build aborts on the first catalog locus with more than 5 Ns in its
+    +/-1000bp flanks ("Flanks can contain at most 5 characters N but found x Ns"), while the bw2 fork tolerates them.
+    str_analysis.filter_out_loci_with_Ns_in_flanks scans each locus's +/-1000bp reference flanks (the EH default
+    --region-extension-length) and writes a catalog with the offending loci removed. The official build can't read a
+    gzipped catalog, so the filtered catalog is written as plain .json.
+
+    Args:
+        bp: the step_pipeline pipeline object.
+        eh_catalog_path: gs:// path of the source ExpansionHunter (EHv5) variant catalog json.
+        reference_fasta: gs:// path of the reference fasta (used to read each locus's flanking sequence).
+        reference_fasta_fai: gs:// path of the reference fasta .fai index.
+        output_dir: directory to write the filtered catalog into (the filter_vcf dir, so it is reused across runs).
+
+    Returns:
+        A (step, filtered_catalog_path) tuple. filtered_catalog_path is the plain-json catalog the IlluminaEHv5
+        genotyping step should read; the genotyping step must depend on the returned step.
+    """
+    filtered_catalog_filename = re.sub(r"\.json(\.gz)?$", "", os.path.basename(eh_catalog_path)) + \
+        ".without_loci_with_flanking_Ns.json"
+    filtered_loci_filename = filtered_catalog_filename.replace(".json", ".filtered_loci.txt")
+    filtered_catalog_path = os.path.join(output_dir, filtered_catalog_filename)
+
+    # the EH image (weisburd/str-analysis-with-expansion-hunter, pinned by digest) bakes in str_analysis, so the
+    # filter runs reproducibly without a runtime pip install
+    step = bp.new_step(
+        name=f"Prefilter EHv5 catalog (drop flanking-N loci) for IlluminaEHv5: {os.path.basename(eh_catalog_path)}",
+        arg_suffix="prefilter-illumina-eh-catalog-step",
+        image=EH_DOCKER_IMAGE,
+        cpu=2,
+        memory="standard",
+        storage="20Gi",
+        localize_by=Localize.GSUTIL_COPY,
+        output_dir=output_dir)
+    step.command("set -ex")
+    local_fasta = step.input(reference_fasta)
+    step.input(reference_fasta_fai)
+    local_catalog = step.input(eh_catalog_path)
+    step.command(
+        f"python3 -m str_analysis.filter_out_loci_with_Ns_in_flanks "
+        f"-R {local_fasta} --region-extension-length 1000 "
+        f"-o {filtered_catalog_filename} "
+        f"-f {filtered_loci_filename} "
+        f"{local_catalog}")
+    step.command("ls -lhrt")
+    step.output(filtered_catalog_filename)
+    step.output(filtered_loci_filename)
+    return step, filtered_catalog_path
 
 
 def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage_label, sample_id, output_dir, truth_set_genotypes_path, tool2="Truth", download_to_dir=None):
