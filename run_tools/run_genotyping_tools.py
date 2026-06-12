@@ -75,7 +75,7 @@ RNASEQ_DATA_TYPES = {
 REFERENCE_FASTA_PATH = "gs://str-truth-set/hg38/ref/hg38.fa"
 REFERENCE_FASTA_FAI_PATH = "gs://str-truth-set/hg38/ref/hg38.fa.fai"
 
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:ceea479fcadac72813986411be2fc50549a4e80e3a47f97d431e3a68330956e4"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:1ff43876d5102ccc403225912fb988dfe025e6162b7d79e8b8566b78a6731b6d"
 
 DEFAULT_OUTPUT_DIR = "gs://str-truth-set-v2/tool_results"
 
@@ -430,6 +430,21 @@ def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage_labe
             "--show-title "
             f"{local_alleles_tsv} ")
         plot_tool_accuracy_step.command("ls -lhrt")
+
+    # Also generate the unstratified "all motif sizes" plot (".all_motifs", surfaced as the "all" bin in the viewer)
+    # by running the script in its default mode with no --min/--max-motif-size. That mode also emits a few default-bin
+    # svgs (.2bp_motifs/.3to6bp_motifs/.7to24bp_motifs/.25to50bp_motifs) whose tokens the viewer doesn't use — harmless
+    # extras captured by the same wildcard output below.
+    plot_tool_accuracy_step.command(
+        f"python3 -u /str-truth-set/figures_and_tables/plot_tool_accuracy_by_allele_size.py "
+        "--verbose "
+        f"--tool {tool} "
+        f"--coverage {coverage_label} "
+        "--q-threshold 0 "
+        "--image-type svg "
+        "--show-title "
+        f"{local_alleles_tsv} ")
+    plot_tool_accuracy_step.command("ls -lhrt")
 
     # gzip each svg in place (keeping the .svg name) and serve it with the right content headers. The plots are
     # uploaded with a wildcard via gcloud storage cp (Delocalize.GSUTIL_COPY), since Delocalize.COPY needs an explicit
