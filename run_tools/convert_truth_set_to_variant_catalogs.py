@@ -95,7 +95,7 @@ def write_expansion_hunter_variant_catalogs(locus_set, output_path_prefix, loci_
     """
     variant_catalog = []
     for unmodified_chrom, start_0based, end_1based, motif in sorted(
-            locus_set, key=lambda x: compute_canonical_motif(x[3], include_reverse_complement=True)):
+            locus_set, key=lambda x: (compute_canonical_motif(x[3], include_reverse_complement=True), x)):
         chrom = unmodified_chrom.replace("chr", "")
         variant_catalog.append({
             "LocusId": f"{chrom}-{start_0based}-{end_1based}-{motif}",
