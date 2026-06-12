@@ -12,16 +12,18 @@
 
   Form controls mirror what the pipeline actually emits (run_genotyping_tools.py
   + str-truth-set/figures_and_tables/plot_tool_accuracy_by_allele_size.py):
-    Sequencing technology — every data type the pipeline processes (8)
+    Individual            — the sample being genotyped (HG002 / CHM1_CHM13)
+    Sequencing technology — data types sequenced for the chosen individual (from the sample table)
     Tool                  — genotyping tools compatible with the chosen technology
-    Coverage              — depths for the chosen technology (from the sample table)
+    Coverage              — depths for the chosen individual + technology (from the sample table)
     Motif size            — run_genotyping_tools.py MOTIF_SIZE_BINS (9 bins)
     Genotype              — all / HET / HOM (the plot script's genotype_subset loop)
     Purity                — all + plot_tool_accuracy_by_allele_size.py PURITY_BINS (5 bins)
     Hide "No Call" loci   — .exclude_no_call_loci filename variant
 
-  Hierarchy is technology -> tool -> coverage: tool compatibility and the coverage
-  list both depend on the technology, so it is the top facet.
+  Hierarchy is individual -> technology -> tool / coverage: the available technologies
+  (and their coverages) depend on the individual, and tool compatibility depends on the
+  technology, so selecting an individual rebuilds the technology / tool / coverage facets.
 
   NOT included (the plot step no longer emits these stratifications):
     Q threshold      (pipeline forces --q-threshold 0)
@@ -44,12 +46,9 @@
         .navlinks { min-width: 70px; display: inline-block; vertical-align: middle; }
         /* match Semantic's ".ui.form .field" specificity so our spacing wins (it zeroes margin-right) */
         .ui.form .field { display: inline-block; margin: 0 20px 0 0; vertical-align: middle; }
-        /* Semantic selection dropdowns for the individual + technology selectors (styled menu + group headers/divider) */
-        #sample-dropdown, #datatype-dropdown { vertical-align: middle; }
-        /* fixed width so the individual dropdown doesn't resize between "HG002 (male)" and "CHM1_CHM13 (female)" */
-        #sample-dropdown { width: 16em; }
-        #datatype-dropdown { min-width: 13em; }
-        .inline-label { font-weight: bold; margin-left: 30px; margin-right: 8px; vertical-align: middle; }
+        /* Semantic selection dropdown for the individual selector (styled menu + group headers/divider) */
+        /* fixed width so it doesn't resize between "HG002 (male)" and "CHM1_CHM13 (female)" */
+        #sample-dropdown { vertical-align: middle; width: 16em; }
         .muted { color: #999; margin-left: 10px; }
         #plot-wrap { margin-top: 10px; }
         #plot-status { color: #b00; padding: 8px 0; min-height: 1.2em; font-size: 15px; }
@@ -69,13 +68,19 @@
                     <div class="text"></div>
                     <div class="menu"></div>
                 </div>
-                <span class="inline-label">Sequencing technology:</span>
-                <div class="ui selection dropdown" id="datatype-dropdown">
-                    <input type="hidden" name="datatype">
-                    <i class="dropdown icon"></i>
-                    <div class="text"></div>
-                    <div class="menu"></div>
-                </div>
+            </li>
+            <li>
+                <span class="facet-label">Sequencing Tech:</span>
+                <span class="navlinks">[<a class="prev-button" id="prev-datatype" href="#">←</a> <a class="next-button" id="next-datatype" href="#">→</a>]</span>
+                <span id="datatype-radios"></span>
+            </li>
+            <li>
+                <span class="facet-label">Tool:</span>
+                <span class="navlinks">[<a class="prev-button" id="prev-tool" href="#">←</a> <a class="next-button" id="next-tool" href="#">→</a>]</span>
+                <span id="tool-radios"></span>
+                <span style="padding-left:15px">
+                    <span class="ui checkbox"><input type="checkbox" id="exclude-tool-no-call-loci" name="exclude-tool-no-call-loci"><label>Hide "No Call" loci</label></span>
+                </span>
             </li>
             <li>
                 <span class="facet-label">Coverage:</span>
@@ -88,27 +93,23 @@
                 <span id="motif-radios"></span>
             </li>
             <li>
-                <span class="facet-label">Genotype:</span>
-                <span class="navlinks">[<a class="prev-button" id="prev-genotype" href="#">←</a> <a class="next-button" id="next-genotype" href="#">→</a>]</span>
-                <span id="genotype-radios"></span>
-            </li>
-            <li>
                 <span class="facet-label">Purity (truth allele):</span>
                 <span class="navlinks">[<a class="prev-button" id="prev-purity" href="#">←</a> <a class="next-button" id="next-purity" href="#">→</a>]</span>
                 <span id="purity-radios"></span>
+            </li>
+            <li>
+                <span class="facet-label">Genotype:</span>
+                <span class="navlinks">[<a class="prev-button" id="prev-genotype" href="#">←</a> <a class="next-button" id="next-genotype" href="#">→</a>]</span>
+                <span id="genotype-radios"></span>
             </li>
             <li>
                 <span class="facet-label">Chromosome:</span>
                 <span class="navlinks">[<a class="prev-button" id="prev-chrom" href="#">←</a> <a class="next-button" id="next-chrom" href="#">→</a>]</span>
                 <span id="chrom-radios"></span>
             </li>
-            <li>
-                <span class="facet-label">Tool:</span>
-                <span class="navlinks">[<a class="prev-button" id="prev-tool" href="#">←</a> <a class="next-button" id="next-tool" href="#">→</a>]</span>
-                <span id="tool-radios"></span>
-                <span style="padding-left:15px">
-                    <span class="ui checkbox"><input type="checkbox" id="exclude-tool-no-call-loci" name="exclude-tool-no-call-loci"><label>Hide "No Call" loci</label></span>
-                </span>
+            <li id="ranking-li">
+                <span class="facet-label">Accuracy (% green):</span>
+                <span id="ranking-row" style="vertical-align:middle"></span>
             </li>
         </ul>
     </div>
@@ -133,11 +134,32 @@
 // ----------------------------------------------------------------------------
 const BASE_URL = "https://storage.googleapis.com/str-truth-set-v2/tool_results";
 
-// Samples. NOTE: only HG002 is currently genotyped by the pipeline; CHM1_CHM13 is
-// listed for completeness but has no plots yet (selecting it shows "no plot yet").
+// Samples. Each lists the sequencing technologies sequenced for that individual and the
+// coverages available for each (from HPRC_all_aligned_short_read_and_long_read_samples.tsv,
+// filtered to sample_id in {HG002, CHM1_CHM13} per run_genotyping_tools.py). Selecting an
+// individual rebuilds the technology radios — and therefore the tool/coverage lists — to
+// match. cov tok is int(round(depth_of_coverage)) + "x", or "{N}G" for RNA-seq data types
+// (illumina_rnaseq, pacbio_isoseq); it is used both in the filename and the path.
 const SAMPLES = [
-    { id: "HG002",      label: 'HG002 <span class="muted">(male)</span>' },
-    { id: "CHM1_CHM13", label: 'CHM1_CHM13 <span class="muted">(female)</span>' },
+    { id: "HG002", label: 'HG002 <span class="muted">(male)</span>',
+      coverages: {
+        illumina:        [{tok:"31x",label:"31x"},{tok:"20x",label:"20x"},{tok:"10x",label:"10x"}],
+        illumina_exome:  [{tok:"3x",label:"exome (3x)"}],
+        element:         [{tok:"30x",label:"30x"}],
+        ultima:          [{tok:"36x",label:"36x"}],
+        illumina_rnaseq: [{tok:"24G",label:"24G"}],
+        pacbio:          [{tok:"37x",label:"37x"},{tok:"30x",label:"30x"},{tok:"20x",label:"20x"},{tok:"8x",label:"8x"}],
+        ONT:             [{tok:"26x",label:"26x"},{tok:"20x",label:"20x"},{tok:"8x",label:"8x"}],
+        pacbio_isoseq:   [{tok:"9G",label:"9G"}],
+      },
+    },
+    { id: "CHM1_CHM13", label: 'CHM1_CHM13 <span class="muted">(female)</span>',
+      coverages: {
+        illumina:       [{tok:"46x",label:"46x"}],
+        illumina_exome: [{tok:"3x",label:"exome (3x)"}],
+        pacbio:         [{tok:"30x",label:"30x"}],
+      },
+    },
 ];
 
 // dir == fileToken == the --tool string the pipeline passes to the plot script.
@@ -155,58 +177,25 @@ const TOOL_LABELS = {
     vamos:                "vamos",
 };
 
-// Sequencing technology (== sequencing_data_type) -> {
-//   label, tools (compatible genotyping tools), coverages [{tok, label}] }.
-// Tool compatibility mirrors run_genotyping_tools.py (SHORT_READ/LONG_READ tool &
-// data-type sets, plus the GangSTR/IlluminaEHv5 illumina-only and vamos no-Iso-Seq rules).
-// cov tok is int(round(depth_of_coverage)) with an "x" suffix for genome data, or
-// "{N}G" for RNA-seq (total Gbp); it is used both in the filename (".{tok}.") and the
-// path ("{tok}_coverage/").
+// Sequencing technology (== sequencing_data_type) -> { label, tools (compatible
+// genotyping tools) }. Tool compatibility is data-type-intrinsic (same for every
+// individual) and mirrors run_genotyping_tools.py (SHORT_READ/LONG_READ tool &
+// data-type sets, plus the GangSTR/IlluminaEHv5 illumina-only and vamos no-Iso-Seq
+// rules). Which technologies (and their coverages) a given individual actually has
+// lives in SAMPLES above.
 const DATA_TYPES = {
-    illumina: {
-        label: "Illumina",
-        tools: ["IlluminaEHv5", "EHv5", "EHv5-bw2-optimized", "GangSTR", "HipSTR"],
-        coverages: [{tok:"31x",label:"31x"},{tok:"20x",label:"20x"},{tok:"10x",label:"10x"}],
-    },
-    illumina_exome: {
-        label: "Illumina Exome",
-        tools: ["IlluminaEHv5", "EHv5", "EHv5-bw2-optimized", "GangSTR", "HipSTR"],
-        coverages: [{tok:"3x",label:"exome (3x)"}],
-    },
-    element: {
-        label: "Element",
-        tools: ["EHv5", "EHv5-bw2-optimized", "HipSTR"],
-        coverages: [{tok:"30x",label:"30x"}],
-    },
-    ultima: {
-        label: "Ultima",
-        tools: ["EHv5", "EHv5-bw2-optimized", "HipSTR"],
-        coverages: [{tok:"36x",label:"36x"}],
-    },
-    illumina_rnaseq: {
-        label: "Illumina RNA-seq",
-        tools: ["EHv5", "EHv5-bw2-optimized", "HipSTR"],
-        coverages: [{tok:"24G",label:"24G"}],
-    },
-    pacbio: {
-        label: "PacBio",
-        tools: ["TRGTv3", "TRGTv5", "inquiSTR", "LongTR", "vamos"],
-        coverages: [{tok:"37x",label:"37x"},{tok:"30x",label:"30x"},{tok:"20x",label:"20x"},{tok:"8x",label:"8x"}],
-    },
-    ONT: {
-        label: "ONT",
-        tools: ["TRGTv3", "TRGTv5", "inquiSTR", "LongTR", "vamos"],
-        coverages: [{tok:"26x",label:"26x"},{tok:"20x",label:"20x"},{tok:"8x",label:"8x"}],
-    },
-    pacbio_isoseq: {
-        label: "PacBio Iso-Seq",
-        tools: ["TRGTv3", "TRGTv5", "inquiSTR", "LongTR"],
-        coverages: [{tok:"9G",label:"9G"}],
-    },
+    illumina:        { label: "Illumina Genome", tools: ["EHv5-bw2-optimized", "EHv5", "IlluminaEHv5", "GangSTR", "HipSTR"] },
+    illumina_exome:  { label: "Illumina Exome",  tools: ["EHv5-bw2-optimized", "EHv5", "IlluminaEHv5", "GangSTR", "HipSTR"] },
+    element:         { label: "Element",         tools: ["EHv5-bw2-optimized", "EHv5", "HipSTR"] },
+    ultima:          { label: "Ultima",          tools: ["EHv5-bw2-optimized", "EHv5", "HipSTR"] },
+    illumina_rnaseq: { label: "Illumina RNA-seq",tools: ["EHv5-bw2-optimized", "EHv5", "HipSTR"] },
+    pacbio:          { label: "PacBio HiFi",     tools: ["TRGTv5", "TRGTv3", "inquiSTR", "LongTR", "vamos"] },
+    ONT:             { label: "ONT",             tools: ["TRGTv5", "TRGTv3", "inquiSTR", "LongTR", "vamos"] },
+    pacbio_isoseq:   { label: "PacBio Iso-Seq",  tools: ["TRGTv5", "TRGTv3", "inquiSTR", "LongTR"] },
 };
 
-// Dropdown grouping: short-read vs long-read sequencing technologies, with a header
-// per group and a divider between them.
+// Ordering for the technology radios: short-read technologies first, then long-read.
+// availableDataTypes() walks this order and keeps only the ones the current individual has.
 const DATATYPE_GROUPS = [
     ["Short read", ["illumina", "illumina_exome", "illumina_rnaseq", "element", "ultima"]],
     ["Long read",  ["pacbio", "ONT", "pacbio_isoseq"]],
@@ -266,23 +255,25 @@ function buildImageUrl() {
     const dtype  = currentDataType();
     const tool   = $('input[name="tool"]:checked').val();
     const cov    = $('input[name="coverage"]:checked').val();   // exact token, e.g. "26x" / "24G"
+    const name = "tool_accuracy_by_true_allele_size." + buildBinKey() + "." + tool + ".svg";
+    return `${BASE_URL}/${currentSample()}/${dtype}/${tool}/${cov}_coverage/${name}`;
+}
+
+// The bin portion of the filename (everything between the "tool_accuracy_by_true_allele_size." prefix and the
+// ".{tool}.svg" suffix). Doubles as the lookup key into rankings.json — run_tools/generate_tool_ranking_json.py
+// builds the identical string — so the per-bin ranking row matches the plotted "% exactly right".
+function buildBinKey() {
+    const cov    = $('input[name="coverage"]:checked').val();
     const motif  = $('input[name="motif"]:checked').val();
     const geno   = $('input[name="genotype"]:checked').val();
     const purity = $('input[name="purity"]:checked').val();     // "" for all
     const chrom  = $('input[name="chrom"]:checked').val();      // "" for all
     const hideNoCall = $('#exclude-tool-no-call-loci').is(':checked');
-
-    let name = "tool_accuracy_by_true_allele_size";
-    name += "." + motif;
-    name += "." + geno;
-    name += "." + cov;
-    if (purity) name += ".purity_" + purity;
-    if (chrom)  name += "." + chrom;
-    if (hideNoCall) name += ".exclude_no_call_loci";
-    name += "." + tool;
-    name += ".svg";
-
-    return `${BASE_URL}/${currentSample()}/${dtype}/${tool}/${cov}_coverage/${name}`;
+    let key = motif + "." + geno + "." + cov;
+    if (purity) key += ".purity_" + purity;
+    if (chrom)  key += "." + chrom;
+    if (hideNoCall) key += ".exclude_no_call_loci";
+    return key;
 }
 
 // ----------------------------------------------------------------------------
@@ -294,21 +285,26 @@ function radio(name, value, label, checked) {
          + `<input type="radio" name="${name}" value="${value}" ${checked?'checked':''}>`
          + `<label>${label}</label></div></span>`;
 }
-function currentSample()   { return $('#sample-dropdown').dropdown('get value'); }
-function currentDataType() { return $('#datatype-dropdown').dropdown('get value'); }
+function currentSample()    { return $('#sample-dropdown').dropdown('get value'); }
+function currentSampleObj() { return SAMPLES.find(s=>s.id===currentSample()); }
+function currentDataType()  { return $('input[name="datatype"]:checked').val(); }
+
+// Technologies the current individual has, in DATATYPE_GROUPS order (short read then long read).
+function availableDataTypes() {
+    const cov = currentSampleObj().coverages;
+    const out = [];
+    for (const [, keys] of DATATYPE_GROUPS) for (const k of keys) if (cov[k]) out.push(k);
+    return out;
+}
 
 function renderSamples() {
     $('#sample-dropdown .menu').html(SAMPLES.map(s=>`<div class="item" data-value="${s.id}">${s.label}</div>`).join(''));
 }
 
 function renderDataTypes() {
-    let html = "";
-    for (const [header, keys] of DATATYPE_GROUPS) {
-        if (html) html += `<div class="divider"></div>`;
-        html += `<div class="header">${header}</div>`;
-        html += keys.map(d=>`<div class="item" data-value="${d}">${DATA_TYPES[d].label}</div>`).join('');
-    }
-    $('#datatype-dropdown .menu').html(html);
+    const types = availableDataTypes();
+    $('#datatype-radios').html(types.map((d,i)=>radio("datatype",d,DATA_TYPES[d].label,i===0)).join(''));
+    $('#datatype-radios .ui.checkbox').checkbox();  // re-init: see renderTools
 }
 function renderTools() {
     const tools = DATA_TYPES[currentDataType()].tools;
@@ -316,7 +312,7 @@ function renderTools() {
     $('#tool-radios .ui.checkbox').checkbox();      // re-init: these radios render after the global init in $(...), so clicking a label wouldn't select otherwise
 }
 function renderCoverages() {
-    const covs = DATA_TYPES[currentDataType()].coverages;
+    const covs = currentSampleObj().coverages[currentDataType()];
     $('#coverage-radios').html(covs.map((c,i)=>radio("coverage",c.tok,c.label,i===0)).join(''));
     $('#coverage-radios .ui.checkbox').checkbox();  // re-init: see renderTools
 }
@@ -331,13 +327,93 @@ function refreshImage() {
     const url = buildImageUrl();
     $('#plot-status').text("");
     $('#plot').show().attr('src', url);
+    refreshRanking();
+    writeHash();   // every state change funnels through here, so the URL always mirrors the page
+}
+
+// Per-bin tool ranking row, e.g. "TRGT v3.0.0 (96.2%) > inquiSTR (95.1%), LongTR (95.0%) > vamos (92.8%)".
+// rankings.json (one per individual x technology, written by run_tools/generate_tool_ranking_json.py) maps each
+// bin key to the tools sorted by descending exact-match percent. Fetched lazily and cached per sample/technology.
+const rankingsCache = {};
+
+function renderRankingRow(perBin) {
+    // keep only tools in the current selector (drops any stale/extra bucket dirs); preserve the JSON's desc-pct order
+    const tools = DATA_TYPES[currentDataType()].tools;
+    const entries = (perBin || []).filter(e => tools.includes(e.tool));
+    if (!entries.length) { $('#ranking-row').html('<span class="muted">no data for this bin yet</span>'); return; }
+    let html = "", prev = null;
+    entries.forEach((e, i) => {
+        const pct = e.pct.toFixed(1);                                  // ties (same 1-decimal %) joined by ", ", else " > "
+        html += (i === 0 ? "" : (pct === prev ? ", " : " &gt; ")) + `${TOOL_LABELS[e.tool] || e.tool} (${pct}%)`;
+        prev = pct;
+    });
+    $('#ranking-row').html(html);
+}
+
+function refreshRanking() {
+    const cacheKey = currentSample() + "/" + currentDataType(), binKey = buildBinKey();
+    if (cacheKey in rankingsCache) {
+        renderRankingRow(rankingsCache[cacheKey] && rankingsCache[cacheKey][binKey]);
+        return;
+    }
+    $('#ranking-row').html('<span class="muted">loading…</span>');
+    fetch(`${BASE_URL}/${currentSample()}/${currentDataType()}/rankings.json`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => { rankingsCache[cacheKey] = data; renderRankingRow(data && data[binKey]); })
+        .catch(() => { rankingsCache[cacheKey] = null; renderRankingRow(null); });
 }
 
 // rebuild downstream radios when the technology changes, then refresh image
 function onDataTypeChange() { renderTools(); renderCoverages(); refreshImage(); }
 
+// rebuild the technology radios (and everything downstream) when the individual changes
+function onSampleChange() { renderDataTypes(); onDataTypeChange(); }
+
+// ----------------------------------------------------------------------------
+// Shareable URL state. The whole page state lives in location.hash as concise params, e.g.
+//   #?s=HG002&st=pacbio&t=TRGTv3&c=37x&m=2to6bp&g=all&p=0.65_to_0.75&ch=chrX&nc=1
+// Motif/genotype drop their constant "_motifs"/"all_genotypes" verbosity (m=all, g=HET); "all"
+// purity/chrom (empty radio value) and an unchecked "Hide No Call" box are omitted entirely, so
+// links stay short. writeHash() runs on every refreshImage(); restoreFromHash runs once at load.
+// ----------------------------------------------------------------------------
+function readHash() {
+    const out = {};
+    for (const part of location.hash.replace(/^#\??/, "").split("&")) {
+        if (!part) continue;
+        const eq = part.indexOf("=");
+        out[decodeURIComponent(eq < 0 ? part : part.slice(0, eq))] = eq < 0 ? "" : decodeURIComponent(part.slice(eq + 1));
+    }
+    return out;
+}
+
+function writeHash() {
+    const p = new URLSearchParams();
+    p.set("s",  currentSample());
+    p.set("st", currentDataType());
+    p.set("t",  $('input[name="tool"]:checked').val());
+    p.set("c",  $('input[name="coverage"]:checked').val());
+    p.set("m",  $('input[name="motif"]:checked').val().replace(/_motifs$/, ""));   // 2to6bp_motifs -> 2to6bp
+    const geno = $('input[name="genotype"]:checked').val();
+    p.set("g",  geno === "all_genotypes" ? "all" : geno);                          // all_genotypes -> all
+    const purity = $('input[name="purity"]:checked').val();
+    const chrom  = $('input[name="chrom"]:checked').val();
+    if (purity) p.set("p", purity);
+    if (chrom)  p.set("ch", chrom);
+    if ($('#exclude-tool-no-call-loci').is(':checked')) p.set("nc", "1");
+    history.replaceState(null, "", "#?" + p.toString());   // replaceState: don't spam the back stack on every click
+}
+
+// check the radio in group `name` whose value == value (Semantic 'set checked' also clears its group);
+// returns false if no such option exists (e.g. a shared link's tool isn't valid for the chosen tech).
+function setRadio(name, value) {
+    const el = document.querySelector(`input[name="${name}"][value="${(value || "").replace(/(["\\])/g, "\\$1")}"]`);
+    if (!el) return false;
+    $(el).closest('.ui.checkbox').checkbox('set checked');
+    return true;
+}
+
 $(function() {
-    renderStatic(); renderSamples(); renderDataTypes();
+    renderStatic(); renderSamples();   // technology radios are rendered below, after the individual default is set
     $('.ui.checkbox').checkbox();
 
     // hide the <img> when the SVG 404s (deleted / not yet regenerated) so no broken-image
@@ -348,8 +424,6 @@ $(function() {
         $('#plot').hide();
     });
     $('#plot').on('load', function() { $('#plot').show(); });
-
-    $(document).on('change', 'input[name="tool"],input[name="coverage"],input[name="motif"],input[name="genotype"],input[name="purity"],input[name="chrom"],#exclude-tool-no-call-loci', refreshImage);
 
     // prev / next arrows step through the radios of the matching group
     $(document).on('click', '.prev-button,.next-button', function(e) {
@@ -362,17 +436,33 @@ $(function() {
         btns[(cur + dir + btns.length) % btns.length].click();
     });
 
-    // Init both dropdowns and set their default selections WITHOUT change handlers bound, so neither
-    // 'set selected' fires a premature refreshImage before the other dropdown's value (and the
-    // tool/coverage radios) exist — which would build an image URL with empty/undefined segments.
-    // Then do a single initial render + image load, and only afterwards wire up the change handlers.
+    // Restore page state from the URL hash (falling back to defaults for anything absent). Build the
+    // facet hierarchy top-down — individual -> technology -> tool/coverage — applying each hash value
+    // BEFORE rendering the level below it, so the downstream radios exist by the time they're set. All
+    // of this runs before the change handlers are wired, so the programmatic 'set checked' calls don't
+    // fire premature re-renders (which would, e.g., reset tool/coverage when datatype is set).
+    const init = readHash();
     $('#sample-dropdown').dropdown();
-    $('#datatype-dropdown').dropdown();
-    $('#sample-dropdown').dropdown('set selected', SAMPLES[0].id);                  // default: HG002
-    $('#datatype-dropdown').dropdown('set selected', Object.keys(DATA_TYPES)[0]);   // default: first technology
-    onDataTypeChange();                                                             // render tools/coverages + first image, with both dropdowns set
-    $('#sample-dropdown').dropdown('setting', 'onChange', refreshImage);            // sample change only refreshes the URL
-    $('#datatype-dropdown').dropdown('setting', 'onChange', onDataTypeChange);      // technology change re-renders tools/coverages
+    $('#sample-dropdown').dropdown('set selected',
+        (init.s && SAMPLES.some(s => s.id === init.s)) ? init.s : SAMPLES[0].id);   // default: HG002
+    renderDataTypes();                                       // technology radios for the chosen individual (first checked)
+    if (init.st) setRadio('datatype', init.st);
+    renderTools(); renderCoverages();                        // tool/coverage radios for the chosen technology (first checked)
+    if (init.t) setRadio('tool', init.t);
+    if (init.c) setRadio('coverage', init.c);
+    if (init.m) setRadio('motif', init.m + "_motifs");                                  // m=2to6bp -> 2to6bp_motifs
+    if (init.g) setRadio('genotype', init.g === "all" ? "all_genotypes" : init.g);      // g=all -> all_genotypes
+    setRadio('purity', init.p || "");                        // empty value == the "all" radio
+    setRadio('chrom',  init.ch || "");
+    $('#exclude-tool-no-call-loci').closest('.ui.checkbox')
+        .checkbox(init.nc === "1" ? 'set checked' : 'set unchecked');
+    refreshImage();                                          // first image + ranking; also normalizes the URL via writeHash()
+
+    // Wire change handlers only AFTER restore. Technology change re-renders tools/coverages; everything
+    // else just refreshes the image. Individual (dropdown) change rebuilds technology/tool/coverage.
+    $(document).on('change', 'input[name="datatype"]', onDataTypeChange);
+    $(document).on('change', 'input[name="tool"],input[name="coverage"],input[name="motif"],input[name="genotype"],input[name="purity"],input[name="chrom"],#exclude-tool-no-call-loci', refreshImage);
+    $('#sample-dropdown').dropdown('setting', 'onChange', onSampleChange);
 });
 </script>
 </body>
