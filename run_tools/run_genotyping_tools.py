@@ -47,6 +47,10 @@ LONG_READ_TOOLS = {
 # Motif size bins (min, max) used to stratify the accuracy plots.
 MOTIF_SIZE_BINS = [(1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (2, 6), (7, 24), (25, 1000)]
 
+# EHv5/EHv5-bw2-optimized stream single-threaded; split the catalog into this many parallel 1-cpu jobs
+# (bw2-fork --start-with/--n-loci) to cut wall time ~N-fold at ~constant total cost.
+EHV5_NUM_SHARDS = 10
+
 SHORT_READ_DATA_TYPES = {
     "illumina",
     "illumina_exome",
@@ -212,7 +216,10 @@ def main():
                     analysis_mode=analysis_mode,
                     loci_to_exclude=None,
                     min_locus_coverage=None,
-                    use_illumina_expansion_hunter=use_illumina_expansion_hunter)
+                    use_illumina_expansion_hunter=use_illumina_expansion_hunter,
+                    # EHv5/EHv5-bw2-optimized stream single-threaded, so split the catalog into EHV5_NUM_SHARDS
+                    # parallel 1-cpu jobs (no-op for IlluminaEHv5, which file-shards via its own catalogs)
+                    num_shards=EHV5_NUM_SHARDS)
             elif tool == "GangSTR":
                 current_step = create_gangstr_steps(
                     bp,
