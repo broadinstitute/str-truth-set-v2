@@ -7,7 +7,7 @@ import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
-DOCKER_IMAGE = "weisburd/str-analysis@sha256:ae2500067543ecc08a6319c37a6df136517beb6e3cd53b9b343fcdba3dfaa571"
+DOCKER_IMAGE = "weisburd/str-analysis@sha256:b7b3f53c5b7cd75388ba84f336bc6b4eae2e1cc84afde9f2fd8197114451c1da"
 #DOCKER_IMAGE = "us-central1-docker.pkg.dev/cmg-analysis/docker-repo/str-analysis@sha256:16191eb046706d19f2cc031f06e12c4da65e3e5f2e6d2a606b1aa8331bc2acae"
 
 def parse_args(bp):

@@ -273,7 +273,7 @@ const CHROM_CLASSES = [
 // ----------------------------------------------------------------------------
 // Filename schema (from plot_tool_accuracy_by_allele_size.py output_image_filename):
 //   tool_accuracy_by_true_allele_size
-//     .{motif}_motifs .{genotype} .{cov} [.purity_{p}] [.exclude_no_call_loci] .{tool} .svg
+//     .{motif}_motifs .{genotype} .{cov} [.purity_{p}] [.{chrom}] [.exclude_no_call_loci] .{tool} .svg
 // Q threshold is forced to 0 (no token) and the pure/interrupt split is no longer emitted.
 // ----------------------------------------------------------------------------
 function buildImageUrl() {
