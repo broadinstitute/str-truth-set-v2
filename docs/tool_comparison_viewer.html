@@ -164,7 +164,9 @@ const SAMPLES = [
     { id: "HG002", label: 'HG002 <span class="muted">(male)</span>',
       coverages: {
         illumina:        [{tok:"31x",label:"31x"},{tok:"20x",label:"20x"},{tok:"10x",label:"10x"}],
-        illumina_exome:  [{tok:"3x",label:"exome (3x)"}],
+        // tok stays "3x" (GCS path = 3x_coverage, the genome-wide mean); label shows true on-target mean depth
+        // (130.7x over the IDT xGen v1.0 exome capture targets, measured with samtools bedcov on the WES BAM).
+        illumina_exome:  [{tok:"3x",label:"131x"}],
         element:         [{tok:"30x",label:"30x"}],
         ultima:          [{tok:"36x",label:"36x"}],
         illumina_rnaseq: [{tok:"24G",label:"24G"}],
@@ -176,7 +178,10 @@ const SAMPLES = [
     { id: "CHM1_CHM13", label: 'CHM1_CHM13 <span class="muted">(female)</span>',
       coverages: {
         illumina:       [{tok:"46x",label:"46x"}],
-        illumina_exome: [{tok:"3x",label:"exome (3x)"}],
+        // tok stays "3x" (GCS path = 3x_coverage, genome-wide mean); label is true on-target mean depth
+        // (91.6x, breadth 92.8%) measured over the same consensus coding-exome target as HG002 (IDT xGen v1.0
+        // regions) with samtools bedcov on the Broad Nextera WES CRAM -- Illumina ships the Nextera target on hg19 only.
+        illumina_exome: [{tok:"3x",label:"92x"}],
         pacbio:         [{tok:"30x",label:"30x"}],
       },
     },
