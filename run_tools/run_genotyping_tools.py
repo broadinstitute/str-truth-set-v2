@@ -7,6 +7,8 @@ Per-sample inputs:
     output directory
 """
 
+import dns_resilience  # noqa: F401  -- patch socket.getaddrinfo (retry/cache) before hailtop, so this
+                       # machine's intermittent DNS blips don't wedge batch submission. Must precede hailtop.
 import collections
 import hailtop.fs as hfs
 import os
@@ -50,8 +52,15 @@ LONG_READ_TOOLS = {
 MOTIF_SIZE_BINS = [(1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (2, 6), (7, 24), (25, 1000)]
 
 # EHv5/EHv5-bw2-optimized stream single-threaded; split the catalog into this many parallel 1-cpu jobs
-# (bw2-fork --start-with/--n-loci) to cut wall time ~N-fold at ~constant total cost.
-EHV5_NUM_SHARDS = 10
+# (bw2-fork --start-with/--n-loci) to cut wall time ~N-fold at ~constant total cost. Sized so the slow
+# low-mem-streaming variant stays under ~4h/shard even at the highest coverage: measured EHv5 low-mem at
+# 31x ran ~3.4h/shard (worst shard 4.8h) at 10 shards, so 46x (CHM1) needs ~20 shards to stay in the 2-4h
+# target band. HG002 EHv5 (10/20/31x) is already done, so this only affects the remaining CHM1 46x run.
+EHV5_NUM_SHARDS = int(os.environ.get("EHV5_NUM_SHARDS", 20))
+
+# IlluminaEHv5 (official Illumina EH v5 build) crashes with "numIndels out of range" on large loci, so its
+# prefiltered catalog drops any locus whose reference interval is at least this many base pairs wide.
+ILLUMINA_EH_MAX_LOCUS_SIZE_BP = 500
 
 SHORT_READ_DATA_TYPES = {
     "illumina",
@@ -77,7 +86,7 @@ RNASEQ_DATA_TYPES = {
 REFERENCE_FASTA_PATH = "gs://str-truth-set/hg38/ref/hg38.fa"
 REFERENCE_FASTA_FAI_PATH = "gs://str-truth-set/hg38/ref/hg38.fa.fai"
 
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:251400db5cc8837029e8ecfcb6bdd525f6a7e84c03516769dd05e8e58fe78cc8"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:77886c884e8c322ced16c8ca775578a605a6aefc15966aa78995d9c5e808876a"
 
 DEFAULT_OUTPUT_DIR = "gs://str-truth-set-v2/tool_results"
 
@@ -113,14 +122,25 @@ def main():
     if args.data_type:
         df = df[df.sequencing_data_type.isin(args.data_type)]
 
-    df = df[df.sample_id == "HG002"]  # only HG002 is used for tool evaluations (CHM1_CHM13 excluded)
+    df = df[df.sample_id.isin(["HG002", "CHM1_CHM13"])]  # only HG002 and CHM1_CHM13 are used for tool evaluations
 
     if args.custom_catalog_path and args.output_dir == DEFAULT_OUTPUT_DIR:
         parser.error("--custom-catalog-path is set without also setting --output-dir")
 
-    bp.precache_file_paths(os.path.join(args.output_dir, "**/*.*"))
+    # Precache only the output subtrees actually selected, not the whole bucket. A single
+    # precache of "{output_dir}/**/*.*" forces gcloud to list ALL ~90k objects (the ~1200 svgs per combo
+    # dominate) and filter client-side -- 5-9 min, the slowest part of every run. Instead precache one narrow
+    # "{sample}/{data_type}/{tool}/**/*.tsv.gz" prefix per selected (sample, data_type, tool): each lists only
+    # that tool's handful of coverage dirs (seconds), and *.tsv.gz is all the genotyping/add-columns skip
+    # detection needs (plot/headers are forced on replots, or run fresh otherwise).
+    precache_tools = args.tool if args.tool else ["TRGTv5"]
+    for precache_sample in df.sample_id.unique():
+        for precache_data_type in df.loc[df.sample_id == precache_sample, "sequencing_data_type"].unique():
+            for precache_tool in precache_tools:
+                bp.precache_file_paths(os.path.join(
+                    args.output_dir, precache_sample, precache_data_type, precache_tool, "**/*.tsv.gz"))
     # precache the prefiltered IlluminaEHv5 catalog(s) so the prefilter step is skipped once it already exists
-    bp.precache_file_paths(os.path.join(args.filter_vcf_dir, "**/*.without_loci_with_flanking_Ns.json"))
+    bp.precache_file_paths(os.path.join(args.filter_vcf_dir, "**/*.for_illumina_eh.json"))
 
 
     download_to_dir = "../results"
@@ -213,7 +233,7 @@ def main():
                     # tolerates them. So prefilter the single unsharded EHv5 catalog to drop those loci before
                     # genotyping. The prefilter step is built once per source catalog (cached in
                     # illumina_eh_prefilter_steps) and reused across all IlluminaEHv5 data types/coverages.
-                    source_eh_catalog_path = next(p for p in repeat_catalog_paths if "001_of_001" in p)
+                    source_eh_catalog_path = next(p for p in repeat_catalog_paths if p.endswith(".EHv5.001_of_001.json"))
                     if source_eh_catalog_path not in illumina_eh_prefilter_steps:
                         illumina_eh_prefilter_steps[source_eh_catalog_path] = create_illumina_eh_catalog_prefilter_step(
                             bp,
@@ -224,8 +244,11 @@ def main():
                     catalog_prefilter_step, filtered_catalog_path = illumina_eh_prefilter_steps[source_eh_catalog_path]
                     variant_catalog_file_paths = [filtered_catalog_path]
                 else:
-                    # the streaming EHv5 / EHv5-bw2-optimized variants use the single unsharded catalog
-                    variant_catalog_file_paths = [p for p in repeat_catalog_paths if "001_of_001" in p]
+                    # the streaming EHv5 / EHv5-bw2-optimized variants use the single unsharded catalog; match the
+                    # exact .EHv5.001_of_001.json so the IlluminaEHv5 prefilter outputs that share the
+                    # EHv5.001_of_001 stem (.for_illumina_eh.json, .without_loci_with_flanking_Ns.json/.filtered_loci.txt)
+                    # are excluded
+                    variant_catalog_file_paths = [p for p in repeat_catalog_paths if p.endswith(".EHv5.001_of_001.json")]
 
                 current_step = create_expansion_hunter_steps(
                     bp,
@@ -324,12 +347,14 @@ def main():
                     reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
                     input_bam=row.read_data_path,
                     input_bai=row.read_data_index_path,
-                    # vamos needs the single unsharded EHv5 catalog; pick it out of the filter_vcf catalogs by the
-                    # "001_of_001" shard name, but pass a --custom-catalog-path through unfiltered (its filename
-                    # won't contain that token, so filtering would leave an empty list and crash the vamos step).
+                    # vamos needs the single unsharded EHv5 catalog; match the exact .EHv5.001_of_001.json so the
+                    # IlluminaEHv5 prefilter outputs sharing the EHv5.001_of_001 stem (.for_illumina_eh.json,
+                    # .without_loci_with_flanking_Ns.json/.filtered_loci.txt) don't make this a multi-catalog list and
+                    # crash the vamos step. A --custom-catalog-path is passed through unfiltered (its filename won't
+                    # contain that token, so filtering would leave an empty list and crash the vamos step).
                     expansion_hunter_catalog_paths=(
                         repeat_catalog_paths if args.custom_catalog_path
-                        else [p for p in repeat_catalog_paths if "001_of_001" in p]),
+                        else [p for p in repeat_catalog_paths if p.endswith(".EHv5.001_of_001.json")]),
                     output_dir=output_dir,
                     output_prefix=f"{row.sample_id}.{tool}")
             else:
@@ -361,13 +386,18 @@ def main():
 
 
 def create_illumina_eh_catalog_prefilter_step(bp, *, eh_catalog_path, reference_fasta, reference_fasta_fai, output_dir):
-    """Build a step that drops loci with >5 Ns in their flanks from an ExpansionHunter catalog, for IlluminaEHv5.
+    """Build a step that prefilters an ExpansionHunter catalog for the official Illumina EH v5 build (IlluminaEHv5).
 
-    The official Illumina ExpansionHunter v5 build aborts on the first catalog locus with more than 5 Ns in its
-    +/-1000bp flanks ("Flanks can contain at most 5 characters N but found x Ns"), while the bw2 fork tolerates them.
-    str_analysis.filter_out_loci_with_Ns_in_flanks scans each locus's +/-1000bp reference flanks (the EH default
-    --region-extension-length) and writes a catalog with the offending loci removed. The official build can't read a
-    gzipped catalog, so the filtered catalog is written as plain .json.
+    The official build chokes on two classes of loci that the bw2 fork tolerates, so two filters are applied in
+    sequence to produce the IlluminaEHv5 catalog:
+      1. Loci with >5 Ns in their +/-1000bp flanks, which make the official build abort with
+         "Flanks can contain at most 5 characters N but found x Ns" (str_analysis.filter_out_loci_with_Ns_in_flanks,
+         using the EH default --region-extension-length of 1000bp).
+      2. Loci whose reference interval is >= ILLUMINA_EH_MAX_LOCUS_SIZE_BP wide, which make the official build crash
+         with "numIndels out of range" on large VNTRs (e.g. a 12kb/4kb-motif locus). For multi-region loci the
+         interval is measured from the first region's start to the last region's end.
+
+    The official build can't read a gzipped catalog, so the output is written as plain .json.
 
     Args:
         bp: the step_pipeline pipeline object.
@@ -380,15 +410,17 @@ def create_illumina_eh_catalog_prefilter_step(bp, *, eh_catalog_path, reference_
         A (step, filtered_catalog_path) tuple. filtered_catalog_path is the plain-json catalog the IlluminaEHv5
         genotyping step should read; the genotyping step must depend on the returned step.
     """
-    filtered_catalog_filename = re.sub(r"\.json(\.gz)?$", "", os.path.basename(eh_catalog_path)) + \
-        ".without_loci_with_flanking_Ns.json"
-    filtered_loci_filename = filtered_catalog_filename.replace(".json", ".filtered_loci.txt")
+    base = re.sub(r"\.json(\.gz)?$", "", os.path.basename(eh_catalog_path))
+    n_filtered_filename = f"{base}.without_loci_with_flanking_Ns.json"
+    n_filtered_loci_filename = f"{base}.without_loci_with_flanking_Ns.filtered_loci.txt"
+    # final IlluminaEHv5 catalog: N-flank-filtered AND with large loci removed
+    filtered_catalog_filename = f"{base}.for_illumina_eh.json"
     filtered_catalog_path = os.path.join(output_dir, filtered_catalog_filename)
 
     # the EH image (weisburd/str-analysis-with-expansion-hunter, pinned by digest) bakes in str_analysis, so the
     # filter runs reproducibly without a runtime pip install
     step = bp.new_step(
-        name=f"Prefilter EHv5 catalog (drop flanking-N loci) for IlluminaEHv5: {os.path.basename(eh_catalog_path)}",
+        name=f"Prefilter EHv5 catalog (drop flanking-N and large loci) for IlluminaEHv5: {os.path.basename(eh_catalog_path)}",
         arg_suffix="prefilter-illumina-eh-catalog-step",
         image=EH_DOCKER_IMAGE,
         cpu=2,
@@ -400,15 +432,42 @@ def create_illumina_eh_catalog_prefilter_step(bp, *, eh_catalog_path, reference_
     local_fasta = step.input(reference_fasta)
     step.input(reference_fasta_fai)
     local_catalog = step.input(eh_catalog_path)
+    # filter 1: drop loci with >5 Ns in their +/-1000bp flanks
     step.command(
         f"python3 -m str_analysis.filter_out_loci_with_Ns_in_flanks "
         f"-R {local_fasta} --region-extension-length 1000 "
-        f"-o {filtered_catalog_filename} "
-        f"-f {filtered_loci_filename} "
+        f"-o {n_filtered_filename} "
+        f"-f {n_filtered_loci_filename} "
         f"{local_catalog}")
+    # filter 2: drop loci whose reference interval is >= ILLUMINA_EH_MAX_LOCUS_SIZE_BP wide (official build crashes
+    # with "numIndels out of range" on large VNTRs). Quoted heredoc so the shell leaves the regex/anchors alone; the
+    # f-string only fills in the file names and the size cutoff.
+    step.command(
+        f"""python3 <<'PYEOF'
+import json, re
+cat = json.load(open("{n_filtered_filename}"))
+kept = []
+dropped = 0
+for rec in cat:
+    rr = rec["ReferenceRegion"]
+    regions = rr if isinstance(rr, list) else [rr]
+    starts = []
+    ends = []
+    for reg in regions:
+        m = re.match(r"^(.+):([0-9]+)-([0-9]+)$", reg)
+        starts.append(int(m.group(2)))
+        ends.append(int(m.group(3)))
+    if max(ends) - min(starts) >= {ILLUMINA_EH_MAX_LOCUS_SIZE_BP}:
+        dropped += 1
+        continue
+    kept.append(rec)
+json.dump(kept, open("{filtered_catalog_filename}", "wt"), indent=4)
+print("Dropped %d loci >= {ILLUMINA_EH_MAX_LOCUS_SIZE_BP}bp wide; kept %d" % (dropped, len(kept)))
+PYEOF""")
     step.command("ls -lhrt")
+    step.output(n_filtered_filename)
+    step.output(n_filtered_loci_filename)
     step.output(filtered_catalog_filename)
-    step.output(filtered_loci_filename)
     return step, filtered_catalog_path
 
 
@@ -511,45 +570,32 @@ def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage_labe
         plot_tool_accuracy_step.command("ls -lhrt")
 
     # Also generate the unstratified "all motif sizes" plot (".all_motifs", surfaced as the "all" bin in the viewer)
-    # by running the script in its default mode with no --min/--max-motif-size. That mode also emits a few default-bin
-    # svgs (.2bp_motifs/.3to6bp_motifs/.7to24bp_motifs/.25to50bp_motifs) whose tokens the viewer doesn't use — harmless
-    # extras captured by the same wildcard output below.
+    # by running the script in its default mode with no --min/--max-motif-size. --all-motifs-only restricts that mode to
+    # the all_motifs plot so it no longer emits the unused .2bp_motifs/.3to6bp_motifs/.25to50bp_motifs coarse-bin svgs.
     plot_tool_accuracy_step.command(
         f"python3 -u /str-truth-set/figures_and_tables/plot_tool_accuracy_by_allele_size.py "
         "--verbose "
         f"--tool {tool} "
         f"--coverage {coverage_label} "
         "--q-threshold 0 "
+        "--all-motifs-only "
         "--image-type svg "
         "--show-title "
         f"{local_alleles_tsv} ")
     plot_tool_accuracy_step.command("ls -lhrt")
 
-    # gzip each svg in place (keeping the .svg name) and serve it with the right content headers. The plots are
-    # uploaded with a wildcard via gcloud storage cp (Delocalize.GSUTIL_COPY), since Delocalize.COPY needs an explicit
-    # filename per output.
+    # gzip each svg in place (keeping the .svg name) and upload it with the content headers set inline on the cp via
+    # step.output's content_encoding/content_type, so the browser fetches the .svg URL, receives gzipped bytes (it
+    # sends Accept-Encoding: gzip), and renders the svg directly. Uploaded with a wildcard via gcloud storage cp
+    # (Delocalize.GSUTIL_COPY), since Delocalize.COPY needs an explicit filename per output. Setting the headers at
+    # upload time avoids a separate "gcloud storage objects update" step, which intermittently hit "HTTPError 409 ...
+    # edited during the operation" when updating freshly-created objects.
     plot_tool_accuracy_step.command('for f in tool_accuracy_by_true_allele_size.*.svg; do gzip "$f"; mv "$f.gz" "$f"; done')
-    plot_tool_accuracy_step.output("tool_accuracy_by_true_allele_size.*.svg", delocalize_by=Delocalize.GSUTIL_COPY)
-
-    image_headers_step = bp.new_step(
-        name=f"Set image headers for {sample_id} {tool} accuracy plots",
-        arg_suffix="image-headers-step",
-        image=FILTER_VCFS_DOCKER_IMAGE,
-        cpu=1,
-        output_dir=output_dir)
-
-    image_headers_step.depends_on(plot_tool_accuracy_step)
-
-    image_headers_step.command("set -ex")
-    # gcloud storage objects update on a freshly-uploaded set of objects can intermittently return
-    # "HTTPError 409 ... edited during the operation", so retry a few times.
-    svg_glob = os.path.join(output_dir, 'tool_accuracy_by_true_allele_size.*.svg')
-    image_headers_step.command(
-        f"for attempt in 1 2 3 4 5; do "
-        f"if gcloud storage objects update --content-type 'image/svg+xml' --content-encoding 'gzip' {svg_glob}; "
-        f"then break; fi; "
-        f"echo \"image headers update attempt $attempt failed; retrying\"; sleep 15; "
-        f"done")
+    plot_tool_accuracy_step.output(
+        "tool_accuracy_by_true_allele_size.*.svg",
+        delocalize_by=Delocalize.GSUTIL_COPY,
+        content_encoding="gzip",
+        content_type="image/svg+xml")
 
     #plot_tool_accuracy_step.command(f"python3 -u /str-truth-set/figures_and_tables/plot_tool_accuracy_vs_Q.py "
     #                                "--verbose "
