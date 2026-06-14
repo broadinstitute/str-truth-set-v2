@@ -135,8 +135,10 @@ def write_gangstr_hipstr_or_longtr_repeat_specs(locus_set, output_path_prefix, t
                                      int((end_1based - start_0based)/len(motif)),
                                      f"{chrom}-{start_0based}-{end_1based}-{motif}"]
                 else:  # longtr
-                    output_fields = [chrom, start_0based + 1, end_1based, len(motif),
-                                     int((end_1based - start_0based)/len(motif)),
+                    # LongTR's region bed expects the repeat motif *sequence* in column 4
+                    # (chrom, start_1based, end, motif, name). The HipSTR-style period/num-copies bed
+                    # makes LongTR reject the file with "Region has a MOTIF with invalid character".
+                    output_fields = [chrom, start_0based + 1, end_1based, motif,
                                      f"{chrom}-{start_0based}-{end_1based}-{motif}"]
                 f.write("\t".join(map(str, output_fields)) + "\n")
 
