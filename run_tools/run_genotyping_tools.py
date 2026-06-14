@@ -131,8 +131,12 @@ def main():
     # precache of "{output_dir}/**/*.*" forces gcloud to list ALL ~90k objects (the ~1200 svgs per combo
     # dominate) and filter client-side -- 5-9 min, the slowest part of every run. Instead precache one narrow
     # "{sample}/{data_type}/{tool}/**/*.tsv.gz" prefix per selected (sample, data_type, tool): each lists only
-    # that tool's handful of coverage dirs (seconds), and *.tsv.gz is all the genotyping/add-columns skip
-    # detection needs (plot/headers are forced on replots, or run fresh otherwise).
+    # that tool's handful of coverage dirs (seconds). *.tsv.gz covers the add-columns for_comparison table and the
+    # combine-step .tsv.gz outputs, so skip detection works for those steps. It does NOT cover ExpansionHunter's
+    # per-shard genotyping outputs, which are written as json/*.json (create_expansion_hunter_steps step1), so a
+    # plain re-run RE-GENOTYPES EHv5/EHv5-bw2-optimized/IlluminaEHv5 instead of skipping. To replot those without
+    # re-genotyping, pass --skip-run-expansion-hunter-step --skip-combine-expansion-hunter-step --skip-add-columns-step
+    # together with --force-plot-accuracy-step.
     precache_tools = args.tool if args.tool else ["TRGTv5"]
     for precache_sample in df.sample_id.unique():
         for precache_data_type in df.loc[df.sample_id == precache_sample, "sequencing_data_type"].unique():
