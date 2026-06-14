@@ -46,13 +46,24 @@
         .navlinks { min-width: 70px; display: inline-block; vertical-align: middle; }
         /* match Semantic's ".ui.form .field" specificity so our spacing wins (it zeroes margin-right) */
         .ui.form .field { display: inline-block; margin: 0 20px 0 0; vertical-align: middle; }
+        /* Sequencing Tech: short-read radios on line 1, long-read on line 2 (7px below); label/arrows top-aligned.
+           Both lines are blocks inside the inline-block #datatype-radios, so they left-align under each other. */
+        #datatype-li .facet-label, #datatype-li .navlinks { vertical-align: top; }
+        #datatype-radios { display: inline-block; vertical-align: top; }
+        #datatype-radios .datatype-line { display: block; }
+        #datatype-radios .datatype-line + .datatype-line { margin-top: 10px; }  /* == ul.facets > li margin-bottom */
         /* Semantic selection dropdown for the individual selector (styled menu + group headers/divider) */
         /* fixed width so it doesn't resize between "HG002 (male)" and "CHM1_CHM13 (female)" */
         #sample-dropdown { vertical-align: middle; width: 16em; }
         .muted { color: #999; margin-left: 10px; }
         #plot-wrap { margin-top: 10px; }
         #plot-status { color: #b00; padding: 8px 0; min-height: 1.2em; font-size: 15px; }
-        .legend { padding: 20px 0 0 20px; max-width: 850px; font-size: 15px; }
+        /* inline-block so the box shrink-wraps the rendered image; (?) anchors to the image's actual top-right */
+        #plot-box { position: relative; display: inline-block; max-width: 90%; }
+        #plot-help { position: absolute; top: 0; right: 0; transform: translateY(-115%); margin: 0;
+                     font-size: 1.7em; color: #555; cursor: pointer; }
+        #plot-help:hover { color: #333; }
+        #legend-popup { font-size: 15px; line-height: 1.55; }
     </style>
 </head>
 <body>
@@ -69,10 +80,15 @@
                     <div class="menu"></div>
                 </div>
             </li>
-            <li>
+            <li id="datatype-li">
                 <span class="facet-label">Sequencing Tech:</span>
                 <span class="navlinks">[<a class="prev-button" id="prev-datatype" href="#">←</a> <a class="next-button" id="next-datatype" href="#">→</a>]</span>
                 <span id="datatype-radios"></span>
+            </li>
+            <li>
+                <span class="facet-label">Coverage:</span>
+                <span class="navlinks">[<a class="prev-button" id="prev-coverage" href="#">←</a> <a class="next-button" id="next-coverage" href="#">→</a>]</span>
+                <span id="coverage-radios"></span>
             </li>
             <li>
                 <span class="facet-label">Tool:</span>
@@ -81,11 +97,6 @@
                 <span style="padding-left:15px">
                     <span class="ui checkbox"><input type="checkbox" id="exclude-tool-no-call-loci" name="exclude-tool-no-call-loci"><label>Hide "No Call" loci</label></span>
                 </span>
-            </li>
-            <li>
-                <span class="facet-label">Coverage:</span>
-                <span class="navlinks">[<a class="prev-button" id="prev-coverage" href="#">←</a> <a class="next-button" id="next-coverage" href="#">→</a>]</span>
-                <span id="coverage-radios"></span>
             </li>
             <li>
                 <span class="facet-label">Motif size:</span>
@@ -114,16 +125,25 @@
         </ul>
     </div>
 
-    <div class="legend">
+    <!-- Legend, shown in a Semantic popup anchored to the (?) icon above the plot's top-right corner. -->
+    <div class="ui popup" id="legend-popup" style="max-width:620px;">
         <b>x-axis:</b> true allele size — positive = expansion, negative = contraction.<br/>
-        <b>Gray</b>: tool produced no genotype. &nbsp;<b>Red</b>: called hom-ref (missed the variant). &nbsp;<b>Brown</b>: called het-ref.<br/>
-        <b>Teal</b>: called the wrong direction. &nbsp;<b>Blue</b>: underestimated. &nbsp;<b>Green</b>: exact match. &nbsp;<b>Orange</b>: overestimated.<br/>
+        <b>Gray</b>: tool produced no genotype.<br/>
+        <b>Red</b>: called hom-ref (missed the variant).<br/>
+        <b>Brown</b>: called het-ref.<br/>
+        <b>Teal</b>: called the wrong direction.<br/>
+        <b>Blue</b>: underestimated.<br/>
+        <b>Green</b>: exact match.<br/>
+        <b>Orange</b>: overestimated.<br/>
         <b>Purity</b> = per-allele repeat purity (fraction of the truth allele's bases inside a perfect repeat of the motif; column <code>RepeatPurity</code>).
     </div>
 
     <div id="plot-wrap">
         <div id="plot-status"></div>
-        <img id="plot" style="max-width:90%" alt="" />
+        <div id="plot-box">
+            <i id="plot-help" class="question circle outline icon" title="Legend"></i>
+            <img id="plot" style="max-width:100%; display:block" alt="" />
+        </div>
     </div>
 
 <script src="https://code.jquery.com/jquery-3.1.1.min.js"></script>
@@ -303,7 +323,12 @@ function renderSamples() {
 
 function renderDataTypes() {
     const types = availableDataTypes();
-    $('#datatype-radios').html(types.map((d,i)=>radio("datatype",d,DATA_TYPES[d].label,i===0)).join(''));
+    const isShort = d => DATATYPE_GROUPS[0][1].includes(d);  // short-read on line 1, long-read on line 2
+    const line = arr => arr.map(d => radio("datatype", d, DATA_TYPES[d].label, d === types[0])).join('');
+    let html = "";
+    if (types.some(isShort))  html += `<span class="datatype-line">${line(types.filter(isShort))}</span>`;
+    if (types.some(d=>!isShort(d))) html += `<span class="datatype-line">${line(types.filter(d=>!isShort(d)))}</span>`;
+    $('#datatype-radios').html(html);
     $('#datatype-radios .ui.checkbox').checkbox();  // re-init: see renderTools
 }
 function renderTools() {
@@ -416,14 +441,18 @@ $(function() {
     renderStatic(); renderSamples();   // technology radios are rendered below, after the individual default is set
     $('.ui.checkbox').checkbox();
 
-    // hide the <img> when the SVG 404s (deleted / not yet regenerated) so no broken-image
-    // icon shows — just the status message; show it again once a real plot loads.
+    // click the (?) icon to toggle the legend popup (Semantic UI), anchored below-left of the icon.
+    $('#plot-help').popup({ popup: $('#legend-popup'), on: 'click', position: 'top right', lastResort: true });
+
+    // hide the <img> (and the floating (?)) when the SVG 404s (deleted / not yet regenerated) so no
+    // broken-image icon shows — just the status message; show them again once a real plot loads.
     // Bound before the dropdown 'set selected' below, which triggers the first refreshImage.
     $('#plot').on('error', function() {
         $('#plot-status').text("No plot available for this combination of parameters: " + this.src);
         $('#plot').hide();
+        $('#plot-help').hide();
     });
-    $('#plot').on('load', function() { $('#plot').show(); });
+    $('#plot').on('load', function() { $('#plot').show(); $('#plot-help').show(); });
 
     // prev / next arrows step through the radios of the matching group
     $(document).on('click', '.prev-button,.next-button', function(e) {
