@@ -515,7 +515,11 @@ def create_combine_results_step(
                 " ".join(i.local_path for i in input_files))
             combine_step.output(joined_tsv_output_filename)
             combine_step.output(joined_tsv_output_stats_filename)
-            join_tsvs_step = combine_step
+            # Feed only the all-repeats join to the combined catalog. The pure-repeats-only join
+            # (--discard-impure-genotypes) is a separate output and must not overwrite join_tsvs_step,
+            # otherwise an all-repeats run would build the combined catalog from pure-repeat genotypes only.
+            if combine_step_type == "join tsvs":
+                join_tsvs_step = combine_step
         elif combine_step_type == "combine beds":
             combined_bed_output_filename = f"combined.{len(df)}_samples.variants.bed.gz"
             combined_bed_output_stats_filename = f"combined.{len(df)}_bed_files.variants.stats.tsv.gz"
@@ -658,8 +662,6 @@ def main():
                                          only_pure_repeats=args.only_pure_repeats,
                                          use_preemptibles=not args.use_nonpreemptibles)
 
-        variant_catalog_steps.append(filter_step)
-
         annotate_variants_step, annotate_alleles_step = create_annotate_steps(bp, row, suffix, output_dir,
                                                                               exclude_homopolymers=args.exclude_homopolymers,
                                                                               use_preemptibles=not args.use_nonpreemptibles,
@@ -675,6 +677,11 @@ def main():
                                                              use_preemptibles=not args.use_nonpreemptibles)
         variant_catalogs_step.depends_on(filter_step)
 
+        # Append the variant-catalogs step (not the filter step) so the combine sub-steps depend on the
+        # step that actually produces the per-sample EHv5 JSON / variants tsv they localize (mirrors the
+        # keeping_all_loci branch above). Appending filter_step instead let the merge run before the JSONs existed.
+        variant_catalog_steps.append(variant_catalogs_step)
+
         #TODO: also annotate the negative loci
         #if args.output_negative_loci:
         #    annotate_variants_step, annotate_alleles_step = create_annotate_steps(
@@ -688,7 +695,7 @@ def main():
                                                                             exclude_homopolymers=args.exclude_homopolymers,
                                                                             output_negative_loci=False,  #TODO: args.output_negative_loci,
                                                                             use_preemptibles=not args.use_nonpreemptibles)
-            table_for_tool_comparisons_step.depends_on(annotate_alleles_step)
+            table_for_tool_comparisons_step.depends_on(annotate_variants_step)
 
             plot_step, figures_to_download_dict = create_plot_step(bp, suffix, input_dir, output_dir, row=row,
                                                                    exclude_homopolymers=args.exclude_homopolymers)
