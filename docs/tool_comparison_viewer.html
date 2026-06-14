@@ -57,7 +57,7 @@
         #sample-dropdown { vertical-align: middle; width: 16em; }
         .muted { color: #999; margin-left: 10px; }
         .rank-pct { color: #80BF75; font-weight: bold; }
-        #plot-wrap { margin-top: 10px; }
+        #plot-wrap { margin-top: 0; }
         #plot-status { color: #b00; padding: 8px 0; min-height: 1.2em; font-size: 15px; }
         /* inline-block so the box shrink-wraps the rendered image; (?) anchors to the image's actual top-right */
         #plot-box { position: relative; display: inline-block; max-width: 90%; }
@@ -92,14 +92,6 @@
                 <span id="coverage-radios"></span>
             </li>
             <li>
-                <span class="facet-label">Tool:</span>
-                <span class="navlinks">[<a class="prev-button" id="prev-tool" href="#">←</a> <a class="next-button" id="next-tool" href="#">→</a>]</span>
-                <span id="tool-radios"></span>
-                <span style="padding-left:15px">
-                    <span class="ui checkbox"><input type="checkbox" id="exclude-tool-no-call-loci" name="exclude-tool-no-call-loci"><label>Hide "No Call" loci</label></span>
-                </span>
-            </li>
-            <li>
                 <span class="facet-label">Motif size:</span>
                 <span class="navlinks">[<a class="prev-button" id="prev-motif" href="#">←</a> <a class="next-button" id="next-motif" href="#">→</a>]</span>
                 <span id="motif-radios"></span>
@@ -119,9 +111,17 @@
                 <span class="navlinks">[<a class="prev-button" id="prev-chrom" href="#">←</a> <a class="next-button" id="next-chrom" href="#">→</a>]</span>
                 <span id="chrom-radios"></span>
             </li>
-            <li id="ranking-li">
-                <span class="facet-label">Accuracy (% green):</span>
-                <span id="ranking-row" style="vertical-align:middle"></span>
+            <li id="ranking-li" style="list-style:none">
+                <span class="facet-label"><span style="color:#15499e">Accuracy Summary</span> (<span style="color:#80BF75">% green</span>):</span>
+                <span id="ranking-row" style="vertical-align:middle; padding-left:10px"></span>
+            </li>
+            <li style="margin:32px 0 0 0">
+                <span class="facet-label">Tool:</span>
+                <span class="navlinks">[<a class="prev-button" id="prev-tool" href="#">←</a> <a class="next-button" id="next-tool" href="#">→</a>]</span>
+                <span id="tool-radios"></span>
+                <span style="padding-left:15px">
+                    <span class="ui checkbox"><input type="checkbox" id="exclude-tool-no-call-loci" name="exclude-tool-no-call-loci"><label>Hide "No Call" loci</label></span>
+                </span>
             </li>
         </ul>
     </div>
@@ -379,7 +379,7 @@ function renderRankingRow(perBin) {
         const label = TOOL_LABELS[e.tool] || e.tool;                   // bold the tool name; keep any " (descriptor)" plain
         const m = label.match(/^(.*?)(\s*\(.*)$/);
         const labelHtml = m ? `<b>${m[1]}</b>${m[2]}` : `<b>${label}</b>`;
-        html += (i === 0 ? "" : (pct === prev ? ", " : " &gt; ")) + `${labelHtml}: <span class="rank-pct">${pct}%</span>`;
+        html += (i === 0 ? "" : (pct === prev ? ", " : "&nbsp;&nbsp;&nbsp;&gt;&nbsp;&nbsp;&nbsp;")) + `${labelHtml}: <span class="rank-pct">${pct}%</span>`;
         prev = pct;
     });
     $('#ranking-row').html(html);
