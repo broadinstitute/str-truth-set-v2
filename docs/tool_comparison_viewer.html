@@ -52,9 +52,6 @@
         #datatype-radios { display: inline-block; vertical-align: top; }
         #datatype-radios .datatype-line { display: block; }
         #datatype-radios .datatype-line + .datatype-line { margin-top: 10px; }  /* == ul.facets > li margin-bottom */
-        /* Semantic selection dropdown for the individual selector (styled menu + group headers/divider) */
-        /* fixed width so it doesn't resize between "HG002 (male)" and "CHM1_CHM13 (female)" */
-        #sample-dropdown { vertical-align: middle; width: 16em; }
         .muted { color: #999; margin-left: 10px; }
         .rank-pct { color: #80BF75; font-weight: bold; }
         #plot-wrap { margin-top: 0; }
@@ -74,12 +71,8 @@
         <ul class="facets">
             <li>
                 <span class="facet-label">Individual:</span>
-                <div class="ui selection dropdown" id="sample-dropdown">
-                    <input type="hidden" name="sample">
-                    <i class="dropdown icon"></i>
-                    <div class="text"></div>
-                    <div class="menu"></div>
-                </div>
+                <span class="navlinks">[<a class="prev-button" id="prev-sample" href="#">←</a> <a class="next-button" id="next-sample" href="#">→</a>]</span>
+                <span id="sample-radios"></span>
             </li>
             <li id="datatype-li">
                 <span class="facet-label">Sequencing Tech:</span>
@@ -115,8 +108,8 @@
                 <span class="facet-label"><span style="color:#15499e">Accuracy Summary</span> (<span style="color:#80BF75">% green</span>):</span>
                 <span id="ranking-row" style="vertical-align:middle; padding-left:10px"></span>
             </li>
-            <li style="margin:32px 0 0 0">
-                <span class="facet-label">Plot Tool Accuracy:</span>
+            <li style="list-style:none; margin:32px 0 0 -22px">
+                <span class="facet-label"><span style="color:#15499e">Plot Tool Accuracy</span>:</span>
                 <span class="navlinks">[<a class="prev-button" id="prev-tool" href="#">←</a> <a class="next-button" id="next-tool" href="#">→</a>]</span>
                 <span id="tool-radios"></span>
                 <span style="padding-left:15px">
@@ -309,7 +302,7 @@ function radio(name, value, label, checked) {
          + `<input type="radio" name="${name}" value="${value}" ${checked?'checked':''}>`
          + `<label>${label}</label></div></span>`;
 }
-function currentSample()    { return $('#sample-dropdown').dropdown('get value'); }
+function currentSample()    { return $('input[name="sample"]:checked').val(); }
 function currentSampleObj() { return SAMPLES.find(s=>s.id===currentSample()); }
 function currentDataType()  { return $('input[name="datatype"]:checked').val(); }
 
@@ -322,7 +315,8 @@ function availableDataTypes() {
 }
 
 function renderSamples() {
-    $('#sample-dropdown .menu').html(SAMPLES.map(s=>`<div class="item" data-value="${s.id}">${s.label}</div>`).join(''));
+    $('#sample-radios').html(SAMPLES.map((s,i)=>radio("sample",s.id,s.label,i===0)).join(''));
+    $('#sample-radios .ui.checkbox').checkbox();  // re-init: see renderTools
 }
 
 function renderDataTypes() {
@@ -479,8 +473,7 @@ $(function() {
     // of this runs before the change handlers are wired, so the programmatic 'set checked' calls don't
     // fire premature re-renders (which would, e.g., reset tool/coverage when datatype is set).
     const init = readHash();
-    $('#sample-dropdown').dropdown();
-    $('#sample-dropdown').dropdown('set selected',
+    setRadio('sample',
         (init.s && SAMPLES.some(s => s.id === init.s)) ? init.s : SAMPLES[0].id);   // default: HG002
     renderDataTypes();                                       // technology radios for the chosen individual (first checked)
     if (init.st) setRadio('datatype', init.st);
@@ -496,10 +489,10 @@ $(function() {
     refreshImage();                                          // first image + ranking; also normalizes the URL via writeHash()
 
     // Wire change handlers only AFTER restore. Technology change re-renders tools/coverages; everything
-    // else just refreshes the image. Individual (dropdown) change rebuilds technology/tool/coverage.
+    // else just refreshes the image. Individual change rebuilds technology/tool/coverage.
+    $(document).on('change', 'input[name="sample"]', onSampleChange);
     $(document).on('change', 'input[name="datatype"]', onDataTypeChange);
     $(document).on('change', 'input[name="tool"],input[name="coverage"],input[name="motif"],input[name="genotype"],input[name="purity"],input[name="chrom"],#exclude-tool-no-call-loci', refreshImage);
-    $('#sample-dropdown').dropdown('setting', 'onChange', onSampleChange);
 });
 </script>
 </body>
