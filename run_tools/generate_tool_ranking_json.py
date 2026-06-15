@@ -202,7 +202,10 @@ def generate_for_sample_data_type(root, sample, dtype_uri, tmp_dir, dry_run):
     if dry_run:
         print(f"{sample}/{dtype}: [dry-run] {len(output):,d} bins -> {dest} ({os.path.getsize(local_json):,d} bytes)")
     else:
-        subprocess.run(["gcloud", "storage", "cp", "--content-type", "application/json", local_json, dest], check=True)
+        # no-cache so the public storage.googleapis.com edge revalidates every fetch; otherwise the default
+        # "public, max-age=3600" makes a regenerated rankings.json invisible to the viewer for up to an hour.
+        subprocess.run(["gcloud", "storage", "cp", "--content-type", "application/json",
+                        "--cache-control", "no-cache, max-age=0", local_json, dest], check=True)
         print(f"{sample}/{dtype}: wrote {len(output):,d} bins -> {dest}")
     os.remove(local_json)
 
