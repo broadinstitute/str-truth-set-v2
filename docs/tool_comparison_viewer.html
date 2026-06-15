@@ -384,7 +384,9 @@ function refreshRanking() {
         return;
     }
     $('#ranking-row').html('<span class="muted">loading…</span>');
-    fetch(`${BASE_URL}/${currentSample()}/${currentDataType()}/rankings.json`)
+    // 'no-cache' forces a revalidation (If-None-Match) on every load so a regenerated rankings.json is picked
+    // up immediately instead of being served stale from the browser's HTTP cache (GCS sets max-age=3600).
+    fetch(`${BASE_URL}/${currentSample()}/${currentDataType()}/rankings.json`, {cache: 'no-cache'})
         .then(r => r.ok ? r.json() : null)
         .then(data => { rankingsCache[cacheKey] = data; renderRankingRow(data && data[binKey]); })
         .catch(() => { rankingsCache[cacheKey] = null; renderRankingRow(null); });
