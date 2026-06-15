@@ -169,7 +169,6 @@ const SAMPLES = [
         // (130.7x over the IDT xGen v1.0 exome capture targets, measured with samtools bedcov on the WES BAM).
         illumina_exome:  [{tok:"3x",label:"131x"}],
         element:         [{tok:"30x",label:"30x"}],
-        ultima:          [{tok:"36x",label:"36x"}],
         illumina_rnaseq: [{tok:"24G",label:"24G"}],
         pacbio:          [{tok:"37x",label:"37x"},{tok:"30x",label:"30x"},{tok:"20x",label:"20x"},{tok:"8x",label:"8x"}],
         ONT:             [{tok:"26x",label:"26x"},{tok:"20x",label:"20x"},{tok:"8x",label:"8x"}],
@@ -213,7 +212,6 @@ const DATA_TYPES = {
     illumina:        { label: "Illumina Genome", tools: ["EHv5-bw2-optimized", "EHv5", "IlluminaEHv5", "GangSTR", "HipSTR"] },
     illumina_exome:  { label: "Illumina Exome",  tools: ["EHv5-bw2-optimized", "EHv5", "IlluminaEHv5", "GangSTR", "HipSTR"] },
     element:         { label: "Element",         tools: ["EHv5-bw2-optimized", "EHv5", "HipSTR"] },
-    ultima:          { label: "Ultima",          tools: ["EHv5-bw2-optimized", "EHv5", "HipSTR"] },
     illumina_rnaseq: { label: "Illumina RNA-seq",tools: ["EHv5-bw2-optimized", "EHv5", "HipSTR"] },
     pacbio:          { label: "PacBio HiFi",     tools: ["TRGTv5", "TRGTv3", "inquiSTR", "LongTR", "vamos"] },
     ONT:             { label: "ONT",             tools: ["TRGTv5", "TRGTv3", "inquiSTR", "LongTR", "vamos"] },
@@ -223,7 +221,7 @@ const DATA_TYPES = {
 // Ordering for the technology radios: short-read technologies first, then long-read.
 // availableDataTypes() walks this order and keeps only the ones the current individual has.
 const DATATYPE_GROUPS = [
-    ["Short read", ["illumina", "illumina_exome", "illumina_rnaseq", "element", "ultima"]],
+    ["Short read", ["illumina", "element", "illumina_exome", "illumina_rnaseq"]],
     ["Long read",  ["pacbio", "ONT", "pacbio_isoseq"]],
 ];
 
