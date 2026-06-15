@@ -111,7 +111,7 @@
                 <span class="navlinks">[<a class="prev-button" id="prev-chrom" href="#">←</a> <a class="next-button" id="next-chrom" href="#">→</a>]</span>
                 <span id="chrom-radios"></span>
             </li>
-            <li id="ranking-li" style="list-style:none">
+            <li id="ranking-li" style="list-style:none; margin-left:-22px; margin-top:25px">
                 <span class="facet-label"><span style="color:#15499e">Accuracy Summary</span> (<span style="color:#80BF75">% green</span>):</span>
                 <span id="ranking-row" style="vertical-align:middle; padding-left:10px"></span>
             </li>
@@ -379,7 +379,7 @@ function renderRankingRow(perBin) {
         const label = TOOL_LABELS[e.tool] || e.tool;                   // bold the tool name; keep any " (descriptor)" plain
         const m = label.match(/^(.*?)(\s*\(.*)$/);
         const labelHtml = m ? `<b>${m[1]}</b>${m[2]}` : `<b>${label}</b>`;
-        html += (i === 0 ? "" : (pct === prev ? ", " : "&nbsp;&nbsp;&nbsp;&gt;&nbsp;&nbsp;&nbsp;")) + `${labelHtml}: <span class="rank-pct">${pct}%</span>`;
+        html += (i === 0 ? "" : (pct === prev ? ",&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;" : "&nbsp;&nbsp;&nbsp;&gt;&nbsp;&nbsp;&nbsp;")) + `${labelHtml}: <span class="rank-pct">${pct}%</span>`;
         prev = pct;
     });
     $('#ranking-row').html(html);
