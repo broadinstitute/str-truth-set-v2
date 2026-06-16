@@ -46,13 +46,8 @@
         .navlinks { min-width: 70px; display: inline-block; vertical-align: middle; }
         /* match Semantic's ".ui.form .field" specificity so our spacing wins (it zeroes margin-right) */
         .ui.form .field { display: inline-block; margin: 0 20px 0 0; vertical-align: middle; }
-        /* Sequencing Tech: short-read radios on line 1, long-read on line 2 (7px below); label/arrows top-aligned.
-           Both lines are blocks inside the inline-block #datatype-radios, so they left-align under each other. */
-        #datatype-li .facet-label, #datatype-li .navlinks { vertical-align: top; }
-        #datatype-radios { display: inline-block; vertical-align: top; }
-        #datatype-radios .datatype-line { display: block; }
-        #datatype-radios .datatype-line + .datatype-line { margin-top: 10px; }  /* == ul.facets > li margin-bottom */
         .muted { color: #999; margin-left: 10px; }
+        .dt-group-label { color: #888; font-size: 0.8em; font-family: Consolas, "Courier New", monospace; margin: 0 6px 0 0; }
         .rank-pct { color: #80BF75; font-weight: bold; }
         #plot-wrap { margin-top: 0; }
         #plot-status { color: #b00; padding: 8px 0; min-height: 1.2em; font-size: 15px; }
@@ -75,12 +70,12 @@
                 <span id="sample-radios"></span>
             </li>
             <li id="datatype-li">
-                <span class="facet-label">Sequencing Tech:</span>
+                <span class="facet-label">Sequencing Type:</span>
                 <span class="navlinks">[<a class="prev-button" id="prev-datatype" href="#">←</a> <a class="next-button" id="next-datatype" href="#">→</a>]</span>
                 <span id="datatype-radios"></span>
             </li>
             <li>
-                <span class="facet-label">Coverage:</span>
+                <span class="facet-label">Depth of Coverage:</span>
                 <span class="navlinks">[<a class="prev-button" id="prev-coverage" href="#">←</a> <a class="next-button" id="next-coverage" href="#">→</a>]</span>
                 <span id="coverage-radios"></span>
             </li>
@@ -320,13 +315,12 @@ function renderSamples() {
 }
 
 function renderDataTypes() {
-    const types = availableDataTypes();
-    const isShort = d => DATATYPE_GROUPS[0][1].includes(d);  // short-read on line 1, long-read on line 2
-    const line = arr => arr.map(d => radio("datatype", d, DATA_TYPES[d].label, d === types[0])).join('');
-    let html = "";
-    if (types.some(isShort))  html += `<span class="datatype-line">${line(types.filter(isShort))}</span>`;
-    if (types.some(d=>!isShort(d))) html += `<span class="datatype-line">${line(types.filter(d=>!isShort(d)))}</span>`;
-    $('#datatype-radios').html(html);
+    const types = availableDataTypes();  // short-read then long-read, all on one row
+    const isShort = d => DATATYPE_GROUPS[0][1].includes(d);
+    const group = (arr, label) => arr.length
+        ? `<span class="dt-group-label">${label}</span>` + arr.map(d => radio("datatype", d, DATA_TYPES[d].label, d === types[0])).join('')
+        : '';
+    $('#datatype-radios').html(group(types.filter(isShort), "short read:") + group(types.filter(d => !isShort(d)), "long read:"));
     $('#datatype-radios .ui.checkbox').checkbox();  // re-init: see renderTools
 }
 function renderTools() {
