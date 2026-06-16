@@ -16,7 +16,7 @@ python3 align_reads_using_bwa.py \
 python3 align_reads_using_bwa.py \
   gs://str-truth-set-v2/raw_data/HG002/element/GAT-LI-C044_R1.fastq.gz \
   gs://str-truth-set-v2/raw_data/HG002/element/GAT-LI-C044_R2.fastq.gz \
-  --use-non-preemptibles \  
+  --use-non-preemptibles \
 -o gs://str-truth-set-v2/raw_data/HG002/element/HG002.element.cram
 
 #python3 align_reads_using_bwa.py \
@@ -28,7 +28,7 @@ python3 align_reads_using_bwa.py \
 python3 align_reads_using_bwa.py \
   ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR147/028/SRR14724528/SRR14724528_1.fastq.gz \
   ftp://ftp.sra.ebi.ac.uk/vol1/fastq/SRR147/028/SRR14724528/SRR14724528_2.fastq.gz \
-  --use-non-preemptibles \  
+  --use-non-preemptibles \
   -o gs://str-truth-set-v2/raw_data/HG005/illumina/HG005.pcr_free.cram  # novoseq
 
 

@@ -120,21 +120,6 @@ def main():
     else:
         bp.set_name(f"PacBio align pipeline: all {len(SAMPLE_METADATA)} samples")
 
-    s0 = bp.new_step(f"pbmm2: index hg38",
-                     arg_suffix=f"index",
-                     step_number=0,
-                     image=DOCKER_IMAGE,
-                     cpu=4,
-                     memory="highmem",
-                     storage="20Gi",
-                     output_dir=TEMP_DIR)
-
-    local_fasta = s0.input(REFERENCE_FASTA, localize_by=Localize.COPY)
-    print(f"Indexing {local_fasta}")
-    s0.command(f"pbmm2 index {local_fasta} Homo_sapiens_assembly38.mmi --preset SUBREAD")
-    s0.output("Homo_sapiens_assembly38.mmi")
-    s0.output(f"{local_fasta}")
-
     aligned_bam_files_for_CHM1_CHM13 = []
     align_bam_files_for_CHM1_CHM13_steps = []
     for sample_id, unaligned_reads_urls in SAMPLE_METADATA.items():
@@ -286,7 +271,9 @@ then
     mv {output_bam_filename.replace('.bam', '.bai')} {output_bam_filename}.bai
 else
     echo "Coverage is $CURRENT_COVERAGE which is already less than the target coverage of {target_coverage}x. Skipping downsampling."
-fi    
+    cp {local_bam} {output_bam_filename}
+    cp {local_bam}.bai {output_bam_filename}.bai
+fi
 """)
         s4.command("ls -lh")
 
@@ -296,7 +283,7 @@ fi
         s4.output(f"/io/{output_bam_filename}")
         s4.output(f"/io/{output_bam_filename}.bai")
 
-    if not ("CHM1" in SAMPLE_METADATA and "CHM13" in SAMPLE_METADATA):
+    if not aligned_bam_files_for_CHM1_CHM13:
         bp.run()        
         return
     

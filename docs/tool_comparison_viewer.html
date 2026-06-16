@@ -351,8 +351,7 @@ function refreshImage() {
 // Per-bin tool ranking row, e.g. "TRGT v3.0.0: 96.2% > inquiSTR: 95.1%, LongTR: 95.0% > vamos: 92.8%"
 // (tool name bold, percent green).
 // rankings.json (one per individual x technology, written by run_tools/generate_tool_ranking_json.py) maps each
-// bin key to the tools sorted by descending exact-match percent. Fetched lazily and cached per sample/technology.
-const rankingsCache = {};
+// bin key to the tools sorted by descending exact-match percent. Re-fetched fresh on every change (no in-memory cache).
 
 function renderRankingRow(perBin) {
     // keep only tools in the current selector (drops any stale/extra bucket dirs); preserve the JSON's desc-pct order
@@ -372,18 +371,17 @@ function renderRankingRow(perBin) {
 }
 
 function refreshRanking() {
-    const cacheKey = currentSample() + "/" + currentDataType(), binKey = buildBinKey();
-    if (cacheKey in rankingsCache) {
-        renderRankingRow(rankingsCache[cacheKey] && rankingsCache[cacheKey][binKey]);
-        return;
-    }
+    // Capture the control state at request time so a slow response can't overwrite the ranking for a newer
+    // selection; always re-fetch (never serve an in-memory copy) so a regenerated rankings.json shows immediately.
+    const reqSample = currentSample(), reqDataType = currentDataType(), reqBinKey = buildBinKey();
+    const stillCurrent = () => reqSample === currentSample() && reqDataType === currentDataType() && reqBinKey === buildBinKey();
     $('#ranking-row').html('<span class="muted">loading…</span>');
     // 'no-cache' forces a revalidation (If-None-Match) on every load so a regenerated rankings.json is picked
     // up immediately instead of being served stale from the browser's HTTP cache (GCS sets max-age=3600).
-    fetch(`${BASE_URL}/${currentSample()}/${currentDataType()}/rankings.json`, {cache: 'no-cache'})
+    fetch(`${BASE_URL}/${reqSample}/${reqDataType}/rankings.json`, {cache: 'no-cache'})
         .then(r => r.ok ? r.json() : null)
-        .then(data => { rankingsCache[cacheKey] = data; renderRankingRow(data && data[binKey]); })
-        .catch(() => { rankingsCache[cacheKey] = null; renderRankingRow(null); });
+        .then(data => { if (stillCurrent()) renderRankingRow(data && data[reqBinKey]); })
+        .catch(() => { if (stillCurrent()) renderRankingRow(null); });
 }
 
 // rebuild downstream radios when the technology changes, then refresh image

@@ -40,7 +40,7 @@ schema_overrides = {
     "Motif": pl.Utf8,
     "CanonicalMotif": pl.Utf8,
     "MotifSize": pl.Int32,
-    "NumRepeatsInReference": pl.Int32,
+    "NumRepeatsInReference": pl.Float32,
     "IsFoundInReference": pl.Boolean,
 }
 
@@ -63,7 +63,9 @@ for sample_id in sample_ids:
     matching_bed_file_path = None
     for bed_file_path in args.dipcall_confidence_regions:
         bed_filename = os.path.basename(bed_file_path)
-        if sample_id in bed_filename:
+        # require sample_id to be followed by "." (e.g. "HG002.dip.bed.gz") so a shorter id can't match a longer
+        # one's file as a substring (e.g. "HG002" must not match "HG00254.dip.bed.gz")
+        if bed_filename.startswith(f"{sample_id}."):
             if matching_bed_file_path is not None:
                 parser.error(f"Multiple DipCall confidence region bed files found for sample {sample_id}: {matching_bed_file_path} and {bed_file_path}")
 

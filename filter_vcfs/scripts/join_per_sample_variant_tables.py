@@ -111,7 +111,6 @@ if not args.output_tsv.endswith(".gz"):
 
 combined_df = None
 output_stats = []
-all_allele_size_columns = []
 
 
 for table_i, input_tsv in tqdm.tqdm(enumerate(args.input_tsvs), total=len(args.input_tsvs), unit=" tables"):
@@ -130,15 +129,11 @@ for table_i, input_tsv in tqdm.tqdm(enumerate(args.input_tsvs), total=len(args.i
 
     # Rename columns efficiently - build rename dict once
     rename_dict = {}
-    allele_columns = []
     for column in SAMPLE_SPECIFIC_COLUMNS:
         renamed_column = f"{column}:{sample_id}"
         rename_dict[column] = renamed_column
-        if column.startswith("NumRepeats") and column.endswith("Allele"):
-            allele_columns.append(renamed_column)
-    
+
     df.rename(columns=rename_dict, inplace=True)
-    all_allele_size_columns.extend(allele_columns)
 
     if combined_df is None:
         locus_ids_before_join = 0
@@ -181,11 +176,6 @@ combined_df["IsPureRepeat"] = combined_df[is_pure_repeat_columns].all(axis=1)
 combined_df.drop(columns=is_pure_repeat_columns, inplace=True)
 
 combined_df = combined_df.reset_index()
-
-for c in all_allele_size_columns:
-    num_empty_values = combined_df[c].isna().sum()
-    combined_df[c] = combined_df[c].fillna(combined_df["NumRepeatsInReference"])
-    print(f"Filled {num_empty_values:,d} empty values in column {c} out of {len(combined_df):,d} total rows")
 
 combined_df.to_csv(args.output_tsv, sep="\t", index=False)
 print(f"Wrote combined table with {len(combined_df):,d} loci to {args.output_tsv}")

@@ -408,29 +408,12 @@ def create_plot_step(bp, suffix, input_dir, output_dir, row=None, alleles_tsv_st
         plot_step.output(filename, output_path)
         files_to_download[filename.replace(".png", "")] = output_path
 
-    # create step to run gcloud storage objects update --content-type 'image/svg+xml' --content-encoding 'gzip' gs://str-truth-set-v2/tool_results/all_repeats_excluding_homopolymers/HG002/**/*.svg.gz
-    # on each image
-    image_headers_step = bp.new_step(
-        name=f"Set plot image headers",
-        arg_suffix="image-headers-step",
-        image=FILTER_VCFS_DOCKER_IMAGE,
-        cpu=1,
-        output_dir=output_dir)
-
-    image_headers_step.depends_on(plot_step)
-
-    image_headers_step.command("set -ex")
-    for previous_step_output in plot_step.get_outputs():
-        if previous_step_output.filename.endswith(".svg") or previous_step_output.filename.endswith(".svg.gz"):
-            image_headers_step.command(
-                f"gcloud storage objects update --content-type 'image/svg+xml' --content-encoding 'gzip' {previous_step_output.output_path}")
-
     return plot_step, files_to_download
 
 
 def create_combine_results_step(
         bp, df, suffix, variant_catalog_steps,
-        annotate_variants_steps, annotate_alleles_steps, output_dir, exclude_homopolymers=False,
+        annotate_variants_steps, annotate_alleles_steps, output_dir, input_dir, exclude_homopolymers=False,
         keep_loci_that_have_overlapping_variants=False,
         use_preemptibles=True):
     combined_output_dir = os.path.join(output_dir, "combined")
@@ -506,13 +489,24 @@ def create_combine_results_step(
             combine_step.output(concat_tsv_output_filename)
         elif combine_step_type == "join tsvs" or combine_step_type == "join tsvs only pure repeats":
             joined_tsv_output_filename = f"{combine_step_prefix}.{len(df)}_samples.variants.tsv.gz"
+            joined_tsv_unfilled_filename = f"{combine_step_prefix}.{len(df)}_samples.variants.unfilled.tsv.gz"
             joined_tsv_output_stats_filename = f"{combine_step_prefix}.{len(df)}_samples.variants.stats.tsv.gz"
             extra_args = "--discard-impure-genotypes" if combine_step_type == "join tsvs only pure repeats" else ""
             combine_step.command(
                 f"python3 /filter_vcfs/scripts/join_per_sample_variant_tables.py {extra_args} "
                 f"--output-stats-tsv {joined_tsv_output_stats_filename} "
-                f"-o {joined_tsv_output_filename} " +
+                f"-o {joined_tsv_unfilled_filename} " +
                 " ".join(i.local_path for i in input_files))
+            dipcall_bed_inputs = [
+                combine_step.input(
+                    os.path.join(input_dir, f"{row.sample_id}/{row.sample_id}.dip.bed.gz")
+                ) for _, row in df.iterrows()
+            ]
+            combine_step.command(
+                f"python3 /filter_vcfs/scripts/fill_missing_genotypes_in_joined_variant_table.py "
+                f"--output-tsv {joined_tsv_output_filename} "
+                f"{joined_tsv_unfilled_filename} " +
+                " ".join(i.local_path for i in dipcall_bed_inputs))
             combine_step.output(joined_tsv_output_filename)
             combine_step.output(joined_tsv_output_stats_filename)
             # Feed only the all-repeats join to the combined catalog. The pure-repeats-only join
@@ -711,6 +705,7 @@ def main():
             bp, df, suffix,
             variant_catalog_steps, annotate_variants_steps, annotate_alleles_steps,
             output_dir=os.path.join(args.output_dir, output_dir_suffix),
+            input_dir=args.input_dir,
             exclude_homopolymers=args.exclude_homopolymers,
             use_preemptibles=not args.use_nonpreemptibles)
 
@@ -721,6 +716,7 @@ def main():
             bp, df, suffix_keeping_all_loci,
             variant_catalog_steps_keeping_all_loci, None, None,
             output_dir=output_base_dir_keeping_all_loci,
+            input_dir=args.input_dir,
             exclude_homopolymers=args.exclude_homopolymers,
             use_preemptibles=not args.use_nonpreemptibles)
 

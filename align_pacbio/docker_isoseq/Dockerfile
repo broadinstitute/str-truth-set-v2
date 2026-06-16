@@ -67,10 +67,10 @@ RUN wget https://github.com/samtools/samtools/releases/download/${SAMTOOLS_VERSI
 RUN wget https://github.com/brentp/mosdepth/releases/download/v0.3.5/mosdepth -O /usr/local/bin/mosdepth \
 	&& chmod 777 /usr/local/bin/mosdepth
 
-# upgrade pbmm2 (base image ships 1.10.0) to a current release via micromamba + bioconda.
+# install pbmm2 via micromamba + bioconda (the base image is plain ubuntu and ships no pbmm2).
 # pbmm2 is installed into an isolated prefix so its bundled libs/tools don't shadow the
-# hand-built samtools 1.20 above; a wrapper at /usr/local/bin/pbmm2 overrides the base binary
-# while keeping the real executable's $ORIGIN-based RPATH intact.
+# hand-built samtools 1.20 above; a wrapper at /usr/local/bin/pbmm2 execs the real executable
+# so its $ORIGIN-based RPATH stays intact.
 ENV PBMM2_VERSION=26.1.0
 ENV MAMBA_ROOT_PREFIX=/opt/micromamba
 RUN curl -L -o /usr/local/bin/micromamba \

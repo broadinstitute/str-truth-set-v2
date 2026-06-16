@@ -125,9 +125,9 @@ def create_combine_step(bp, filter_steps, data_dir, cpu=2, memory="highmem"):
     for filter_step in filter_steps:
         combine_step.depends_on(filter_step)
 
-        filter_step_outputs = filter_step.get_outputs()
-        local_bed_path = combine_step.input(filter_step_outputs[4].output_path)
-        catalog_bed_files.append(local_bed_path)
+        catalog_bed_files.append(combine_step.input(
+            next(o.output_path for o in filter_step.get_outputs()
+                 if o.filename.endswith(".tandem_repeats.detailed.bed.gz"))))
 
     combine_step.command("set -exuo pipefail")
 
