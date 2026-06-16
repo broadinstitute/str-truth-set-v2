@@ -10,10 +10,9 @@ Outputs:
 
 import argparse
 import collections
-import gzip
 from intervaltree import IntervalTree, Interval
 import os
-import polars as pl
+import pandas as pd
 import tqdm
 
 parser = argparse.ArgumentParser(description="Fill in homozygous-reference genotypes for missing-genotype loci inside dipcall confidence regions")
@@ -29,26 +28,16 @@ if not os.path.exists(args.joined_variant_table):
 if not args.output_tsv:
     args.output_tsv = args.joined_variant_table.replace(".tsv", ".with_hom_ref_filled_in.tsv")
 
-# Define schema for the joined variant table
-# We need to specify Chrom as Utf8 to handle X, Y, etc.
-schema_overrides = {
-    "Chrom": pl.Utf8,
-    "Start1Based": pl.Int32,
-    "End1Based": pl.Int32,
-    "Locus": pl.Utf8,
-    "LocusId": pl.Utf8,
-    "Motif": pl.Utf8,
-    "CanonicalMotif": pl.Utf8,
-    "MotifSize": pl.Int32,
-    "NumRepeatsInReference": pl.Float32,
-    "IsFoundInReference": pl.Boolean,
+# Read string-typed columns as strings (Chrom must stay Utf8 to handle X, Y, etc.); numeric columns are inferred.
+dtype_overrides = {
+    "Chrom": str,
+    "Locus": str,
+    "LocusId": str,
+    "Motif": str,
+    "CanonicalMotif": str,
 }
 
-joined_variant_table = pl.read_csv(
-    args.joined_variant_table, 
-    separator="\t",
-    schema_overrides=schema_overrides
-)
+joined_variant_table = pd.read_csv(args.joined_variant_table, sep="\t", dtype=dtype_overrides)
 
 sample_ids = set()
 for column in joined_variant_table.columns:
@@ -70,7 +59,7 @@ for sample_id in sample_ids:
                 parser.error(f"Multiple DipCall confidence region bed files found for sample {sample_id}: {matching_bed_file_path} and {bed_file_path}")
 
             matching_bed_file_path = bed_file_path
-            
+
     if matching_bed_file_path is None:
         parser.error(f"No dipcall confidence region bed file found for sample {sample_id}")
 
@@ -82,80 +71,48 @@ for sample_id in sample_ids:
 
 for bed_file_i, (sample_id, bed_file_path) in tqdm.tqdm(enumerate(sample_ids_to_bed_file_paths.items()), total=len(sample_ids_to_bed_file_paths), unit=" samples"):
     print(f"Processing sample {sample_id} from {bed_file_path}")
-    # read the bed file
-    # Define schema for BED file - chrom should be Utf8 to handle complex chromosome names
-    bed_schema_overrides = {
-        "chrom": pl.Utf8,
-        "start": pl.Int32,
-        "end": pl.Int32,
-    }
-    
-    dipcall_confidence_regions = pl.read_csv(
-        bed_file_path, 
-        separator="\t", 
-        has_header=False, 
-        new_columns=["Chrom", "Start0Based", "End1Based"],
-        schema_overrides=bed_schema_overrides
-    )
-    #print(dipcall_confidence_regions)
+    # read the first 3 columns of the bed file (chrom, start, end)
+    dipcall_confidence_regions = pd.read_csv(bed_file_path, sep="\t", header=None, dtype=str).iloc[:, :3]
+    dipcall_confidence_regions.columns = ["Chrom", "Start0Based", "End1Based"]
+    dipcall_confidence_regions["Start0Based"] = dipcall_confidence_regions["Start0Based"].astype(int)
+    dipcall_confidence_regions["End1Based"] = dipcall_confidence_regions["End1Based"].astype(int)
 
     EMPTY_INTERVAL_TREE = IntervalTree()
     confidence_region_interval_trees = collections.defaultdict(IntervalTree)
     total_bases = 0
-    for row in dipcall_confidence_regions.iter_rows(named=True):
-        if "_" in row["Chrom"]:
+    for row in dipcall_confidence_regions.itertuples(index=False):
+        if "_" in row.Chrom:
             continue
-        normalized_chrom = row["Chrom"].replace("chr", "").upper()
-        confidence_region_interval_trees[normalized_chrom].add(Interval(row["Start0Based"], row["End1Based"]))
-        total_bases += row["End1Based"] - row["Start0Based"]
+        normalized_chrom = row.Chrom.replace("chr", "").upper()
+        confidence_region_interval_trees[normalized_chrom].add(Interval(row.Start0Based, row.End1Based))
+        total_bases += row.End1Based - row.Start0Based
 
     print(f"Total bases in {bed_file_path}: {total_bases:,d}")
-    # for each row in the joined variant table, check if the locus is in the interval tree
 
+    short_allele_column = f"NumRepeatsShortAllele:{sample_id}"
+    long_allele_column = f"NumRepeatsLongAllele:{sample_id}"
+
+    # for each locus whose short and long alleles are both missing, check if the locus is in the interval tree
     set_to_hom_ref = set()
-    for row in joined_variant_table.iter_rows(named=True):
-        # if both the short and long alleles are "missing" accourding to polars, set the genotype to homozygous reference
-        if row[f"NumRepeatsShortAllele:{sample_id}"] is None and row[f"NumRepeatsLongAllele:{sample_id}"] is None:
-            normalized_chrom = row["Chrom"].replace("chr", "").upper()
-            if confidence_region_interval_trees.get(normalized_chrom, EMPTY_INTERVAL_TREE).overlaps(row["Start1Based"] - 1, row["End1Based"]):
-                set_to_hom_ref.add(row["LocusId"])
+    both_missing = joined_variant_table[short_allele_column].isna() & joined_variant_table[long_allele_column].isna()
+    for row in joined_variant_table.loc[both_missing, ["Chrom", "Start1Based", "End1Based", "LocusId"]].itertuples(index=False):
+        normalized_chrom = row.Chrom.replace("chr", "").upper()
+        if confidence_region_interval_trees.get(normalized_chrom, EMPTY_INTERVAL_TREE).overlaps(row.Start1Based - 1, row.End1Based):
+            set_to_hom_ref.add(row.LocusId)
 
-    print(f"Resetting {len(set_to_hom_ref):,d} out of {joined_variant_table.height:,d} ({(len(set_to_hom_ref)/joined_variant_table.height):.1%}) genotypes to homozygous reference for sample {sample_id}")
+    print(f"Resetting {len(set_to_hom_ref):,d} out of {len(joined_variant_table):,d} ({(len(set_to_hom_ref)/len(joined_variant_table)):.1%}) genotypes to homozygous reference for sample {sample_id}")
 
-    joined_variant_table = joined_variant_table.with_columns(
-        pl.when(pl.col(f"LocusId").is_in(set_to_hom_ref)).then(pl.col(f"NumRepeatsInReference")).otherwise(pl.col(f"NumRepeatsShortAllele:{sample_id}")).alias(f"NumRepeatsShortAllele:{sample_id}"),
-        pl.when(pl.col(f"LocusId").is_in(set_to_hom_ref)).then(pl.col(f"NumRepeatsInReference")).otherwise(pl.col(f"NumRepeatsLongAllele:{sample_id}")).alias(f"NumRepeatsLongAllele:{sample_id}"),
-    )
+    set_to_hom_ref_mask = joined_variant_table["LocusId"].isin(set_to_hom_ref)
+    joined_variant_table.loc[set_to_hom_ref_mask, short_allele_column] = joined_variant_table.loc[set_to_hom_ref_mask, "NumRepeatsInReference"]
+    joined_variant_table.loc[set_to_hom_ref_mask, long_allele_column] = joined_variant_table.loc[set_to_hom_ref_mask, "NumRepeatsInReference"]
 
     if bed_file_i % 100 == 0:
-        temp_file = f"temp_df2.tsv.gz"
-        with gzip.open(temp_file, "wb") as f:
-            joined_variant_table.write_csv(f, separator="\t")
-        print(f"Wrote {joined_variant_table.height:,d} loci to {temp_file}")
+        temp_file = "temp_df2.tsv.gz"
+        joined_variant_table.to_csv(temp_file, sep="\t", index=False, compression="gzip")
+        print(f"Wrote {len(joined_variant_table):,d} loci to {temp_file}")
 
-        joined_variant_table = pl.read_csv(temp_file, separator="\t", schema_overrides=schema_overrides)
-        print(f"Read {joined_variant_table.height:,d} loci from {temp_file}")
+        joined_variant_table = pd.read_csv(temp_file, sep="\t", dtype=dtype_overrides)
+        print(f"Read {len(joined_variant_table):,d} loci from {temp_file}")
 
 # Write the joined variant table to a gzipped file
-with gzip.open(args.output_tsv, "wb") as f:
-    joined_variant_table.write_csv(f, separator="\t")
-
-joined_variant_table = joined_variant_table.with_columns(
-    *[pl.col(f"NumRepeatsShortAllele:{s}").fill_null("missing").alias(f"NumRepeatsShortAllele:{s}") for s in sample_ids],
-    *[pl.col(f"NumRepeatsLongAllele:{s}").fill_null("missing").alias(f"NumRepeatsLongAllele:{s}") for s in sample_ids],
-)
-
-for sample_id in sample_ids:
-    sample_bed_path = f"{sample_id}.with_hom_ref_filled_in.bed"
-    subset_df = joined_variant_table.select(
-        pl.col("Chrom").cast(pl.Utf8).alias("chrom"),
-        (pl.col("Start1Based") - 1).cast(pl.Int32).alias("start"),
-        pl.col("End1Based").cast(pl.Int32).alias("end"),
-        (pl.col(f"NumRepeatsShortAllele:{sample_id}").cast(pl.String) + "/" + pl.col(f"NumRepeatsLongAllele:{sample_id}").cast(pl.String)).alias("name"),
-        pl.lit(".").alias("score"),
-        pl.lit(".").alias("strand"),
-    )
-    subset_df = subset_df.sort("chrom", "start", "end")
-
-    subset_df.write_csv(sample_bed_path, separator="\t", include_header=False)
-    print(f"Wrote {subset_df.height:,d} rows to {sample_bed_path}")
+joined_variant_table.to_csv(args.output_tsv, sep="\t", index=False, compression="gzip")

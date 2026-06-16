@@ -7,8 +7,6 @@ Per-sample inputs:
     output directory
 """
 
-import dns_resilience  # noqa: F401  -- patch socket.getaddrinfo (retry/cache) before hailtop, so this
-                       # machine's intermittent DNS blips don't wedge batch submission. Must precede hailtop.
 import collections
 import hailtop.fs as hfs
 import os
@@ -137,7 +135,7 @@ def main():
     # plain re-run RE-GENOTYPES EHv5/EHv5-bw2-optimized/IlluminaEHv5 instead of skipping. To replot those without
     # re-genotyping, pass --skip-run-expansion-hunter-step --skip-combine-expansion-hunter-step --skip-add-columns-step
     # together with --force-plot-accuracy-step.
-    precache_tools = args.tool if args.tool else ["TRGTv5"]
+    precache_tools = args.tool
     for precache_sample in df.sample_id.unique():
         for precache_data_type in df.loc[df.sample_id == precache_sample, "sequencing_data_type"].unique():
             for precache_tool in precache_tools:

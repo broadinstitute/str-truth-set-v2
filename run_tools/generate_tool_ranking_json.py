@@ -160,7 +160,7 @@ def basename(uri):
     return uri.rstrip("/").split("/")[-1]
 
 
-def generate_for_sample_data_type(root, sample, dtype_uri, tmp_dir, dry_run):
+def generate_for_sample_data_type(sample, dtype_uri, tmp_dir, dry_run):
     """Builds and uploads rankings.json for one (sample, data type) by scanning every tool/coverage under it."""
     dtype = basename(dtype_uri)
     rankings = {}  # bin_key -> {tool -> {exact, total, pct}}
@@ -227,7 +227,7 @@ def main():
             for dtype_uri in [u for u in gcs_ls(f"{root}/{sample}") if u.endswith("/")]:
                 if args.data_type and basename(dtype_uri) not in args.data_type:
                     continue
-                generate_for_sample_data_type(root, sample, dtype_uri, tmp_dir, args.dry_run)
+                generate_for_sample_data_type(sample, dtype_uri, tmp_dir, args.dry_run)
 
 
 if __name__ == "__main__":
