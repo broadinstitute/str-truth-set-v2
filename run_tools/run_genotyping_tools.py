@@ -382,6 +382,7 @@ def main():
                 add_columns_step,
                 tool=tool,
                 coverage_label=coverage_label,
+                sequencing_data_type=row.sequencing_data_type,
                 sample_id=row.sample_id,
                 output_dir=output_dir)
     bp.run()
@@ -541,7 +542,7 @@ EOF
     return add_columns_step
 
 
-def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage_label, sample_id, output_dir):
+def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage_label, sequencing_data_type, sample_id, output_dir):
     plot_tool_accuracy_step = bp.new_step(
         name=f"Plot {sample_id} {tool} accuracy for {os.path.basename(output_dir)}",
         arg_suffix=f"plot-accuracy-step",
@@ -563,6 +564,7 @@ def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage_labe
             "--verbose "
             f"--tool {tool} "
             f"--coverage {coverage_label} "
+            f"--sequencing-data-type {sequencing_data_type} "
             "--q-threshold 0 "
             f"--min-motif-size {min_motif_size} "
             f"--max-motif-size {max_motif_size} "
@@ -579,6 +581,7 @@ def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage_labe
         "--verbose "
         f"--tool {tool} "
         f"--coverage {coverage_label} "
+        f"--sequencing-data-type {sequencing_data_type} "
         "--q-threshold 0 "
         "--all-motifs-only "
         "--image-type svg "
