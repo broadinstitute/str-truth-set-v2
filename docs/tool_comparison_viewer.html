@@ -348,7 +348,7 @@ function refreshImage() {
     writeHash();   // every state change funnels through here, so the URL always mirrors the page
 }
 
-// Per-bin tool ranking row, e.g. "TRGT v3.0.0: 96.2% > inquiSTR: 95.1%, LongTR: 95.0% > vamos: 92.8%"
+// Per-bin tool ranking row, e.g. "TRGT v3.0.0: 96.2% and TRGT v5: 96.2% > inquiSTR: 95.1% > vamos: 92.8%"
 // (tool name bold, percent green).
 // rankings.json (one per individual x technology, written by run_tools/generate_tool_ranking_json.py) maps each
 // bin key to the tools sorted by descending exact-match percent. Re-fetched (no-cache) whenever the
@@ -361,11 +361,11 @@ function renderRankingRow(perBin) {
     if (!entries.length) { $('#ranking-row').html('<span class="muted">no data for this bin yet</span>'); return; }
     let html = "", prev = null;
     entries.forEach((e, i) => {
-        const pct = e.pct.toFixed(1);                                  // ties (same 1-decimal %) joined by ", ", else " > "
+        const pct = e.pct.toFixed(1);                                  // ties (same 1-decimal %) joined by " and ", else " > "
         const label = TOOL_LABELS[e.tool] || e.tool;                   // bold the tool name; keep any " (descriptor)" plain
         const m = label.match(/^(.*?)(\s*\(.*)$/);
         const labelHtml = m ? `<b>${m[1]}</b>${m[2]}` : `<b>${label}</b>`;
-        html += (i === 0 ? "" : (pct === prev ? ",&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;" : "&nbsp;&nbsp;&nbsp;&gt;&nbsp;&nbsp;&nbsp;")) + `${labelHtml}: <span class="rank-pct">${pct}%</span>`;
+        html += (i === 0 ? "" : (pct === prev ? "&nbsp;&nbsp;and&nbsp;&nbsp;" : "&nbsp;&nbsp;&nbsp;&gt;&nbsp;&nbsp;&nbsp;")) + `${labelHtml}: <span class="rank-pct">${pct}%</span>`;
         prev = pct;
     });
     $('#ranking-row').html(html);
