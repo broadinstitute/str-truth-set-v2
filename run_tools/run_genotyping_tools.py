@@ -329,7 +329,10 @@ def main():
                     male_or_female=row.male_or_female,
                     regions_bed_paths=repeat_catalog_paths,
                     output_dir=output_dir,
-                    output_prefix=f"{row.sample_id}.{tool}")
+                    output_prefix=f"{row.sample_id}.{tool}",
+                    # ONT base qualities sit below LongTR's default --min-mean-qual 30, so without a lower
+                    # threshold every ONT read is filtered out and LongTR emits an empty VCF.
+                    min_mean_qual=10 if row.sequencing_data_type == "ONT" else None)
             elif tool == "inquiSTR":
                 current_step = create_inquistr_steps(
                     bp,
@@ -506,7 +509,13 @@ def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage_la
     add_columns_step.command(f"""python3 <<EOF
 import pandas as pd
 print("Adding columns to {local_tool_results_input}")
-df = pd.read_table("{local_tool_results_input}", dtype=str)
+try:
+    df = pd.read_table("{local_tool_results_input}", dtype=str)
+except pd.errors.EmptyDataError:
+    # The tool genotyped nothing (e.g. HipSTR/EH on single-end ultima reads, or LongTR on ONT before the
+    # --min-mean-qual fix), so the combined variants table is an empty gzip. Keep going with an empty table:
+    # add_tool_results_columns.py marks every truth-set locus as a No Call for this tool.
+    df = pd.DataFrame()
 df.loc[:, "Coverage"] = "{coverage_label}"
 print(f"Writing {{len(df):,d}} rows to {local_tool_results_input}")
 df.to_csv("{local_tool_results_input}", sep="\\t", index=False, header=True)
