@@ -91,10 +91,17 @@ for bed_file_i, (sample_id, bed_file_path) in tqdm.tqdm(enumerate(sample_ids_to_
 
     short_allele_column = f"NumRepeatsShortAllele:{sample_id}"
     long_allele_column = f"NumRepeatsLongAllele:{sample_id}"
+    discarded_impure_column = f"DiscardedImpureGenotype:{sample_id}"
 
     # for each locus whose short and long alleles are both missing, check if the locus is in the interval tree
     set_to_hom_ref = set()
     both_missing = joined_variant_table[short_allele_column].isna() & joined_variant_table[long_allele_column].isna()
+    if discarded_impure_column in joined_variant_table.columns:
+        # A missing genotype here may be missing because an impure genotype was intentionally discarded upstream
+        # (in the pure-repeats-only join) rather than because the sample matches the reference. Leave those
+        # missing instead of resetting them to homozygous reference.
+        is_discarded_impure = joined_variant_table[discarded_impure_column].fillna(False).astype(str).str.lower().isin(("true", "1"))
+        both_missing &= ~is_discarded_impure
     for row in joined_variant_table.loc[both_missing, ["Chrom", "Start1Based", "End1Based", "LocusId"]].itertuples(index=False):
         normalized_chrom = row.Chrom.replace("chr", "").upper()
         if confidence_region_interval_trees.get(normalized_chrom, EMPTY_INTERVAL_TREE).overlaps(row.Start1Based - 1, row.End1Based):
@@ -113,6 +120,12 @@ for bed_file_i, (sample_id, bed_file_path) in tqdm.tqdm(enumerate(sample_ids_to_
 
         joined_variant_table = pd.read_csv(temp_file, sep="\t", dtype=dtype_overrides)
         print(f"Read {len(joined_variant_table):,d} loci from {temp_file}")
+
+# Drop the internal DiscardedImpureGenotype:<sample> marker columns (used only to keep discarded impure genotypes
+# from being reset to homozygous reference) so they don't appear in the output table.
+discarded_impure_columns = [c for c in joined_variant_table.columns if c.startswith("DiscardedImpureGenotype:")]
+if discarded_impure_columns:
+    joined_variant_table = joined_variant_table.drop(columns=discarded_impure_columns)
 
 # Write the joined variant table to a gzipped file
 joined_variant_table.to_csv(args.output_tsv, sep="\t", index=False, compression="gzip")

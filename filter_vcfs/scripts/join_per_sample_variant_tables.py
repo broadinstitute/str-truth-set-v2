@@ -123,7 +123,15 @@ for table_i, input_tsv in tqdm.tqdm(enumerate(args.input_tsvs), total=len(args.i
         raise ValueError(f"{input_tsv} is missing these columns: {missing_columns}. Its columns are: {df.columns}")
 
     if args.discard_impure_genotypes:
-        df = df[df["IsPureRepeat"]]
+        # Don't drop impure rows outright: that would make a sample's discarded impure genotype indistinguishable
+        # from a locus the sample simply had no call at, so the downstream fill_missing_genotypes step would wrongly
+        # reset the discarded impure genotype to homozygous reference. Instead, null out the impure allele values
+        # (so the output contains no impure genotypes) and flag them in a DiscardedImpureGenotype:<sample> column
+        # so the fill step leaves them missing. Setting IsPureRepeat to NA for these rows keeps the per-locus
+        # IsPureRepeat computed below identical to what dropping the rows would have produced.
+        impure_mask = ~df["IsPureRepeat"].fillna(False)
+        df["DiscardedImpureGenotype"] = impure_mask
+        df.loc[impure_mask, ["NumRepeatsShortAllele", "NumRepeatsLongAllele", "IsPureRepeat"]] = pd.NA
 
     df.set_index(PER_LOCUS_COLUMNS, inplace=True)
 
@@ -132,6 +140,8 @@ for table_i, input_tsv in tqdm.tqdm(enumerate(args.input_tsvs), total=len(args.i
     for column in SAMPLE_SPECIFIC_COLUMNS:
         renamed_column = f"{column}:{sample_id}"
         rename_dict[column] = renamed_column
+    if "DiscardedImpureGenotype" in df.columns:
+        rename_dict["DiscardedImpureGenotype"] = f"DiscardedImpureGenotype:{sample_id}"
 
     df.rename(columns=rename_dict, inplace=True)
 
@@ -176,6 +186,13 @@ combined_df["IsPureRepeat"] = combined_df[is_pure_repeat_columns].all(axis=1)
 combined_df.drop(columns=is_pure_repeat_columns, inplace=True)
 
 combined_df = combined_df.reset_index()
+
+if args.discard_impure_genotypes:
+    # A locus belongs in this table only if at least one sample had a pure genotype for it. Loci where every
+    # sample was either absent or had an impure (now-nulled) genotype have all-NA alleles; drop them, matching
+    # the previous behavior of dropping impure rows before the join.
+    short_allele_columns = [c for c in combined_df.columns if c.startswith("NumRepeatsShortAllele:")]
+    combined_df = combined_df[combined_df[short_allele_columns].notna().any(axis=1)]
 
 combined_df.to_csv(args.output_tsv, sep="\t", index=False)
 print(f"Wrote combined table with {len(combined_df):,d} loci to {args.output_tsv}")
