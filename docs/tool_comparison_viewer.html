@@ -75,7 +75,7 @@
                 <span id="datatype-radios"></span>
             </li>
             <li>
-                <span class="facet-label">Depth of Coverage:</span>
+                <span class="facet-label">Coverage:</span>
                 <span class="navlinks">[<a class="prev-button" id="prev-coverage" href="#">←</a> <a class="next-button" id="next-coverage" href="#">→</a>]</span>
                 <span id="coverage-radios"></span>
             </li>
@@ -325,12 +325,12 @@ function renderDataTypes() {
 }
 function renderTools() {
     const tools = DATA_TYPES[currentDataType()].tools;
-    $('#tool-radios').html(tools.map((t,i)=>radio("tool",t,TOOL_LABELS[t]||t,i===0)).join(''));
+    $('#tool-radios').html(tools.map((t,i)=>radio("tool",t,(TOOL_LABELS[t]||t).replace(/^([^(]+?)\s*(\(.*)?$/,(_,a,b)=>b?`<b>${a}</b> ${b}`:`<b>${a}</b>`),i===0)).join(''));
     $('#tool-radios .ui.checkbox').checkbox();      // re-init: these radios render after the global init in $(...), so clicking a label wouldn't select otherwise
 }
 function renderCoverages() {
     const covs = currentSampleObj().coverages[currentDataType()];
-    $('#coverage-radios').html(covs.map((c,i)=>radio("coverage",c.tok,c.label,i===0)).join(''));
+    $('#coverage-radios').html(covs.map((c,i)=>radio("coverage",c.tok,c.label.replace(/^(\d+)G$/,'$1 gigabases <span class="muted">(= read length x number of reads)</span>'),i===0)).join(''));
     $('#coverage-radios .ui.checkbox').checkbox();  // re-init: see renderTools
 }
 function renderStatic() {
