@@ -107,6 +107,9 @@ def main():
                              "(it carries the per-allele repeat purity used by the purity-stratified plots)")
     parser.add_argument("--custom-catalog-path", help="If specified, use this catalog instead of the filter_vcf catalogs")
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument("--output-subdir", help="If specified, append this extra subdirectory after the "
+                        "{sample}/{data_type}/{tool}/{coverage}_coverage/ output path. Useful to keep a "
+                        "--custom-catalog-path run's results separate from the per-sample-catalog results.")
     args = bp.parse_known_args()
 
     if not args.tool:
@@ -120,10 +123,14 @@ def main():
     if args.data_type:
         df = df[df.sequencing_data_type.isin(args.data_type)]
 
-    df = df[df.sample_id.isin(["HG002", "CHM1_CHM13"])]  # only HG002 and CHM1_CHM13 are used for tool evaluations
+    if not args.sample_id:
+        # default to HG002 + CHM1_CHM13 (the standard tool-evaluation samples) unless explicit --sample-id given
+        df = df[df.sample_id.isin(["HG002", "CHM1_CHM13"])]
 
-    if args.custom_catalog_path and args.output_dir == DEFAULT_OUTPUT_DIR:
-        parser.error("--custom-catalog-path is set without also setting --output-dir")
+    # A custom catalog's results must not collide with the per-sample-catalog results under the default output dir;
+    # require either a non-default --output-dir or an --output-subdir that nests them under a separate path.
+    if args.custom_catalog_path and args.output_dir == DEFAULT_OUTPUT_DIR and not args.output_subdir:
+        parser.error("--custom-catalog-path is set without also setting --output-dir or --output-subdir")
 
     # Precache only the output subtrees actually selected, not the whole bucket. A single
     # precache of "{output_dir}/**/*.*" forces gcloud to list ALL ~90k objects (the ~1200 svgs per combo
@@ -141,6 +148,12 @@ def main():
             for precache_tool in precache_tools:
                 bp.precache_file_paths(os.path.join(
                     args.output_dir, precache_sample, precache_data_type, precache_tool, "**/*.tsv.gz"))
+                # also precache the per-shard genotyping json so existing shards are skipped without re-genotyping
+                # (lists only the json dirs -- ~20 files per combo, fast). This makes a no-force re-run surgical:
+                # only shards whose json is absent are re-run, the rest are reused. The *.json* glob matches both
+                # the uncompressed .json and the .json.gz the bw2 fork writes (-z is always on for EHv5/EHv5-bw2-optimized).
+                bp.precache_file_paths(os.path.join(
+                    args.output_dir, precache_sample, precache_data_type, precache_tool, "**/json/*.json*"))
     # precache the prefiltered IlluminaEHv5 catalog(s) so the prefilter step is skipped once it already exists
     bp.precache_file_paths(os.path.join(args.filter_vcf_dir, "**/*.for_illumina_eh.json"))
 
@@ -212,6 +225,8 @@ def main():
             print(f"Listing catalogs {repeat_catalog_paths}")
             repeat_catalog_paths = [x.path for x in hfs.ls(repeat_catalog_paths)]
             output_dir = os.path.join(args.output_dir, row.sample_id, row.sequencing_data_type, tool, f"{coverage_label}_coverage")
+            if args.output_subdir:
+                output_dir = os.path.join(output_dir, args.output_subdir)
             if tool in ("EHv5", "EHv5-bw2-optimized", "IlluminaEHv5"):
                 # Three ExpansionHunter v5 variants, all genotyped with create_expansion_hunter_steps:
                 #   EHv5               - bw2 fork, --analysis-mode low-mem-streaming
