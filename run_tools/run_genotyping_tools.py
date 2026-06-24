@@ -94,6 +94,10 @@ def main():
 
     bp = pipeline("run_genotyping_tools", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline")
 
+    # Run on non-preemptible (non-spot) machines when NONPREEMPTIBLE=1, for long runs that must not be interrupted.
+    if os.environ.get("NONPREEMPTIBLE", "").lower() in ("1", "true", "yes"):
+        bp.default_preemptible(False)
+
     parser = bp.get_config_arg_parser()
     parser.add_argument("-s", "--sample-id", action="append",
                         help="Process only this sample. Can be specified more than once.")
@@ -506,7 +510,9 @@ def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage_la
         name=f"Add {sample_id} {tool} results columns to {tool2} table for {os.path.basename(output_dir)}",
         arg_suffix=f"add-columns-step",
         image=FILTER_VCFS_DOCKER_IMAGE,
-        cpu=2,
+        # cpu=2/highmem (~13GB) OOM-kills add_concordance_columns.py on the 1.6M-locus combined catalog
+        # (~762k-row pandas table); cpu=4/highmem (~26GB) gives headroom.
+        cpu=4,
         memory="highmem",
         storage="20Gi",
         localize_by=Localize.GSUTIL_COPY,
