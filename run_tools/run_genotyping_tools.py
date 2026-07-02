@@ -24,7 +24,16 @@ from trgt_pipeline import create_trgt_step, DOCKER_IMAGE as TRGT_V5_DOCKER_IMAGE
 from longtr_pipeline import create_longtr_steps
 from inquistr_pipeline import create_inquistr_steps
 from vamos_pipeline import create_vamos_step
+from ensembletr_pipeline import create_ensembletr_steps
 
+# EnsembleTR is a consensus/merge tool run in two modes (each a separate "tool" in the comparison). It consumes the
+# already-computed per-caller outputs for the same (sample, data_type, coverage): the ExpansionHunter json (from
+# ENSEMBLETR_EH_SOURCE_TOOL) plus the HipSTR (+GangSTR) native VCFs.
+ENSEMBLETR_EH_SOURCE_TOOL = "EHv5-bw2-optimized"
+ENSEMBLETR_TOOLS = {
+    "EnsembleTR-EH+HipSTR",
+    "EnsembleTR-EH+HipSTR+GangSTR",
+}
 
 SHORT_READ_TOOLS = {
     "IlluminaEHv5",
@@ -32,8 +41,8 @@ SHORT_READ_TOOLS = {
     "EHv5-bw2-optimized",
     "GangSTR",
     "HipSTR",
-    "constrain"
-}
+    "constrain",
+} | ENSEMBLETR_TOOLS
 
 LONG_READ_TOOLS = {
     "TRGTv3",
@@ -194,6 +203,12 @@ def main():
                       f"({tool} is only run on illumina and illumina_exome data)")
                 continue
 
+            # The EH+HipSTR+GangSTR EnsembleTR mode needs GangSTR, which is only run on illumina/illumina_exome.
+            if tool == "EnsembleTR-EH+HipSTR+GangSTR" and row.sequencing_data_type not in ("illumina", "illumina_exome"):
+                print(f"WARNING: Skipping {tool} for {row.sample_id} {row.sequencing_data_type} "
+                      f"(the EH+HipSTR+GangSTR mode is only run on illumina and illumina_exome data)")
+                continue
+
             # vamos is not run on pacbio_isoseq data.
             if tool == "vamos" and row.sequencing_data_type == "pacbio_isoseq":
                 print(f"WARNING: Skipping {tool} for {row.sample_id} {row.sequencing_data_type} "
@@ -211,9 +226,11 @@ def main():
                 # vamos derives its catalog (inside the step) from the unsharded ExpansionHunter catalog json
                 repeat_catalog_paths = os.path.join(args.filter_vcf_dir, row.sample_id,
                     f"{row.sample_id}.EHv5*")
-            elif tool in ("EHv5", "EHv5-bw2-optimized", "IlluminaEHv5"):
+            elif tool in ("EHv5", "EHv5-bw2-optimized", "IlluminaEHv5") or tool in ENSEMBLETR_TOOLS:
                 # all three ExpansionHunter v5 variants share the EHv5 catalog set; the branch below picks the
-                # unsharded catalog for EHv5/EHv5-bw2-optimized and the sharded catalog(s) for IlluminaEHv5
+                # unsharded catalog for EHv5/EHv5-bw2-optimized and the sharded catalog(s) for IlluminaEHv5.
+                # The EnsembleTR tools also use the unsharded EHv5 catalog (to reconcile consensus records to truth-set
+                # LocusIds); their upstream per-caller inputs are located separately in the dispatch branch below.
                 repeat_catalog_paths = os.path.join(args.filter_vcf_dir, row.sample_id,
                     f"{row.sample_id}.EHv5*")
             elif tool in ("TRGTv3", "TRGTv5"):
@@ -240,8 +257,10 @@ def main():
                 if tool == "EHv5":
                     analysis_mode = "low-mem-streaming"
                 elif tool == "EHv5-bw2-optimized":
-                    # optimized-streaming implies --improved-genotyping inside create_expansion_hunter_steps
-                    analysis_mode = "optimized-streaming"
+                    # optimized-streaming implies --improved-genotyping inside create_expansion_hunter_steps.
+                    # EHV5_ANALYSIS_MODE overrides this (e.g. "streaming") to benchmark other bw2-fork modes
+                    # with the same binary; cpu/threads/memory then come from EHV5_STREAMING_* as usual.
+                    analysis_mode = os.environ.get("EHV5_ANALYSIS_MODE", "optimized-streaming")
                 else:  # IlluminaEHv5
                     analysis_mode = "streaming"
 
@@ -381,6 +400,41 @@ def main():
                         else [p for p in repeat_catalog_paths if p.endswith(".EHv5.001_of_001.json")]),
                     output_dir=output_dir,
                     output_prefix=f"{row.sample_id}.{tool}")
+            elif tool in ENSEMBLETR_TOOLS:
+                # EnsembleTR merges the already-computed per-caller outputs for this (sample, data_type, coverage):
+                # the ExpansionHunter json (from ENSEMBLETR_EH_SOURCE_TOOL) and the HipSTR (+GangSTR) native VCFs.
+                tool_results_base = os.path.join(args.output_dir, row.sample_id, row.sequencing_data_type)
+                eh_json_glob = os.path.join(
+                    tool_results_base, ENSEMBLETR_EH_SOURCE_TOOL, f"{coverage_label}_coverage", "json", "*.json*")
+                hipstr_vcf_glob = os.path.join(
+                    tool_results_base, "HipSTR", f"{coverage_label}_coverage", "vcf", "*.vcf.gz")
+                eh_json_paths = sorted(x.path for x in hfs.ls(eh_json_glob))
+                hipstr_vcf_paths = sorted(x.path for x in hfs.ls(hipstr_vcf_glob))
+                if not eh_json_paths:
+                    raise ValueError(f"No ExpansionHunter json files found for EnsembleTR at {eh_json_glob}")
+                if not hipstr_vcf_paths:
+                    raise ValueError(f"No HipSTR vcf files found for EnsembleTR at {hipstr_vcf_glob}")
+                gangstr_vcf_paths = None
+                if tool == "EnsembleTR-EH+HipSTR+GangSTR":
+                    gangstr_vcf_glob = os.path.join(
+                        tool_results_base, "GangSTR", f"{coverage_label}_coverage", "vcf", "*.vcf.gz")
+                    gangstr_vcf_paths = sorted(x.path for x in hfs.ls(gangstr_vcf_glob))
+                    if not gangstr_vcf_paths:
+                        raise ValueError(f"No GangSTR vcf files found for EnsembleTR at {gangstr_vcf_glob}")
+                current_step = create_ensembletr_steps(
+                    bp,
+                    reference_fasta=REFERENCE_FASTA_PATH,
+                    reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
+                    eh_json_paths=eh_json_paths,
+                    hipstr_vcf_paths=hipstr_vcf_paths,
+                    gangstr_vcf_paths=gangstr_vcf_paths,
+                    variant_catalog_path=(
+                        repeat_catalog_paths[0] if args.custom_catalog_path
+                        else next(p for p in repeat_catalog_paths if p.endswith(".EHv5.001_of_001.json"))),
+                    output_dir=output_dir,
+                    output_prefix=f"{row.sample_id}.{tool}",
+                    sample_id=row.sample_id,
+                    male_or_female=row.male_or_female)
             else:
                 raise ValueError(f"Unknown tool: {tool}")
 

@@ -188,6 +188,8 @@ const TOOL_LABELS = {
     LongTR:               "LongTR",
     inquiSTR:             "inquiSTR",
     vamos:                "vamos",
+    "EnsembleTR-EH+HipSTR":         "EnsembleTR (EH+HipSTR)",
+    "EnsembleTR-EH+HipSTR+GangSTR": "EnsembleTR (EH+HipSTR+GangSTR)",
 };
 
 // Sequencing technology (== sequencing_data_type) -> { label, tools (compatible
@@ -197,8 +199,8 @@ const TOOL_LABELS = {
 // rules). Which technologies (and their coverages) a given individual actually has
 // lives in SAMPLES above.
 const DATA_TYPES = {
-    illumina:        { label: "Illumina Genome", tools: ["EHv5-bw2-optimized", "EHv5", "IlluminaEHv5", "GangSTR", "HipSTR"] },
-    illumina_exome:  { label: "Illumina Exome",  tools: ["EHv5-bw2-optimized", "EHv5", "IlluminaEHv5", "GangSTR", "HipSTR"] },
+    illumina:        { label: "Illumina Genome", tools: ["EHv5-bw2-optimized", "EHv5", "IlluminaEHv5", "GangSTR", "HipSTR", "EnsembleTR-EH+HipSTR", "EnsembleTR-EH+HipSTR+GangSTR"] },
+    illumina_exome:  { label: "Illumina Exome",  tools: ["EHv5-bw2-optimized", "EHv5", "IlluminaEHv5", "GangSTR", "HipSTR", "EnsembleTR-EH+HipSTR", "EnsembleTR-EH+HipSTR+GangSTR"] },
     element:         { label: "Element",         tools: ["EHv5-bw2-optimized", "EHv5", "HipSTR"] },
     illumina_rnaseq: { label: "Illumina RNA-seq",tools: ["EHv5-bw2-optimized", "EHv5", "HipSTR"] },
     pacbio:          { label: "PacBio HiFi",     tools: ["TRGTv5", "TRGTv3", "inquiSTR", "LongTR", "vamos"] },
