@@ -93,7 +93,7 @@ RNASEQ_DATA_TYPES = {
 REFERENCE_FASTA_PATH = "gs://str-truth-set/hg38/ref/hg38.fa"
 REFERENCE_FASTA_FAI_PATH = "gs://str-truth-set/hg38/ref/hg38.fa.fai"
 
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:5e07defb3acf8db88301954bd7fb1473c16f9f8d2bcd1c791af801a60f75d523"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:a11b9fde833fb121ad830cb0557ec451a0e5cbcebfa385e7c4735bf4e0d66f99"
 
 DEFAULT_OUTPUT_DIR = "gs://str-truth-set-v2/tool_results"
 
