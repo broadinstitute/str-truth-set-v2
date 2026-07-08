@@ -94,10 +94,9 @@ REFERENCE_FASTA_FAI_PATH = "gs://str-truth-set/hg38/ref/hg38.fa.fai"
 FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:a11b9fde833fb121ad830cb0557ec451a0e5cbcebfa385e7c4735bf4e0d66f99"
 
 # Image for run_tools scripts run as Hail Batch steps (built by .github/workflows/build_run_tools_image.yml from
-# run_tools/docker/Dockerfile). Currently used by the per-sample build-catalogs step, which runs
+# run_tools/docker/Dockerfile). Used by the per-sample build-catalogs step, which runs
 # convert_truth_set_to_variant_catalogs.py baked into the image.
-# TODO: replace the placeholder digest with the one written to run_tools/docker/sha256.txt after building the image.
-RUN_TOOLS_DOCKER_IMAGE = "weisburd/run-tools@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+RUN_TOOLS_DOCKER_IMAGE = "weisburd/run-tools@sha256:311ee8747a37235ab13da3024733b44006a80bd99806422766a8dcd07e5dcc10"
 
 DEFAULT_OUTPUT_DIR = "gs://str-truth-set-v2/tool_results"
 
