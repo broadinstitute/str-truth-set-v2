@@ -56,13 +56,6 @@ LONG_READ_TOOLS = {
 # Motif size bins (min, max) used to stratify the accuracy plots.
 MOTIF_SIZE_BINS = [(1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (2, 6), (7, 24), (25, 1000)]
 
-# EHv5/EHv5-bw2-optimized stream single-threaded; split the catalog into this many parallel 1-cpu jobs
-# (bw2-fork --start-with/--n-loci) to cut wall time ~N-fold at ~constant total cost. Sized so the slow
-# low-mem-streaming variant stays under ~4h/shard even at the highest coverage: measured EHv5 low-mem at
-# 31x ran ~3.4h/shard (worst shard 4.8h) at 10 shards, so 46x (CHM1) needs ~20 shards to stay in the 2-4h
-# target band. HG002 EHv5 (10/20/31x) is already done, so this only affects the remaining CHM1 46x run.
-EHV5_NUM_SHARDS = int(os.environ.get("EHV5_NUM_SHARDS", 20))
-
 # IlluminaEHv5 (official Illumina EH v5 build) crashes with "numIndels out of range" on large loci, so its
 # prefiltered catalog drops any locus whose reference interval is at least this many base pairs wide.
 ILLUMINA_EH_MAX_LOCUS_SIZE_BP = 500
@@ -325,20 +318,17 @@ def main():
                     use_illumina_expansion_hunter=use_illumina_expansion_hunter,
                     # IlluminaEHv5 genotypes the single prefiltered catalog and must wait for the prefilter step
                     catalog_prefilter_step=catalog_prefilter_step,
-                    # EHv5/EHv5-bw2-optimized stream single-threaded, so split the catalog into EHV5_NUM_SHARDS
-                    # parallel 1-cpu jobs (no-op for IlluminaEHv5, which genotypes one prefiltered catalog).
-                    # Sharding splits the catalog by reading it at construction time (_count_catalog_loci does a
-                    # `gcloud storage cat`), so it can't be used when the catalog is produced by the in-run
-                    # build-catalogs step (it doesn't exist yet) -- run unsharded then. A --custom-catalog-path
-                    # (build_catalogs_step is None) already exists, so it still shards.
-                    num_shards=(1 if build_catalogs_step is not None else EHV5_NUM_SHARDS),
-                    # For the unsharded in-run build (build_catalogs_step set), size the single job at cpu=2/threads=4/
-                    # highmem -- the June cost benchmark's balanced optimum: the 4 threads parallelize the htslib CRAM
-                    # scan (~half the cost of cpu=4/threads=8 for ~25-35% more wall). A sharded --custom-catalog-path
-                    # run keeps the per-shard defaults (cpu=1) via None. No-op for IlluminaEHv5 (hardcoded 16/highmem).
-                    streaming_cpu=(2 if build_catalogs_step is not None else None),
-                    streaming_threads=(4 if build_catalogs_step is not None else None),
-                    streaming_memory=("highmem" if build_catalogs_step is not None else None))
+                    # EHv5/EHv5-bw2-optimized stream single-threaded. Always run UNSHARDED (one job over the whole
+                    # catalog) -- both for the in-run per-sample build (whose catalog doesn't exist at construction,
+                    # so it can't be sharded) and for a --custom-catalog-path (sharding it would re-download +
+                    # re-scan the full CRAM once per shard). The single job is sized cpu=2 / --threads 4 / highmem,
+                    # the June cost benchmark's balanced optimum: the 4 threads parallelize the htslib CRAM
+                    # decompression scan (~half the cost of cpu=4/threads=8 for ~25-35% more wall). Baked in code,
+                    # not env vars. No-op for IlluminaEHv5 (hardcoded 16/highmem).
+                    num_shards=1,
+                    streaming_cpu=2,
+                    streaming_threads=4,
+                    streaming_memory="highmem")
             elif tool == "GangSTR":
                 current_step = create_gangstr_steps(
                     bp,
