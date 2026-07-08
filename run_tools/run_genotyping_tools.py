@@ -19,7 +19,6 @@ sys.path.append("../str-truth-set/tool_comparison/hail_batch_pipelines")
 from expansion_hunter_pipeline import create_expansion_hunter_steps, DOCKER_IMAGE as EH_DOCKER_IMAGE
 from gangstr_pipeline import create_gangstr_steps
 from hipstr_pipeline import create_hipstr_steps
-from constrain_pipeline import create_constrain_step
 from trgt_pipeline import create_trgt_step, DOCKER_IMAGE as TRGT_V5_DOCKER_IMAGE, TRGT_V3_DOCKER_IMAGE
 from longtr_pipeline import create_longtr_steps
 from inquistr_pipeline import create_inquistr_steps
@@ -41,7 +40,6 @@ SHORT_READ_TOOLS = {
     "EHv5-bw2-optimized",
     "GangSTR",
     "HipSTR",
-    "constrain",
 } | ENSEMBLETR_TOOLS
 
 LONG_READ_TOOLS = {
@@ -95,6 +93,12 @@ REFERENCE_FASTA_FAI_PATH = "gs://str-truth-set/hg38/ref/hg38.fa.fai"
 
 FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:a11b9fde833fb121ad830cb0557ec451a0e5cbcebfa385e7c4735bf4e0d66f99"
 
+# Image for run_tools scripts run as Hail Batch steps (built by .github/workflows/build_run_tools_image.yml from
+# run_tools/docker/Dockerfile). Currently used by the per-sample build-catalogs step, which runs
+# convert_truth_set_to_variant_catalogs.py baked into the image.
+# TODO: replace the placeholder digest with the one written to run_tools/docker/sha256.txt after building the image.
+RUN_TOOLS_DOCKER_IMAGE = "weisburd/run-tools@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+
 DEFAULT_OUTPUT_DIR = "gs://str-truth-set-v2/tool_results"
 
 def main():
@@ -113,7 +117,10 @@ def main():
     parser.add_argument("-t", "--tool", action="append", choices=SHORT_READ_TOOLS|LONG_READ_TOOLS, help="The tool to run.")
     parser.add_argument("--data-type", action="append", choices=SHORT_READ_DATA_TYPES|LONG_READ_DATA_TYPES, help="Which data type(s) to process")
     parser.add_argument("-k", "--filename-keyword", help="If specified, only BAM paths that contain this keyword will be processed", action="append")
-    parser.add_argument("--filter-vcf-dir", default="gs://str-truth-set-v2/filter_vcf", help="Base dir for filter_vcf pipeline output files")
+    parser.add_argument("--filter-vcf-dir", default="gs://str-truth-set-v2/filter_vcf_v2",
+                        help="Base dir under which the per-sample tool catalogs live ({sample_id}/{sample_id}.EHv5* "
+                             "etc.). The build-catalogs step writes them here (from the truth set in "
+                             "--truth-set-genotypes-dir) and the genotyping steps read them back from here.")
     parser.add_argument("--truth-set-genotypes-dir", default="gs://str-truth-set-v2/filter_vcf_v2",
                         help="Base dir for the filter_vcf_to_tandem_repeats genotype step output "
                              "({sample_id}/{sample_id}.tandem_repeat_genotypes.tsv.gz), used as the truth set "
@@ -177,6 +184,10 @@ def main():
     # is reused across all IlluminaEHv5 data types/coverages; values are (step, filtered_catalog_path) tuples.
     illumina_eh_prefilter_steps = {}
 
+    # Per-sample build-catalogs steps, keyed by sample_id so each sample's catalogs are built once and reused
+    # across all its data types/coverages/tools; values are (step, catalog_paths_by_tool) tuples.
+    variant_catalog_steps = {}
+
     for row_i, (_, row) in enumerate(df.iterrows()):
         if args.filename_keyword:
             if not any(keyword in row.read_data_path for keyword in args.filename_keyword):
@@ -215,36 +226,39 @@ def main():
                       f"(vamos is not run on pacbio_isoseq data)")
                 continue
 
+            # Build this sample's tool catalogs once (reused across its data types/coverages/tools) from the truth
+            # set, unless a --custom-catalog-path was given. Cached by sample_id like illumina_eh_prefilter_steps.
+            build_catalogs_step = None
+            catalog_paths_by_tool = None
+            if not args.custom_catalog_path:
+                if row.sample_id not in variant_catalog_steps:
+                    variant_catalog_steps[row.sample_id] = create_variant_catalogs_step(
+                        bp,
+                        sample_id=row.sample_id,
+                        genotypes_tsv_path=os.path.join(args.truth_set_genotypes_dir, row.sample_id,
+                            f"{row.sample_id}.tandem_repeat_genotypes.tsv.gz"),
+                        output_dir=os.path.join(args.filter_vcf_dir, row.sample_id))
+                build_catalogs_step, catalog_paths_by_tool = variant_catalog_steps[row.sample_id]
+
+            # Resolve the catalog path(s) this tool reads. With --custom-catalog-path, hfs.ls it as before.
+            # Otherwise reference the build-catalogs step's known single-shard outputs (created above); hfs.ls-ing
+            # them here would find nothing until that step runs, so the genotyping steps depend on it instead.
             if args.custom_catalog_path:
-                repeat_catalog_paths = args.custom_catalog_path
+                repeat_catalog_paths = [x.path for x in hfs.ls(args.custom_catalog_path)]
             elif tool == "inquiSTR":
-                # inquiSTR genotypes from a plain region bed, so use the {sample_id}.bed.gz loci catalog
-                # (columns: chrom, start0, end, motif). The inquiSTR step derives its region bed from it.
-                repeat_catalog_paths = os.path.join(args.filter_vcf_dir, row.sample_id,
-                    f"{row.sample_id}.bed.gz")
-            elif tool == "vamos":
-                # vamos derives its catalog (inside the step) from the unsharded ExpansionHunter catalog json
-                repeat_catalog_paths = os.path.join(args.filter_vcf_dir, row.sample_id,
-                    f"{row.sample_id}.EHv5*")
-            elif tool in ("EHv5", "EHv5-bw2-optimized", "IlluminaEHv5") or tool in ENSEMBLETR_TOOLS:
-                # all three ExpansionHunter v5 variants share the EHv5 catalog set; the branch below picks the
-                # unsharded catalog for EHv5/EHv5-bw2-optimized and the sharded catalog(s) for IlluminaEHv5.
-                # The EnsembleTR tools also use the unsharded EHv5 catalog (to reconcile consensus records to truth-set
-                # LocusIds); their upstream per-caller inputs are located separately in the dispatch branch below.
-                repeat_catalog_paths = os.path.join(args.filter_vcf_dir, row.sample_id,
-                    f"{row.sample_id}.EHv5*")
+                # inquiSTR genotypes from the plain {sample_id}.bed.gz loci catalog (chrom, start0, end, motif)
+                repeat_catalog_paths = [catalog_paths_by_tool["inquiSTR"]]
+            elif tool == "vamos" or tool in ("EHv5", "EHv5-bw2-optimized", "IlluminaEHv5") or tool in ENSEMBLETR_TOOLS:
+                # vamos, all three ExpansionHunter v5 variants, and both EnsembleTR modes read the single unsharded
+                # EHv5 catalog json (IlluminaEHv5 prefilters it first; vamos/EnsembleTR derive from it in-step)
+                repeat_catalog_paths = [catalog_paths_by_tool["EHv5"]]
             elif tool in ("TRGTv3", "TRGTv5"):
-                # both TRGT versions read the same TRGT BED catalog ({sample_id}.TRGT*)
-                repeat_catalog_paths = os.path.join(args.filter_vcf_dir, row.sample_id,
-                    f"{row.sample_id}.TRGT*")
-            else:
-                catalog_path_suffix = tool
+                # both TRGT versions read the same TRGT BED catalog
+                repeat_catalog_paths = [catalog_paths_by_tool["TRGT"]]
+            elif tool in ("GangSTR", "HipSTR", "LongTR"):
+                repeat_catalog_paths = [catalog_paths_by_tool[tool]]
 
-                repeat_catalog_paths = os.path.join(args.filter_vcf_dir, row.sample_id,
-                    f"{row.sample_id}.{catalog_path_suffix}*")
-
-            print(f"Listing catalogs {repeat_catalog_paths}")
-            repeat_catalog_paths = [x.path for x in hfs.ls(repeat_catalog_paths)]
+            print(f"Catalogs for {tool}: {repeat_catalog_paths}")
             output_dir = os.path.join(args.output_dir, row.sample_id, row.sequencing_data_type, tool, f"{coverage_label}_coverage")
             if args.output_subdir:
                 output_dir = os.path.join(output_dir, args.output_subdir)
@@ -275,12 +289,16 @@ def main():
                     # illumina_eh_prefilter_steps) and reused across all IlluminaEHv5 data types/coverages.
                     source_eh_catalog_path = next(p for p in repeat_catalog_paths if p.endswith(".EHv5.001_of_001.json"))
                     if source_eh_catalog_path not in illumina_eh_prefilter_steps:
-                        illumina_eh_prefilter_steps[source_eh_catalog_path] = create_illumina_eh_catalog_prefilter_step(
+                        prefilter_step = create_illumina_eh_catalog_prefilter_step(
                             bp,
                             eh_catalog_path=source_eh_catalog_path,
                             reference_fasta=REFERENCE_FASTA_PATH,
                             reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
                             output_dir=os.path.join(args.filter_vcf_dir, row.sample_id))
+                        # the prefilter reads the build-catalogs step's EHv5 json, so it must wait for that step
+                        if build_catalogs_step is not None:
+                            prefilter_step[0].depends_on(build_catalogs_step)
+                        illumina_eh_prefilter_steps[source_eh_catalog_path] = prefilter_step
                     catalog_prefilter_step, filtered_catalog_path = illumina_eh_prefilter_steps[source_eh_catalog_path]
                     variant_catalog_file_paths = [filtered_catalog_path]
                 else:
@@ -289,6 +307,8 @@ def main():
                     # EHv5.001_of_001 stem (.for_illumina_eh.json, .without_loci_with_flanking_Ns.json/.filtered_loci.txt)
                     # are excluded
                     variant_catalog_file_paths = [p for p in repeat_catalog_paths if p.endswith(".EHv5.001_of_001.json")]
+                    # genotyping reads the build-catalogs step's EHv5 json, so gate it on that step
+                    catalog_prefilter_step = build_catalogs_step
 
                 current_step = create_expansion_hunter_steps(
                     bp,
@@ -307,8 +327,19 @@ def main():
                     # IlluminaEHv5 genotypes the single prefiltered catalog and must wait for the prefilter step
                     catalog_prefilter_step=catalog_prefilter_step,
                     # EHv5/EHv5-bw2-optimized stream single-threaded, so split the catalog into EHV5_NUM_SHARDS
-                    # parallel 1-cpu jobs (no-op for IlluminaEHv5, which genotypes one prefiltered catalog)
-                    num_shards=EHV5_NUM_SHARDS)
+                    # parallel 1-cpu jobs (no-op for IlluminaEHv5, which genotypes one prefiltered catalog).
+                    # Sharding splits the catalog by reading it at construction time (_count_catalog_loci does a
+                    # `gcloud storage cat`), so it can't be used when the catalog is produced by the in-run
+                    # build-catalogs step (it doesn't exist yet) -- run unsharded then. A --custom-catalog-path
+                    # (build_catalogs_step is None) already exists, so it still shards.
+                    num_shards=(1 if build_catalogs_step is not None else EHV5_NUM_SHARDS),
+                    # For the unsharded in-run build (build_catalogs_step set), size the single job at cpu=2/threads=4/
+                    # highmem -- the June cost benchmark's balanced optimum: the 4 threads parallelize the htslib CRAM
+                    # scan (~half the cost of cpu=4/threads=8 for ~25-35% more wall). A sharded --custom-catalog-path
+                    # run keeps the per-shard defaults (cpu=1) via None. No-op for IlluminaEHv5 (hardcoded 16/highmem).
+                    streaming_cpu=(2 if build_catalogs_step is not None else None),
+                    streaming_threads=(4 if build_catalogs_step is not None else None),
+                    streaming_memory=("highmem" if build_catalogs_step is not None else None))
             elif tool == "GangSTR":
                 current_step = create_gangstr_steps(
                     bp,
@@ -319,7 +350,9 @@ def main():
                     male_or_female=row.male_or_female,
                     repeat_spec_file_paths=repeat_catalog_paths,
                     output_dir=output_dir,
-                    output_prefix=f"{row.sample_id}.{tool}")
+                    output_prefix=f"{row.sample_id}.{tool}",
+                    # wait for the build-catalogs step that produces this sample's GangSTR bed (None for --custom-catalog-path)
+                    catalog_step=build_catalogs_step)
             elif tool == "HipSTR":
                 current_step = create_hipstr_steps(
                     bp,
@@ -330,20 +363,9 @@ def main():
                     male_or_female=row.male_or_female,
                     regions_bed_file_paths=repeat_catalog_paths,
                     output_dir=output_dir,
-                    output_prefix=f"{row.sample_id}.{tool}")
-            elif tool == "constrain":
-                current_step = create_constrain_step(
-                    bp,
-                    reference_fasta=REFERENCE_FASTA_PATH,
-                    reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
-                    input_bam=row.read_data_path,
-                    input_bai=row.read_data_index_path,
-                    male_or_female=row.male_or_female,
-                    constrain_catalog_bed_paths=repeat_catalog_paths,
-                    output_dir=output_dir,
                     output_prefix=f"{row.sample_id}.{tool}",
-                    cpu=1,
-                )
+                    # wait for the build-catalogs step that produces this sample's HipSTR bed (None for --custom-catalog-path)
+                    catalog_step=build_catalogs_step)
             elif tool in ("TRGTv3", "TRGTv5"):
                 current_step = create_trgt_step(
                     bp,
@@ -356,7 +378,9 @@ def main():
                     parse_reference_region_from_locus_id=True,
                     output_dir=output_dir,
                     output_prefix= f"{row.sample_id}.{tool}",
-                    docker_image=TRGT_V3_DOCKER_IMAGE if tool == "TRGTv3" else TRGT_V5_DOCKER_IMAGE)
+                    docker_image=TRGT_V3_DOCKER_IMAGE if tool == "TRGTv3" else TRGT_V5_DOCKER_IMAGE,
+                    # wait for the build-catalogs step that produces this sample's TRGT bed (None for --custom-catalog-path)
+                    catalog_step=build_catalogs_step)
             elif tool == "LongTR":
                 current_step = create_longtr_steps(
                     bp,
@@ -370,7 +394,9 @@ def main():
                     output_prefix=f"{row.sample_id}.{tool}",
                     # ONT base qualities sit below LongTR's default --min-mean-qual 30, so without a lower
                     # threshold every ONT read is filtered out and LongTR emits an empty VCF.
-                    min_mean_qual=10 if row.sequencing_data_type == "ONT" else None)
+                    min_mean_qual=10 if row.sequencing_data_type == "ONT" else None,
+                    # wait for the build-catalogs step that produces this sample's LongTR bed (None for --custom-catalog-path)
+                    catalog_step=build_catalogs_step)
             elif tool == "inquiSTR":
                 current_step = create_inquistr_steps(
                     bp,
@@ -381,7 +407,9 @@ def main():
                     male_or_female=row.male_or_female,
                     inquistr_catalog_bed_paths=repeat_catalog_paths,
                     output_dir=output_dir,
-                    output_prefix=f"{row.sample_id}.{tool}")
+                    output_prefix=f"{row.sample_id}.{tool}",
+                    # wait for the build-catalogs step that produces this sample's loci bed (None for --custom-catalog-path)
+                    catalog_step=build_catalogs_step)
             elif tool == "vamos":
                 # use the unsharded ExpansionHunter catalog json; the vamos step converts it to a vamos catalog
                 current_step = create_vamos_step(
@@ -399,7 +427,9 @@ def main():
                         repeat_catalog_paths if args.custom_catalog_path
                         else [p for p in repeat_catalog_paths if p.endswith(".EHv5.001_of_001.json")]),
                     output_dir=output_dir,
-                    output_prefix=f"{row.sample_id}.{tool}")
+                    output_prefix=f"{row.sample_id}.{tool}",
+                    # wait for the build-catalogs step that produces this sample's EHv5 json (None for --custom-catalog-path)
+                    catalog_step=build_catalogs_step)
             elif tool in ENSEMBLETR_TOOLS:
                 # EnsembleTR merges the already-computed per-caller outputs for this (sample, data_type, coverage):
                 # the ExpansionHunter json (from ENSEMBLETR_EH_SOURCE_TOOL) and the HipSTR (+GangSTR) native VCFs.
@@ -434,7 +464,9 @@ def main():
                     output_dir=output_dir,
                     output_prefix=f"{row.sample_id}.{tool}",
                     sample_id=row.sample_id,
-                    male_or_female=row.male_or_female)
+                    male_or_female=row.male_or_female,
+                    # wait for the build-catalogs step that produces this sample's EHv5 json (None for --custom-catalog-path)
+                    catalog_step=build_catalogs_step)
             else:
                 raise ValueError(f"Unknown tool: {tool}")
 
@@ -462,6 +494,62 @@ def main():
                 sample_id=row.sample_id,
                 output_dir=output_dir)
     bp.run()
+
+
+def create_variant_catalogs_step(bp, *, sample_id, genotypes_tsv_path, output_dir):
+    """Build the per-tool repeat catalogs for one sample from its filter_vcf_to_tandem_repeats truth set.
+
+    Runs convert_truth_set_to_variant_catalogs.py (baked into RUN_TOOLS_DOCKER_IMAGE) on the sample's
+    {sample_id}.tandem_repeat_genotypes.tsv.gz, writing a single unsharded catalog per tool so the genotyping
+    steps can reference exact 001_of_001 paths (and depend on this step) instead of hfs.ls-ing files that don't
+    exist until this step runs. --gangstr-loci-per-run is set huge so GangSTR/HipSTR are single-shard like the rest.
+
+    Args:
+        bp: the step_pipeline pipeline object.
+        sample_id: sample id, used as the catalog filename prefix and to name the step.
+        genotypes_tsv_path: gs:// path of {sample_id}.tandem_repeat_genotypes.tsv.gz (the truth set).
+        output_dir: directory to write the catalogs into (the --filter-vcf-dir/{sample_id} dir, reused across runs).
+
+    Returns:
+        A (step, catalog_paths_by_tool) tuple. catalog_paths_by_tool maps
+        "EHv5"/"GangSTR"/"HipSTR"/"LongTR"/"TRGT"/"inquiSTR" to the gs:// path of that tool's catalog; the
+        genotyping steps read those paths and must depend on the returned step.
+    """
+    catalog_filenames = {
+        "EHv5": f"{sample_id}.EHv5.001_of_001.json",
+        "GangSTR": f"{sample_id}.GangSTR.001_of_001.bed",
+        "HipSTR": f"{sample_id}.HipSTR.001_of_001.bed",
+        "LongTR": f"{sample_id}.LongTR.001_of_001.bed",
+        "TRGT": f"{sample_id}.TRGT_repeat_catalog.bed",
+        "inquiSTR": f"{sample_id}.bed.gz",
+    }
+
+    step = bp.new_step(
+        name=f"Build tool catalogs for {sample_id}",
+        arg_suffix="build-variant-catalogs-step",
+        image=RUN_TOOLS_DOCKER_IMAGE,
+        cpu=2,
+        memory="highmem",
+        storage="20Gi",
+        localize_by=Localize.GSUTIL_COPY,
+        output_dir=output_dir)
+    step.command("set -ex")
+    local_tsv = step.input(genotypes_tsv_path)
+    # single unsharded catalog per tool (--gangstr-loci-per-run huge -> GangSTR/HipSTR are 001_of_001 too)
+    step.command(
+        f"python3 /run_tools/convert_truth_set_to_variant_catalogs.py "
+        f"--output-filename-prefix {sample_id} "
+        f"--gangstr-loci-per-run 1000000000 "
+        f"--output-dir . "
+        f"{local_tsv}")
+    step.command("ls -lhrt")
+    for fname in catalog_filenames.values():
+        step.output(fname)
+    # inquiSTR bed is bgzipped + tabixed by the converter, so also delocalize its index
+    step.output(f"{sample_id}.bed.gz.tbi")
+
+    catalog_paths_by_tool = {tool: os.path.join(output_dir, fname) for tool, fname in catalog_filenames.items()}
+    return step, catalog_paths_by_tool
 
 
 def create_illumina_eh_catalog_prefilter_step(bp, *, eh_catalog_path, reference_fasta, reference_fasta_fai, output_dir):
