@@ -1,8 +1,9 @@
 name: build atarva image
 
 # Builds weisburd/atarva and pushes it to Docker Hub. The Dockerfile lives in the str-truth-set submodule
-# (tool_comparison/hail_batch_pipelines/docker/atarva) and is self-contained (it installs ATaRVa from PyPI, builds
-# htslib/samtools, and pip-installs str-analysis), so the checkout pulls submodules and the build context is just that
+# (tool_comparison/hail_batch_pipelines/docker/atarva) and is self-contained (it installs ATaRVa from the pinned
+# bw2 fork commit, builds htslib, and pip-installs str-analysis), so the checkout pulls submodules and the build
+# context is just that
 # directory. The pushed image digest is written to docker/atarva/sha256.txt and uploaded as an artifact; update the
 # DOCKER_IMAGE reference in atarva_pipeline.py from that digest. Manual trigger only
 # (Actions tab -> Run workflow, or `gh workflow run build_atarva_image.yml --ref <branch>`).
