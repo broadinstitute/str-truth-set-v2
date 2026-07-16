@@ -188,6 +188,7 @@ const TOOL_LABELS = {
     LongTR:               "LongTR",
     inquiSTR:             "inquiSTR",
     vamos:                "vamos",
+    ATaRVa:               "ATaRVa",
     "EnsembleTR-EH+HipSTR":         "EnsembleTR (EH+HipSTR)",
     "EnsembleTR-EH+HipSTR+GangSTR": "EnsembleTR (EH+HipSTR+GangSTR)",
 };
@@ -203,9 +204,9 @@ const DATA_TYPES = {
     illumina_exome:  { label: "Illumina Exome",  tools: ["EHv5-bw2-optimized", "EHv5", "IlluminaEHv5", "GangSTR", "HipSTR", "EnsembleTR-EH+HipSTR", "EnsembleTR-EH+HipSTR+GangSTR"] },
     element:         { label: "Element",         tools: ["EHv5-bw2-optimized", "EHv5", "HipSTR", "EnsembleTR-EH+HipSTR"] },
     illumina_rnaseq: { label: "Illumina RNA-seq",tools: ["EHv5-bw2-optimized", "EHv5", "HipSTR"] },
-    pacbio:          { label: "PacBio HiFi",     tools: ["TRGTv5", "TRGTv3", "inquiSTR", "LongTR", "vamos"] },
-    ONT:             { label: "ONT",             tools: ["TRGTv5", "TRGTv3", "inquiSTR", "LongTR", "vamos"] },
-    pacbio_isoseq:   { label: "PacBio Iso-Seq",  tools: ["TRGTv5", "TRGTv3", "inquiSTR", "LongTR"] },
+    pacbio:          { label: "PacBio HiFi",     tools: ["TRGTv5", "TRGTv3", "inquiSTR", "LongTR", "vamos", "ATaRVa"] },
+    ONT:             { label: "ONT",             tools: ["TRGTv5", "TRGTv3", "inquiSTR", "LongTR", "vamos", "ATaRVa"] },
+    pacbio_isoseq:   { label: "PacBio Iso-Seq",  tools: ["TRGTv5", "TRGTv3", "inquiSTR", "LongTR", "ATaRVa"] },
 };
 
 // Ordering for the technology radios: short-read technologies first, then long-read.

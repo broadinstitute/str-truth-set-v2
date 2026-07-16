@@ -23,6 +23,7 @@ from trgt_pipeline import create_trgt_step, DOCKER_IMAGE as TRGT_V5_DOCKER_IMAGE
 from longtr_pipeline import create_longtr_steps
 from inquistr_pipeline import create_inquistr_steps
 from vamos_pipeline import create_vamos_step
+from atarva_pipeline import create_atarva_step
 from ensembletr_pipeline import create_ensembletr_steps
 
 # EnsembleTR is a consensus/merge tool run in two modes (each a separate "tool" in the comparison). It consumes the
@@ -48,6 +49,7 @@ LONG_READ_TOOLS = {
     "LongTR",
     "inquiSTR",
     "vamos",
+    "ATaRVa",
 }
 
 # The add-columns and plot steps use the /str-truth-set baked into FILTER_VCFS_DOCKER_IMAGE (rebuild that image and
@@ -237,8 +239,9 @@ def main():
             # them here would find nothing until that step runs, so the genotyping steps depend on it instead.
             if args.custom_catalog_path:
                 repeat_catalog_paths = [x.path for x in hfs.ls(args.custom_catalog_path)]
-            elif tool == "inquiSTR":
-                # inquiSTR genotypes from the plain {sample_id}.bed.gz loci catalog (chrom, start0, end, motif)
+            elif tool in ("inquiSTR", "ATaRVa"):
+                # inquiSTR and ATaRVa both genotype from the plain {sample_id}.bed.gz loci catalog
+                # (chrom, start0, end, motif, motif_length; bgzipped + tabix-indexed)
                 repeat_catalog_paths = [catalog_paths_by_tool["inquiSTR"]]
             elif tool == "vamos" or tool in ("EHv5", "EHv5-bw2-optimized", "IlluminaEHv5") or tool in ENSEMBLETR_TOOLS:
                 # vamos, all three ExpansionHunter v5 variants, and both EnsembleTR modes read the single unsharded
@@ -395,6 +398,20 @@ def main():
                     input_bai=row.read_data_index_path,
                     male_or_female=row.male_or_female,
                     inquistr_catalog_bed_paths=repeat_catalog_paths,
+                    output_dir=output_dir,
+                    output_prefix=f"{row.sample_id}.{tool}",
+                    # wait for the build-catalogs step that produces this sample's loci bed (None for --custom-catalog-path)
+                    catalog_step=build_catalogs_step)
+            elif tool == "ATaRVa":
+                # ATaRVa reads the same bgzipped + tabix-indexed {sample}.bed.gz loci catalog as inquiSTR
+                current_step = create_atarva_step(
+                    bp,
+                    reference_fasta=REFERENCE_FASTA_PATH,
+                    reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
+                    input_bam=row.read_data_path,
+                    input_bai=row.read_data_index_path,
+                    male_or_female=row.male_or_female,
+                    regions_bed_path=repeat_catalog_paths[0],
                     output_dir=output_dir,
                     output_prefix=f"{row.sample_id}.{tool}",
                     # wait for the build-catalogs step that produces this sample's loci bed (None for --custom-catalog-path)
