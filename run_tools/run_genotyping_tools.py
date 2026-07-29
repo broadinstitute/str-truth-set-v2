@@ -8,12 +8,14 @@ Per-sample inputs:
 """
 
 import collections
+import json
 import hailtop.fs as hfs
 import os
 import pandas as pd
 import re
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 import sys
+import tempfile
 
 sys.path.append("../str-truth-set/tool_comparison/hail_batch_pipelines")
 from expansion_hunter_pipeline import create_expansion_hunter_steps, DOCKER_IMAGE as EH_DOCKER_IMAGE
@@ -95,6 +97,56 @@ RUN_TOOLS_DOCKER_IMAGE = "weisburd/run-tools@sha256:311ee8747a37235ab13da3024733
 
 DEFAULT_OUTPUT_DIR = "gs://str-truth-set-v2/tool_results"
 
+# --benchmark-resources mode (see run_resource_benchmark): benchmark one tool's runtime/memory/cost vs. catalog
+# size, by subsampling the TRExplorer catalog (trexplorer.broadinstitute.org) to the N most-polymorphic loci.
+# TREXPLORER_BIGQUERY_TABLE is the live BigQuery snapshot; HPRC256_Stdev is the per-locus standard deviation of allele
+# sizes across the 256 HPRC samples, used to rank loci by polymorphism (highest stdev = most polymorphic). Update
+# the table id when TRExplorer reloads it (it's the TABLE_ID const in tandem-repeat-explorer/website/index.html).
+TREXPLORER_BIGQUERY_TABLE = "cmg-analysis.tandem_repeat_explorer.catalog_20260712_002034"
+BENCHMARK_TOOL = "EHv5-bw2-optimized"
+# Full range of catalog sizes (# loci) — this is the range behind the resource_metrics.json files the viewer reads.
+# Pass a smaller subset via --benchmark-catalog-sizes for a quick test run (the sizes are nested, so a subset of
+# these reuses the already-uploaded catalogs).
+BENCHMARK_CATALOG_SIZES = [2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000, 2000000]
+
+# Per-tool resource-benchmark config. "cpu" is the VM's provisioned cores (used for VM sizing + the recorded VM
+# metadata); "threads" is how many cores the tool actually uses (Runtime CPU-hours = wall x threads). They can differ
+# (a single-threaded tool provisioned with extra cores just for RAM), so runtime never counts idle cores. GangSTR and
+# HipSTR run cpu=1 single-threaded on a bed catalog -- HipSTR stays lightweight (~0.5 GB) because the catalog is
+# filtered to loci it can handle (see BENCHMARK_MAX_* above); IlluminaEHv5 uses all 16 cores (--threads 16) on a
+# prefiltered EH json; the bw2 fork reads the EH json directly at cpu=1. Runtime as CPU-hours keeps them comparable.
+BENCHMARK_TOOL_CONFIG = {
+    "EHv5-bw2-optimized": {"cpu": 1,  "threads": 1,  "memory": "highmem",  "job_name": "Run EHv5:optimized-streaming", "catalog": "eh"},
+    "IlluminaEHv5":       {"cpu": 16, "threads": 16, "memory": "highmem",  "job_name": "Run EHv5:streaming",           "catalog": "illumina_eh"},
+    "GangSTR":            {"cpu": 1,  "threads": 1,  "memory": "standard",  "job_name": "Run GangSTR",                  "catalog": "gangstr"},
+    "HipSTR":             {"cpu": 1,  "threads": 1,  "memory": "standard",  "job_name": "Run HipSTR",                   "catalog": "hipstr"},
+    # Long-read tools (PacBio HiFi / ONT). Each genotypes the SAME 120bp-filtered TRExplorer catalog (converted to the
+    # tool's format) on the long-read BAM. cpu/threads match each tool's own default in its hail_batch_pipelines
+    # factory; "memory" is only used to report the VM RAM (factories that set no tier get Hail's 3.75 GB/core
+    # "standard" default). "catalog" names the converter that feeds the tool (see _convert_eh_catalog_step) -- vamos
+    # reads the raw EH json in-step so it needs no convert step. TRGT v3/v5 share one factory, selected by "docker".
+    "TRGTv5":             {"cpu": 16, "threads": 16, "memory": "standard",  "job_name": "Run TRGT on",                  "catalog": "trgt",   "docker": TRGT_V5_DOCKER_IMAGE},
+    "TRGTv3":             {"cpu": 16, "threads": 16, "memory": "standard",  "job_name": "Run TRGT on",                  "catalog": "trgt",   "docker": TRGT_V3_DOCKER_IMAGE},
+    "LongTR":             {"cpu": 1,  "threads": 1,  "memory": "standard",  "job_name": "Run LongTR on",                "catalog": "longtr"},
+    "vamos":              {"cpu": 16, "threads": 16, "memory": "standard",  "job_name": "Run Vamos on",                 "catalog": "eh"},
+    "ATaRVa":             {"cpu": 4,  "threads": 4,  "memory": "standard",  "job_name": "Run ATaRVa on",                "catalog": "bed"},
+    "inquiSTR":           {"cpu": 16, "threads": 16, "memory": "standard",  "job_name": "Run inquiSTR on",              "catalog": "bed"},
+}
+# Hail Batch RAM per core (GiB) by memory tier, used to report the VM RAM in the recorded metadata.
+HAIL_MEM_GB_PER_CORE = {"lowmem": 0.9, "standard": 3.75, "highmem": 6.5}
+
+# Primary assembly contigs (no 'chr' prefix, matching the TRExplorer 'chrom' column). The benchmark catalog is
+# restricted to these (like production catalogs) so a locus's +/-flank extension near a contig start can't go
+# negative -- the official Illumina EH build crashes on e.g. chrM loci whose +/-1000bp extension is a negative coord.
+BENCHMARK_PRIMARY_CONTIGS = [str(i) for i in range(1, 23)] + ["X", "Y"]
+
+# HipSTR can't genotype the largest polymorphic VNTRs (its memory explodes and it segfaults on huge expansions),
+# so the benchmark catalog is restricted to loci HipSTR can handle: motif <= 9bp (HipSTR's own motif-size limit)
+# and reference span <= 120bp. The SAME filtered catalog is used for every tool so the comparison is on an identical
+# locus set. (These caps were chosen so HipSTR finishes -- re-verify HipSTR completes if you loosen them further.)
+BENCHMARK_MAX_MOTIF_SIZE_BP = 9
+BENCHMARK_MAX_LOCUS_SPAN_BP = 120
+
 def main():
     sample_table_path = "HPRC_all_aligned_short_read_and_long_read_samples.tsv"
     df = pd.read_table(sample_table_path)
@@ -124,7 +176,38 @@ def main():
     parser.add_argument("--output-subdir", help="If specified, append this extra subdirectory after the "
                         "{sample}/{data_type}/{tool}/{coverage}_coverage/ output path. Useful to keep a "
                         "--custom-catalog-path run's results separate from the per-sample-catalog results.")
+
+    # --benchmark-resources mode (handled by run_resource_benchmark, which reuses --output-dir but ignores the
+    # --tool/--data-type/--sample-id/--custom-catalog-path selection args above).
+    parser.add_argument("--benchmark-resources", action="store_true",
+                        help="Resource-benchmark mode: subsample the TRExplorer catalog to the N most-polymorphic "
+                             "loci for several catalog sizes, run one tool at cpu=1 on each, and record wall-clock "
+                             "runtime, peak RSS, and Hail Batch cost into resource_metrics.json (read by "
+                             "docs/tool_comparison_viewer.html). Reuses --output-dir but ignores the "
+                             "--tool/--data-type/--sample-id selection args. Run with the tool's combine-skip flag "
+                             "(--skip-combine-expansion-hunter-step for the EH tools, --skip-combine-gangstr-step for "
+                             "GangSTR, --skip-combine-hipstr-step for HipSTR) so the benchmark doesn't pay for the "
+                             "combine step (recorded metrics are genotyping-only).")
+    parser.add_argument("--benchmark-tool", default=BENCHMARK_TOOL, choices=SHORT_READ_TOOLS|LONG_READ_TOOLS,
+                        help="Tool to benchmark in --benchmark-resources mode.")
+    parser.add_argument("--benchmark-sample-id", default="HG002", help="Sample to benchmark.")
+    parser.add_argument("--benchmark-data-type", default="illumina", help="Sequencing data type to benchmark.")
+    parser.add_argument("--benchmark-coverage-keyword", default="downsampled_to_10x",
+                        help="Substring selecting which coverage's read-data row to benchmark (matched against "
+                             "read_data_path).")
+    parser.add_argument("--benchmark-catalog-sizes", default=",".join(str(s) for s in BENCHMARK_CATALOG_SIZES),
+                        help="Comma-separated catalog sizes (# loci) to benchmark, smallest first.")
+    parser.add_argument("--trexplorer-bigquery-table", default=TREXPLORER_BIGQUERY_TABLE,
+                        help="BigQuery table (project.dataset.table) of the TRExplorer catalog to subsample.")
+    parser.add_argument("--benchmark-scrape-batch-id", type=int,
+                        help="Recovery path for --benchmark-resources: skip submitting any steps and just scrape "
+                             "this already-finished Hail Batch id (printed by an earlier run) and (re)write "
+                             "resource_metrics.json. Use the same --benchmark-* args as the original run.")
     args = bp.parse_known_args()
+
+    if args.benchmark_resources:
+        run_resource_benchmark(bp, args, df)
+        return
 
     if not args.tool:
         args.tool = ["TRGTv5"]
@@ -500,6 +583,581 @@ def main():
                 sample_id=row.sample_id,
                 output_dir=output_dir)
     bp.run()
+
+
+def run_resource_benchmark(bp, args, df):
+    """Benchmark one tool's runtime / memory / cost vs. catalog size, for the resource viewer.
+
+    Subsamples the TRExplorer catalog (--trexplorer-bigquery-table) to the N most-polymorphic loci (ranked by the
+    per-locus HPRC256_Stdev annotation, descending) for each requested catalog size, builds the tool's catalog
+    (EH json for the EH variants, prefiltered EH json for IlluminaEHv5, converted bed for GangSTR/HipSTR), and runs
+    --benchmark-tool once per catalog on the selected sample/coverage. After the batch finishes, it scrapes each
+    genotyping job's wall-clock runtime and peak RSS from the /usr/bin/time output in the job log and its cost from
+    the Hail Batch client, and merges resource_metrics.json (the schema read by docs/tool_comparison_viewer.html)
+    into the tool_results coverage dir.
+
+    Runtime is recorded as CPU-hours (wall-clock x the VM's cpu count) so tools on different-sized VMs are
+    comparable: GangSTR/HipSTR/EHv5-bw2-optimized run at cpu=1, IlluminaEHv5 at cpu=16 (see BENCHMARK_TOOL_CONFIG).
+    Each tool's VM (cpu, RAM, preemptible) and full genotyping command line (filenames only) are recorded alongside
+    the metrics. The metrics are for the genotyping step ONLY; run with --skip-combine-{expansion-hunter,gangstr,
+    hipstr}-step so the benchmark doesn't pay for the downstream combine steps.
+
+    The sizes are nested subsets (each is the top-N most-polymorphic loci); note the actual genotyped locus count is
+    smaller than N for tools that filter (HipSTR drops motifs >9bp; IlluminaEHv5 drops flanking-N and >=500bp loci).
+
+    Args:
+        bp: the step_pipeline pipeline object.
+        args: parsed args (uses the --benchmark-* and --trexplorer-bigquery-table options).
+        df: the sample table (HPRC_all_aligned_short_read_and_long_read_samples.tsv), used to resolve the sample's
+            read-data path, index, sex, and coverage.
+    """
+    tool = args.benchmark_tool
+    if tool not in BENCHMARK_TOOL_CONFIG:
+        raise ValueError(f"--benchmark-resources supports {sorted(BENCHMARK_TOOL_CONFIG)}, got '{tool}'")
+
+    sizes = sorted(int(s) for s in args.benchmark_catalog_sizes.split(","))
+
+    # Resolve the one read-data row for the requested sample / data type / coverage.
+    rows = df[(df.sample_id == args.benchmark_sample_id)
+              & (df.sequencing_data_type == args.benchmark_data_type)
+              & (df.read_data_path.str.contains(args.benchmark_coverage_keyword, regex=False))]
+    if len(rows) != 1:
+        raise ValueError(f"Expected exactly 1 read-data row for {args.benchmark_sample_id} "
+                         f"{args.benchmark_data_type} matching '{args.benchmark_coverage_keyword}', found {len(rows)}")
+    row = rows.iloc[0]
+    cov = int(round(float(row.depth_of_coverage)))
+    # RNA-seq rows are labeled by total bases sequenced (Gbp) not fold-coverage, matching main() and the viewer's
+    # SAMPLES tok (e.g. "24G"); using "x" here would write to a coverage dir the viewer never requests.
+    coverage_label = f"{cov}G" if args.benchmark_data_type in RNASEQ_DATA_TYPES else f"{cov}x"
+
+    # resource_metrics.json goes into the coverage dir the viewer reads
+    # ({output_dir}/{sample}/{data_type}/{coverage}_coverage/resource_metrics.json); the subsampled catalogs and
+    # per-size EH outputs go under a resource_benchmark subtree so they don't collide with the accuracy results.
+    coverage_dir = os.path.join(args.output_dir, args.benchmark_sample_id, args.benchmark_data_type,
+                                f"{coverage_label}_coverage")
+    benchmark_base = os.path.join(args.output_dir, args.benchmark_sample_id, args.benchmark_data_type,
+                                  "resource_benchmark", tool, f"{coverage_label}_coverage")
+    billing_project = getattr(args, "batch_billing_project", None) or "tgg-rare-disease"
+
+    # Recovery path: with --benchmark-scrape-batch-id, skip resubmitting any steps and just (re)scrape a finished
+    # batch and write resource_metrics.json. Used when a blocking run's scrape/write failed after the (paid) batch
+    # already ran, or to finish a --no-wait submission. The other --benchmark-* args must match the original run.
+    if args.benchmark_scrape_batch_id:
+        _scrape_and_write(args.benchmark_scrape_batch_id, billing_project, sizes, tool, coverage_dir)
+        return
+
+    # 1. Query TRExplorer for the top max(sizes) loci by HPRC256_Stdev, build nested EH catalogs, upload to GCS.
+    #    (GangSTR/HipSTR convert these to bed; IlluminaEHv5 prefilters them; the bw2 EH fork reads them directly.)
+    #    The 120bp-filtered nested catalogs depend only on (bigquery_table, sizes, filter params) -- NOT on the
+    #    sample / coverage / tool -- so every combo shares ONE catalog dir (keyed by the filter params so a filter
+    #    change can't silently reuse stale catalogs), and _build_trexplorer_catalogs skips any size already uploaded.
+    shared_catalogs_dir = os.path.join(args.output_dir, "resource_benchmark",
+                                       f"shared_catalogs_span{BENCHMARK_MAX_LOCUS_SPAN_BP}_motif{BENCHMARK_MAX_MOTIF_SIZE_BP}")
+    eh_catalog_paths = _build_trexplorer_catalogs(args.trexplorer_bigquery_table, sizes, shared_catalogs_dir)
+
+    # 2. Per catalog size: build the tool's catalog (convert/prefilter as needed) + one genotyping step on the tool's
+    #    VM. The per-size catalog basename carries the trexplorer_top_{size} token, so the genotyping job name does too,
+    #    which is how _scrape_benchmark_metrics keys the catalog size.
+    for size in sizes:
+        eh_catalog = eh_catalog_paths[size]
+        size_dir = os.path.join(benchmark_base, f"size_{size}")
+        output_prefix = f"{args.benchmark_sample_id}.{tool}.trexplorer_top_{size}"
+
+        if tool in ("EHv5-bw2-optimized", "IlluminaEHv5"):
+            use_illumina = (tool == "IlluminaEHv5")
+            if use_illumina:
+                # IlluminaEHv5 needs the flanking-N / >=500bp-locus prefilter; cpu/memory are forced to 16/highmem
+                # inside the factory (the streaming_* args below are ignored for it).
+                prefilter_step, catalog_path = create_illumina_eh_catalog_prefilter_step(
+                    bp, eh_catalog_path=eh_catalog, reference_fasta=REFERENCE_FASTA_PATH,
+                    reference_fasta_fai=REFERENCE_FASTA_FAI_PATH, output_dir=os.path.join(size_dir, "catalog"))
+                analysis_mode = "streaming"
+            else:
+                prefilter_step, catalog_path, analysis_mode = None, eh_catalog, "optimized-streaming"
+            create_expansion_hunter_steps(
+                bp,
+                reference_fasta=REFERENCE_FASTA_PATH,
+                reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
+                input_bam=row.read_data_path,
+                input_bai=row.read_data_index_path,
+                male_or_female=row.male_or_female,
+                variant_catalog_file_paths=[catalog_path],
+                output_dir=size_dir,
+                output_prefix=output_prefix,
+                analysis_mode=analysis_mode,
+                loci_to_exclude=None,
+                min_locus_coverage=None,
+                use_illumina_expansion_hunter=use_illumina,
+                catalog_prefilter_step=prefilter_step,
+                num_shards=1,
+                streaming_cpu=1,
+                streaming_threads=1,
+                streaming_memory="highmem")
+        elif tool == "GangSTR":
+            convert_step, bed_path = _convert_eh_catalog_step(bp, eh_catalog, "GangSTR", size,
+                                                              os.path.join(size_dir, "catalog"))
+            create_gangstr_steps(
+                bp,
+                reference_fasta=REFERENCE_FASTA_PATH,
+                reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
+                input_bam=row.read_data_path,
+                input_bai=row.read_data_index_path,
+                male_or_female=row.male_or_female,
+                repeat_spec_file_paths=[bed_path],
+                output_dir=size_dir,
+                output_prefix=output_prefix,
+                catalog_step=convert_step)
+        elif tool == "HipSTR":
+            convert_step, bed_path = _convert_eh_catalog_step(bp, eh_catalog, "HipSTR", size,
+                                                              os.path.join(size_dir, "catalog"))
+            create_hipstr_steps(
+                bp,
+                reference_fasta=REFERENCE_FASTA_PATH,
+                reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
+                input_bam=row.read_data_path,
+                input_bai=row.read_data_index_path,
+                male_or_female=row.male_or_female,
+                regions_bed_file_paths=[bed_path],
+                output_dir=size_dir,
+                output_prefix=output_prefix,
+                catalog_step=convert_step,
+                cpu=BENCHMARK_TOOL_CONFIG["HipSTR"]["cpu"],
+                memory=BENCHMARK_TOOL_CONFIG["HipSTR"]["memory"])
+        elif tool in ("TRGTv5", "TRGTv3"):
+            convert_step, bed_path = _convert_eh_catalog_step(
+                bp, eh_catalog, "TRGT", size, os.path.join(size_dir, "catalog"),
+                reference_fasta=REFERENCE_FASTA_PATH, reference_fasta_fai=REFERENCE_FASTA_FAI_PATH)
+            create_trgt_step(
+                bp,
+                reference_fasta=REFERENCE_FASTA_PATH,
+                reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
+                input_bam=row.read_data_path,
+                input_bai=row.read_data_index_path,
+                male_or_female=row.male_or_female,
+                trgt_catalog_bed_paths=[bed_path],
+                output_dir=size_dir,
+                output_prefix=output_prefix,
+                # the downstream json conversion derives the ReferenceRegion from the TRGT VCF's own coords (the
+                # single-motif catalog takes the --parse-genotype-from-AL-field path), so it never has to parse the
+                # catalog's locus-id -- keeping the genotyping step from failing on an unexpected TRID format.
+                parse_reference_region_from_locus_id=False,
+                cpu=BENCHMARK_TOOL_CONFIG[tool]["cpu"],
+                docker_image=BENCHMARK_TOOL_CONFIG[tool]["docker"],
+                catalog_step=convert_step)
+        elif tool == "LongTR":
+            convert_step, bed_path = _convert_eh_catalog_step(bp, eh_catalog, "LongTR", size,
+                                                              os.path.join(size_dir, "catalog"))
+            create_longtr_steps(
+                bp,
+                reference_fasta=REFERENCE_FASTA_PATH,
+                reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
+                input_bam=row.read_data_path,
+                input_bai=row.read_data_index_path,
+                male_or_female=row.male_or_female,
+                regions_bed_paths=[bed_path],
+                output_dir=size_dir,
+                output_prefix=output_prefix,
+                # ONT reads are noisier; match the main pipeline's ONT quality floor
+                min_mean_qual=(10 if args.benchmark_data_type == "ONT" else None),
+                catalog_step=convert_step)
+        elif tool == "vamos":
+            # vamos converts the EH json to its own motif catalog IN-STEP, so it reads the raw EH catalog directly
+            # (no separate convert step); cpu drives both the CRAM/BAM scan threads and vamos -t.
+            create_vamos_step(
+                bp,
+                reference_fasta=REFERENCE_FASTA_PATH,
+                reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
+                input_bam=row.read_data_path,
+                input_bai=row.read_data_index_path,
+                expansion_hunter_catalog_paths=[eh_catalog],
+                output_dir=size_dir,
+                output_prefix=output_prefix,
+                cpu=BENCHMARK_TOOL_CONFIG["vamos"]["cpu"])
+        elif tool == "ATaRVa":
+            convert_step, bed_path = _convert_eh_catalog_step(bp, eh_catalog, "ATaRVa", size,
+                                                              os.path.join(size_dir, "catalog"))
+            create_atarva_step(
+                bp,
+                reference_fasta=REFERENCE_FASTA_PATH,
+                reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
+                input_bam=row.read_data_path,
+                input_bai=row.read_data_index_path,
+                male_or_female=row.male_or_female,
+                regions_bed_path=bed_path,   # ATaRVa takes a single bed path (not a list)
+                output_dir=size_dir,
+                output_prefix=output_prefix,
+                cpu=BENCHMARK_TOOL_CONFIG["ATaRVa"]["cpu"],
+                catalog_step=convert_step)
+        elif tool == "inquiSTR":
+            convert_step, bed_path = _convert_eh_catalog_step(bp, eh_catalog, "inquiSTR", size,
+                                                              os.path.join(size_dir, "catalog"))
+            create_inquistr_steps(
+                bp,
+                reference_fasta=REFERENCE_FASTA_PATH,
+                reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
+                input_bam=row.read_data_path,
+                input_bai=row.read_data_index_path,
+                male_or_female=row.male_or_female,
+                inquistr_catalog_bed_paths=[bed_path],
+                output_dir=size_dir,
+                output_prefix=output_prefix,
+                cpu=BENCHMARK_TOOL_CONFIG["inquiSTR"]["cpu"],
+                catalog_step=convert_step)
+
+    # 3. Submit + wait. bp.run() blocks unless --no-wait, and returns the hail batch handle (result.id).
+    result = bp.run()
+    if result is None:
+        print("No steps were run (all skipped?); not writing resource_metrics.json.")
+        return
+    batch_id = getattr(result, "id", None)
+    print(f"Benchmark batch id: {batch_id}")
+    if getattr(args, "no_wait", False) or getattr(args, "dry_run", False):
+        print(f"--no-wait/--dry-run does not scrape metrics. Once the batch finishes, write resource_metrics.json "
+              f"by re-running with --benchmark-scrape-batch-id {batch_id} (plus the same --benchmark-* args).")
+        return
+
+    # 4. Scrape wall-clock + peak RSS (from the /usr/bin/time output in each job log) and cost (from the Hail Batch
+    #    client), keyed by catalog size, then write resource_metrics.json. The batch already ran (and was paid for),
+    #    so on failure surface the recovery command instead of silently losing the results.
+    try:
+        _scrape_and_write(batch_id, billing_project, sizes, tool, coverage_dir)
+    except Exception:
+        print(f"ERROR scraping/writing metrics for finished batch {batch_id}. Retry without resubmitting the batch "
+              f"by re-running with --benchmark-scrape-batch-id {batch_id} (plus the same --benchmark-* args).")
+        raise
+
+
+def _scrape_and_write(batch_id, billing_project, sizes, tool, coverage_dir):
+    """Scrape a finished benchmark batch and merge its metrics + provenance + VM metadata into resource_metrics.json."""
+    print(f"Scraping metrics from finished batch {batch_id} ...")
+    metrics_by_size, vm = _scrape_benchmark_metrics(batch_id, billing_project, sizes, tool)
+    _write_resource_metrics_json(metrics_by_size, sizes, tool, coverage_dir, vm or _benchmark_vm(tool))
+
+
+def _benchmark_vm(tool):
+    """Table/env fallback VM metadata for this tool: {cpu, mem_gb, preemptible} (used when no job was scraped)."""
+    cfg = BENCHMARK_TOOL_CONFIG[tool]
+    preemptible = os.environ.get("NONPREEMPTIBLE", "").lower() not in ("1", "true", "yes")
+    return {"cpu": cfg["cpu"], "mem_gb": round(cfg["cpu"] * HAIL_MEM_GB_PER_CORE[cfg["memory"]], 2),
+            "preemptible": preemptible}
+
+
+def _read_job_vm(status, tool):
+    """Read the VM (cpu, mem_gb, preemptible) from a finished job's Hail Batch status, with the table as fallback.
+
+    cpu is the actual allocated cores (msec_mcpu / duration_ms / 1000, Hail's own accounting); preemptible is read
+    from the cost_breakdown resource strings (which carry a preemptible/nonpreemptible token); RAM is the provisioned
+    tier RAM for that cpu count (cpu x HAIL_MEM_GB_PER_CORE[tier]). Falls back to BENCHMARK_TOOL_CONFIG + env when a
+    field can't be read from the job.
+    """
+    cfg = BENCHMARK_TOOL_CONFIG[tool]
+    cpu = cfg["cpu"]
+    msec_mcpu, duration = status.get("msec_mcpu"), status.get("duration")
+    if msec_mcpu and duration:
+        cpu = max(1, round(msec_mcpu / duration / 1000))
+    resource_strs = " ".join((cb or {}).get("resource", "") for cb in (status.get("cost_breakdown") or []))
+    if "nonpreemptible" in resource_strs:      # check nonpreemptible first (it contains "preemptible")
+        preemptible = False
+    elif "preemptible" in resource_strs:
+        preemptible = True
+    else:
+        preemptible = os.environ.get("NONPREEMPTIBLE", "").lower() not in ("1", "true", "yes")
+    return {"cpu": cpu, "mem_gb": round(cpu * HAIL_MEM_GB_PER_CORE[cfg["memory"]], 2), "preemptible": preemptible}
+
+
+def _sanitize_command(cmd):
+    """Collapse whitespace and replace every path-like token with just its basename (record filenames, not paths)."""
+    return " ".join(t.rsplit("/", 1)[-1] if "/" in t else t for t in cmd.split())
+
+
+def _convert_eh_catalog_step(bp, eh_catalog_path, tool, size, output_dir, reference_fasta=None, reference_fasta_fai=None):
+    """Convert an ExpansionHunter JSON catalog to the tool's catalog format via the str_analysis converters baked into
+    RUN_TOOLS_DOCKER_IMAGE. The output basename carries the trexplorer_top_{size} token so the downstream genotyping
+    job name does too (that's how _scrape_benchmark_metrics keys the catalog size). Returns (step, gs:// catalog path).
+
+    tool -> converter (all baked into RUN_TOOLS_DOCKER_IMAGE):
+      GangSTR         -> convert_expansion_hunter_catalog_to_gangstr_spec   (plain .bed)
+      HipSTR          -> convert_expansion_hunter_catalog_to_hipstr_format  (plain .bed)
+      TRGT            -> convert_expansion_hunter_catalog_to_trgt_catalog   (plain .bed; requires -R reference_fasta)
+      LongTR          -> convert_expansion_hunter_catalog_to_longtr_format  (plain .bed)
+      ATaRVa/inquiSTR -> convert_expansion_hunter_catalog_to_bed            (bgzipped + tabix-indexed .bed.gz; ATaRVa
+                                                                             localizes the .tbi, inquiSTR ignores it;
+                                                                             ATaRVa's col5 is rewritten to the motif
+                                                                             length, which it requires)
+    """
+    module = {"GangSTR": "convert_expansion_hunter_catalog_to_gangstr_spec",
+              "HipSTR": "convert_expansion_hunter_catalog_to_hipstr_format",
+              "TRGT": "convert_expansion_hunter_catalog_to_trgt_catalog",
+              "LongTR": "convert_expansion_hunter_catalog_to_longtr_format",
+              "ATaRVa": "convert_expansion_hunter_catalog_to_bed",
+              "inquiSTR": "convert_expansion_hunter_catalog_to_bed"}[tool]
+    # the plain-bed converter bgzips + tabix-indexes when its -o path ends in .bed.gz (ATaRVa needs the .tbi)
+    bgzipped = tool in ("ATaRVa", "inquiSTR")
+    out_name = f"trexplorer_top_{size}.{tool}.bed.gz" if bgzipped else f"trexplorer_top_{size}.{tool}.bed"
+    step = bp.new_step(
+        name=f"Convert catalog to {tool} format (trexplorer_top_{size})",
+        arg_suffix="convert-benchmark-catalog-step",
+        image=RUN_TOOLS_DOCKER_IMAGE,
+        cpu=1,
+        memory="standard",
+        storage="10Gi",
+        localize_by=Localize.GSUTIL_COPY,
+        output_dir=output_dir)
+    step.command("set -ex")
+    local_json = step.input(eh_catalog_path)
+    ref_arg = ""
+    if tool == "TRGT":
+        # the TRGT converter reads each locus's reference sequence, so it requires the reference fasta (+ .fai)
+        local_fasta = step.input(reference_fasta)
+        step.input(reference_fasta_fai or f"{reference_fasta}.fai")
+        ref_arg = f"-R {local_fasta} "
+    step.command(f"python3 -m str_analysis.{module} {ref_arg}{local_json} -o {out_name}")
+    if tool == "ATaRVa":
+        # ATaRVa strictly requires 5 columns: chrom, start, end, motif, motif_length -- it aborts if column 5 isn't
+        # the motif length. The plain-bed converter writes "." in column 5 (which inquiSTR tolerates), so rewrite
+        # column 5 to len(motif) and re-index. The benchmark catalog is single-motif, so column 4 holds one motif.
+        step.command(f"zcat {out_name} | awk 'BEGIN{{OFS=\"\\t\"}} {{$5=length($4); print}}' | bgzip > {out_name}.fixed")
+        step.command(f"mv {out_name}.fixed {out_name}")
+        step.command(f"tabix -f {out_name}")
+    step.command("ls -lhrt")
+    step.output(out_name)
+    if bgzipped:
+        step.output(f"{out_name}.tbi")
+    return step, os.path.join(output_dir, out_name)
+
+
+def _build_trexplorer_catalogs(bigquery_table, sizes, catalogs_gcs_dir):
+    """Query the TRExplorer BigQuery catalog for the most-polymorphic loci and write one EH catalog per size.
+
+    Selects the top max(sizes) loci ordered by HPRC256_Stdev descending (LocusId as a deterministic tiebreak),
+    restricted to the primary contigs (chr1-22,X,Y; matching production catalogs, and avoiding the chrM near-start
+    loci whose flank extension goes negative and crashes IlluminaEHv5), and
+    excluding loci with >5 Ns in their flanks (matching TRExplorer's own ExpansionHunter catalog export — the
+    official Illumina EH build rejects these; the bw2 fork tolerates them, but excluding them keeps the benchmark
+    catalog identical to what TRExplorer distributes). Each size takes the top-N of that sigma-ranked list, so the
+    sizes are nested subsets (same loci); the loci WITHIN each written catalog are then ordered by canonical motif
+    to match how production EH catalogs are laid out (convert_truth_set_to_variant_catalogs.py sorts by canonical
+    motif to improve the optimized-streaming cache hit rate), so the benchmarked runtime is representative. Each
+    catalog is written as an ExpansionHunter variant catalog JSON and uploaded to
+    {catalogs_gcs_dir}/trexplorer_top_{size}.EH.json.
+
+    Args:
+        bigquery_table: "project.dataset.table" of the TRExplorer catalog.
+        sizes: list of catalog sizes (# loci).
+        catalogs_gcs_dir: gs:// dir to upload the catalogs into.
+
+    Returns:
+        dict mapping size -> gs:// path of that size's EH catalog.
+    """
+    from google.cloud import bigquery   # lazy import: only needed in --benchmark-resources mode
+
+    # The catalogs are shared across all (sample, coverage, tool) combos, so skip any size already uploaded and only
+    # query/build the missing ones. When every requested size is present, skip the BigQuery query entirely.
+    gcs_paths = {size: os.path.join(catalogs_gcs_dir, f"trexplorer_top_{size}.EH.json") for size in sizes}
+    missing = [size for size in sizes if not hfs.exists(gcs_paths[size])]
+    if not missing:
+        print(f"All {len(sizes)} catalog(s) already present in {catalogs_gcs_dir}; skipping BigQuery query + rebuild.")
+        return gcs_paths
+    print(f"{len(sizes) - len(missing)}/{len(sizes)} catalog(s) already present in {catalogs_gcs_dir}; "
+          f"building missing size(s) {missing}.")
+
+    max_size = max(missing)
+    project = bigquery_table.split(".")[0]
+    contigs_in = ", ".join(f"'{c}'" for c in BENCHMARK_PRIMARY_CONTIGS)
+    sql = f"""
+        SELECT ReferenceRegion, CONCAT('(', ReferenceMotif, ')*') AS LocusStructure, LocusId, CanonicalMotif
+        FROM `{bigquery_table}`
+        WHERE HPRC256_Stdev IS NOT NULL AND NsInFlanks <= 5 AND chrom IN ({contigs_in})
+          AND MotifSize <= {BENCHMARK_MAX_MOTIF_SIZE_BP}
+          AND (end_1based - start_0based) <= {BENCHMARK_MAX_LOCUS_SPAN_BP}
+        ORDER BY HPRC256_Stdev DESC, LocusId ASC
+        LIMIT {max_size}
+    """
+    print(f"Querying {bigquery_table} for the top {max_size} loci by HPRC256_Stdev ...")
+    rows = list(bigquery.Client(project=project).query(sql).result())
+    if len(rows) < max_size:
+        print(f"WARNING: only {len(rows)} loci have a non-null HPRC256_Stdev (< requested {max_size}); larger "
+              f"catalog sizes will be truncated to {len(rows)}.")
+    # kept in sigma-descending order (defines which loci each size includes); CanonicalMotif is carried so each
+    # written catalog can be motif-sorted below, then dropped from the EH records.
+    catalog_records = [
+        {"LocusId": r["LocusId"], "LocusStructure": r["LocusStructure"],
+         "ReferenceRegion": r["ReferenceRegion"], "VariantType": "Repeat", "_CanonicalMotif": r["CanonicalMotif"]}
+        for r in rows]
+
+    tmp_dir = tempfile.mkdtemp()
+    for size in missing:
+        # top-N most-polymorphic loci (prefix of the sigma-ranked list), ordered by canonical motif for a
+        # production-representative layout; drop the helper _CanonicalMotif key from the written EH records.
+        subset = sorted(catalog_records[:size], key=lambda r: (r["_CanonicalMotif"] or "", r["LocusId"]))
+        records = [{k: v for k, v in r.items() if k != "_CanonicalMotif"} for r in subset]
+        local_path = os.path.join(tmp_dir, f"trexplorer_top_{size}.EH.json")
+        with open(local_path, "w") as f:
+            json.dump(records, f)
+        print(f"Uploading {min(size, len(catalog_records))}-locus catalog to {gcs_paths[size]}")
+        if os.system(f"gcloud storage cp '{local_path}' '{gcs_paths[size]}'") != 0:
+            raise RuntimeError(f"Failed to upload catalog to {gcs_paths[size]}")
+    return gcs_paths
+
+
+def _scrape_benchmark_metrics(batch_id, billing_project, sizes, tool):
+    """Scrape per-catalog-size runtime / peak RSS / cost + provenance from a finished Hail Batch.
+
+    Matches this tool's genotyping jobs by BENCHMARK_TOOL_CONFIG[tool]["job_name"], parses the catalog size from the
+    'trexplorer_top_{size}' token in the job name, the wall-clock runtime and peak RSS from the /usr/bin/time --verbose
+    output in the job log, and the cost from the Hail Batch client. Runtime is reported as CPU-hours (wall-clock x
+    the job's actual allocated cpu) so different-VM tools are comparable; memory as peak RSS in GB. For each size it
+    also records the batch id, job id, and the sanitized genotyping command line (from that job's `set -x` echo) so
+    every data point is traceable back to the job that produced it.
+
+    Args:
+        batch_id: the finished batch's id.
+        billing_project: hail batch billing project to open the client with.
+        sizes: catalog sizes expected (used to warn about any missing job).
+        tool: which tool's jobs to scrape (selects the job-name matcher).
+
+    Returns:
+        (metrics_by_size, vm): metrics_by_size maps size -> {"runtime": cpu_hours, "memory": gb, "cost": usd,
+        "batch_id": int, "job_id": int, "command": str} (any unmeasured field is None); vm is the {cpu, mem_gb,
+        preemptible} read from the first matched job, or None if no job matched.
+    """
+    import hailtop.batch_client.client as hb_client   # lazy import: only needed in --benchmark-resources mode
+
+    job_name_match = BENCHMARK_TOOL_CONFIG[tool]["job_name"]
+    batch = hb_client.BatchClient(billing_project).get_batch(batch_id)
+    metrics = {}
+    vm = None
+    for job_info in batch.jobs():
+        name = job_info.get("name") or ""
+        if job_name_match not in name:
+            continue
+        # tolerant of both the current "trexplorer_top_{size}" naming and the legacy "trex_top_{size}" (batches
+        # submitted before the trex -> trexplorer rename still carry trex_top_ in their job names).
+        size_match = re.search(r"trex(?:plorer)?_top_(\d+)", name)
+        if not size_match:
+            continue
+        size = int(size_match.group(1))
+        # only scrape the requested sizes -- lets a scrape target a subset and skips fetching logs for sizes we
+        # intentionally exclude (e.g. GangSTR's huge multi-MB 100k/200k logs that time out and are capped out anyway).
+        if size not in sizes:
+            continue
+
+        job = batch.get_job(job_info["job_id"])
+        status = job.status()
+        cost = status.get("cost")
+        if isinstance(cost, str):
+            cost = float(cost.lstrip("$")) if cost.strip() else None
+
+        # runtime CPU-hours = wall-clock x the cores the tool actually uses (its thread count), NOT the provisioned
+        # cpu -- e.g. HipSTR is single-threaded on a cpu=2 VM (2nd core only for RAM), so its idle core isn't counted.
+        threads = BENCHMARK_TOOL_CONFIG[tool]["threads"]
+        if vm is None:
+            vm = _read_job_vm(status, tool)   # VM record still uses the provisioned cpu (read from the job)
+
+        # a slow/unavailable job log must not abort the whole scrape (one Hail log-fetch TimeoutError previously
+        # crashed the run after other jobs were already fetched) -- treat an unfetchable log as "no metrics for this
+        # size" (cost is still recorded from the job status above), and move on.
+        try:
+            log = job.log() or {}
+        except Exception as e:
+            print(f"WARNING: could not fetch log for job {job_info['job_id']} (catalog size {size}): {e}")
+            log = {}
+        main_log = log.get("main", "") if isinstance(log, dict) else str(log)
+
+        runtime_cpu_hours = None
+        wall_match = re.search(r"Elapsed \(wall clock\) time.*?\): ([0-9:.]+)", main_log)
+        if wall_match:
+            # e.g. "7:53.62" (m:ss) or "1:07:53.6" (h:mm:ss): sum tokens right-to-left with 60**i weights, then
+            # x threads to get CPU-hours (== wall-hours for the single-threaded tools; x16 for IlluminaEHv5).
+            parts = [float(x) for x in wall_match.group(1).split(":")][::-1]
+            runtime_cpu_hours = sum(value * 60**i for i, value in enumerate(parts)) / 3600.0 * threads
+
+        memory_gb = None
+        rss_match = re.search(r"Maximum resident set size \(kbytes\): (\d+)", main_log)
+        if rss_match:
+            memory_gb = int(rss_match.group(1)) / 1e6
+
+        # the tool's own command (strip the /usr/bin/time --verbose measurement wrapper), filenames only
+        command = None
+        cmd_match = re.search(r"/usr/bin/time --verbose (\S[^\n]*)", main_log)
+        if cmd_match:
+            command = _sanitize_command(cmd_match.group(1))
+
+        if runtime_cpu_hours is None or memory_gb is None:
+            print(f"WARNING: could not parse runtime/RSS for catalog size {size} from job {job_info['job_id']}")
+        metrics[size] = {"runtime": runtime_cpu_hours, "memory": memory_gb, "cost": cost,
+                         "batch_id": batch_id, "job_id": job_info["job_id"], "command": command}
+
+    for size in sizes:
+        if size not in metrics:
+            print(f"WARNING: no {tool} genotyping job found for catalog size {size}")
+            metrics[size] = {k: None for k in ("runtime", "memory", "cost", "batch_id", "job_id", "command")}
+    return metrics, vm
+
+
+def _write_resource_metrics_json(metrics_by_size, sizes, tool, coverage_dir, vm):
+    """Merge this run's metrics + provenance + metadata into resource_metrics.json (viewer schema) at {coverage_dir}.
+
+    Schema read by docs/tool_comparison_viewer.html:
+        {"catalog_sizes": [...], "tools": {tool: {"runtime": [...], "memory": [...], "cost": [...],
+                                                  "batch_id": [...], "job_id": [...], "command": [...],
+                                                  "vm": {"cpu", "mem_gb", "preemptible"}}}}
+    Every per-size array (runtime/memory/cost + batch_id/job_id/command) is aligned index-wise to catalog_sizes
+    (null where not measured), so each data point is traceable to the batch+job that produced it; vm is per-tool.
+
+    A single benchmark run only covers one tool and the --benchmark-catalog-sizes it was given, but the viewer's
+    "all" mode overlays every tool and the full-range plan re-runs with more sizes; so this reads any existing file
+    and MERGES (union of catalog_sizes, this tool's arrays + metadata re-aligned and added/updated) rather than
+    overwriting, which would discard previously recorded sizes/tools.
+    """
+    gcs_path = os.path.join(coverage_dir, "resource_metrics.json")
+    per_size = ("runtime", "memory", "cost", "batch_id", "job_id", "command")
+
+    # Unpack any existing file into {tool: {size: {field}}} + {tool: {vm}}, then overlay this run. The per-field
+    # read is defensive (missing / non-list / short arrays -> None) so a schema change can't corrupt the merge.
+    by_tool, meta_by_tool = {}, {}
+    existing = _read_existing_resource_metrics(gcs_path)
+    if existing:
+        existing_sizes = existing.get("catalog_sizes", [])
+        for t, entry in existing.get("tools", {}).items():
+            for i, s in enumerate(existing_sizes):
+                by_tool.setdefault(t, {})[s] = {
+                    f: (entry[f][i] if isinstance(entry.get(f), list) and i < len(entry[f]) else None)
+                    for f in per_size}
+            if entry.get("vm") is not None:
+                meta_by_tool[t] = {"vm": entry["vm"]}
+    # Overlay this run per-field, but never overwrite a previously-recorded value with a None: on a re-run with a
+    # wider size range, step_pipeline skips the already-completed sizes, so _scrape_benchmark_metrics has no job for
+    # them and reports all-None -- writing those Nones would wipe the real earlier measurements + provenance.
+    for s in sizes:
+        slot = by_tool.setdefault(tool, {}).setdefault(s, {f: None for f in per_size})
+        for f in per_size:
+            if metrics_by_size[s][f] is not None:
+                slot[f] = metrics_by_size[s][f]
+    if vm is not None:
+        meta_by_tool.setdefault(tool, {})["vm"] = vm
+
+    all_sizes = sorted({s for size_map in by_tool.values() for s in size_map})
+    data = {"catalog_sizes": all_sizes, "tools": {}}
+    for t, size_map in by_tool.items():
+        entry = {f: [(size_map.get(s) or {}).get(f) for s in all_sizes] for f in per_size}
+        entry.update(meta_by_tool.get(t, {}))
+        data["tools"][t] = entry
+
+    local_path = os.path.join(tempfile.mkdtemp(), "resource_metrics.json")
+    with open(local_path, "w") as f:
+        json.dump(data, f, indent=2)
+    print(f"Writing resource metrics to {gcs_path}:\n{json.dumps(data, indent=2)}")
+    if os.system(f"gcloud storage cp '{local_path}' '{gcs_path}'") != 0:
+        raise RuntimeError(f"Failed to upload resource_metrics.json to {gcs_path}")
+
+
+def _read_existing_resource_metrics(gcs_path):
+    """Return the parsed resource_metrics.json at gcs_path, or None if it doesn't exist yet."""
+    if not hfs.exists(gcs_path):
+        return None
+    with hfs.open(gcs_path, "rb") as f:
+        return json.loads(f.read())
 
 
 def create_variant_catalogs_step(bp, *, sample_id, genotypes_tsv_path, output_dir):
