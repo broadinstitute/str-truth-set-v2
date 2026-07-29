@@ -36,7 +36,7 @@
     <title>Tandem Repeat Genotyping: Tool Benchmark</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.4.1/semantic.min.css" />
     <style>
-        body { font-family: Lato, Helvetica, Arial, sans-serif; margin: 20px 30px; }
+        body { font-family: Lato, Helvetica, Arial, sans-serif; margin: 20px 30px; padding-bottom: 25px; }
         h2 { font-size: 20px; font-weight: bold; margin: 4px 0 18px; }
         .ui.form { font-size: 16px; }
         .ui.form label { font-size: 16px; }
@@ -57,6 +57,15 @@
                      font-size: 1.7em; color: #555; cursor: pointer; }
         #plot-help:hover { color: #333; }
         #legend-popup { font-size: 15px; line-height: 1.55; }
+        /* Runtime / Memory / Cost section */
+        hr.section-sep { border: 0; border-top: 1px solid #ddd; margin: 48px 0 26px; }
+        #res-status { color: #b00; padding: 8px 0; min-height: 1.2em; font-size: 15px; }
+        .res-chart-box { position: relative; height: 300px; max-width: 1200px; margin: 0 0 26px; }
+        /* per-tool command-line + machine metadata, a multi-line fixed-width block per shown tool, below the plots */
+        #res-metadata { font-family: Consolas, "Courier New", monospace; font-size: 12.5px; color: #333;
+                        margin: 20px 0 8px; line-height: 1.5; max-width: 1200px; }
+        .res-meta-block { white-space: pre-wrap; margin: 0 0 16px; }
+        #res-note { max-width: 1200px; margin: 16px 0 6px; font-size: 14px; color: #555; line-height: 1.5; }
     </style>
 </head>
 <body>
@@ -135,8 +144,57 @@
         </div>
     </div>
 
+    <!-- ====================================================================
+         Runtime / Memory / Cost section. Same Individual / Sequencing Type /
+         Coverage selectors as the accuracy section above (independent copies,
+         prefixed res-), plus a Tool selector with an extra "all" option that
+         overlays every compatible tool in one plot. Catalog size is the shared
+         x-axis (not a selector). Three vertically-stacked Chart.js line plots:
+         Runtime (blue), Memory (orange), Cost (green). Data is fetched from
+             {BASE_URL}/{sample}/{datatype}/{cov}_coverage/resource_metrics.json
+         (schema documented above the resource JS module); until that file
+         exists the plots show a "no data yet" message.
+    ==================================================================== -->
+    <hr class="section-sep" />
+    <h2>Tandem Repeat Genotyping: Tool Benchmark &nbsp;<small style="color:#888">Runtime, Memory, and Cost</small></h2>
+
+    <div class="ui form">
+        <ul class="facets">
+            <li>
+                <span class="facet-label">Individual:</span>
+                <span class="navlinks">[<a class="prev-button" id="prev-res-sample" href="#">←</a> <a class="next-button" id="next-res-sample" href="#">→</a>]</span>
+                <span id="res-sample-radios"></span>
+            </li>
+            <li>
+                <span class="facet-label">Sequencing Type:</span>
+                <span class="navlinks">[<a class="prev-button" id="prev-res-datatype" href="#">←</a> <a class="next-button" id="next-res-datatype" href="#">→</a>]</span>
+                <span id="res-datatype-radios"></span>
+            </li>
+            <li>
+                <span class="facet-label">Coverage:</span>
+                <span class="navlinks">[<a class="prev-button" id="prev-res-coverage" href="#">←</a> <a class="next-button" id="next-res-coverage" href="#">→</a>]</span>
+                <span id="res-coverage-radios"></span>
+            </li>
+            <li>
+                <span class="facet-label"><span style="color:#15499e">Tool</span>:</span>
+                <span class="navlinks">[<a class="prev-button" id="prev-res-tool" href="#">←</a> <a class="next-button" id="next-res-tool" href="#">→</a>]</span>
+                <span id="res-tool-radios"></span>
+            </li>
+        </ul>
+    </div>
+
+    <div id="res-status"></div>
+    <div id="res-charts">
+        <div class="res-chart-box"><canvas id="res-chart-runtime"></canvas></div>
+        <div class="res-chart-box"><canvas id="res-chart-memory"></canvas></div>
+        <div class="res-chart-box"><canvas id="res-chart-cost"></canvas></div>
+    </div>
+    <div id="res-note"><b>NOTE:</b> Memory is measured as the Maximum resident set size (RSS). Compute cost ($) on Google Cloud is measured by running the tool using the <a href="https://hail.is/docs/batch/index.html">Hail Batch</a> cloud execution system.</div>
+    <div id="res-metadata"></div>
+
 <script src="https://code.jquery.com/jquery-3.1.1.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.4.1/semantic.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
 // ----------------------------------------------------------------------------
 // Config — the only place that knows the GCS layout. Update once, not in HTML.
@@ -178,7 +236,7 @@ const SAMPLES = [
 // dir == fileToken == the --tool string the pipeline passes to the plot script.
 // label is just the friendlier display text for that tool.
 const TOOL_LABELS = {
-    IlluminaEHv5:         "Illumina/EHv5",
+    IlluminaEHv5:         "Illumina/EHv5 (streaming)",
     EHv5:                 "bw2/EHv5 (low-mem-streaming)",
     "EHv5-bw2-optimized": "bw2/EHv5 (optimized-streaming)",
     GangSTR:              "GangSTR",
@@ -304,6 +362,11 @@ function currentSample()    { return $('input[name="sample"]:checked').val(); }
 function currentSampleObj() { return SAMPLES.find(s=>s.id===currentSample()); }
 function currentDataType()  { return $('input[name="datatype"]:checked').val(); }
 
+// Tool display label with the tool name bolded and any " (descriptor)" left plain.
+function boldTool(t) {
+    return (TOOL_LABELS[t]||t).replace(/^([^(]+?)\s*(\(.*)?$/,(_,a,b)=>b?`<b>${a}</b> ${b}`:`<b>${a}</b>`);
+}
+
 // Technologies the current individual has, in DATATYPE_GROUPS order (short read then long read).
 function availableDataTypes() {
     const cov = currentSampleObj().coverages;
@@ -328,7 +391,7 @@ function renderDataTypes() {
 }
 function renderTools() {
     const tools = DATA_TYPES[currentDataType()].tools;
-    $('#tool-radios').html(tools.map((t,i)=>radio("tool",t,(TOOL_LABELS[t]||t).replace(/^([^(]+?)\s*(\(.*)?$/,(_,a,b)=>b?`<b>${a}</b> ${b}`:`<b>${a}</b>`),i===0)).join(''));
+    $('#tool-radios').html(tools.map((t,i)=>radio("tool",t,boldTool(t),i===0)).join(''));
     $('#tool-radios .ui.checkbox').checkbox();      // re-init: these radios render after the global init in $(...), so clicking a label wouldn't select otherwise
 }
 function renderCoverages() {
@@ -444,6 +507,223 @@ function setRadio(name, value) {
     return true;
 }
 
+// ============================================================================
+// Runtime / Memory / Cost section (independent of the accuracy section above).
+// Reuses the shared SAMPLES / DATA_TYPES / DATATYPE_GROUPS / TOOL_LABELS config,
+// with its own res- radio groups. Catalog size is the x-axis (not a selector).
+//
+// Data JSON, one per (individual, technology, coverage):
+//   {BASE_URL}/{sample}/{datatype}/{cov}_coverage/resource_metrics.json
+//   {
+//     "catalog_sizes": [2000, 5000, ... 2000000],   // x-axis points (# loci)
+//     "tools": {
+//       "TRGTv5": { "runtime": [...], "memory": [...], "cost": [...] },  // each array
+//       ...                                                              // aligns index-wise
+//     }                                                                  // with catalog_sizes;
+//   }                                                                    // null == no point
+// runtime = CPU-hours, memory = peak GB, cost = Google Cloud USD. A tool absent
+// from "tools" (or a null entry) is simply not plotted.
+// ============================================================================
+const RES_CATALOG_SIZES = [2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000, 2000000];
+const RES_CATALOG_LABELS = {2000:"2k",5000:"5k",10000:"10k",20000:"20k",50000:"50k",100000:"100k",200000:"200k",500000:"500k",1000000:"1M",2000000:"2M"};
+const RES_METRICS = [
+    { key:"runtime", label:"Runtime (CPU-hours)",       color:"#2f7ed8" },  // blue
+    { key:"memory",  label:"Memory (GB)",               color:"#f28e2b" },  // orange
+    { key:"cost",    label:"Google Cloud cost (USD)",   color:"#59a14f" },  // green
+];
+// One color per tool for the "all" overlay (Tableau-10 + extras).
+const RES_TOOL_PALETTE = ["#4E79A7","#F28E2B","#59A14F","#E15759","#B07AA1","#76B7B2","#EDC948","#FF9DA7","#9C755F","#BAB0AC","#86BCB6","#D37295","#8CD17D"];
+// Tools omitted from the resource section only (the accuracy section's DATA_TYPES tool lists are unchanged):
+// the EHv5 low-mem-streaming variant and the EnsembleTR consensus tools aren't benchmarked here.
+const RES_EXCLUDED_TOOLS = new Set(["EHv5", "EnsembleTR-EH+HipSTR", "EnsembleTR-EH+HipSTR+GangSTR"]);
+// Sequencing data types omitted from the resource section only (accuracy section unchanged): not benchmarked here.
+const RES_EXCLUDED_DATA_TYPES = new Set(["element", "illumina_rnaseq", "pacbio_isoseq"]);
+
+function resSample()    { return $('input[name="res-sample"]:checked').val(); }
+function resSampleObj() { return SAMPLES.find(s=>s.id===resSample()); }
+function resDataType()  { return $('input[name="res-datatype"]:checked').val(); }
+function resTool()      { return $('input[name="res-tool"]:checked').val(); }
+function resCoverage()  { return $('input[name="res-coverage"]:checked').val(); }
+// tools shown in the resource section = the data type's tools minus RES_EXCLUDED_TOOLS
+function resTools()     { return DATA_TYPES[resDataType()].tools.filter(t => !RES_EXCLUDED_TOOLS.has(t)); }
+
+function resAvailableDataTypes() {
+    const cov = resSampleObj().coverages, out = [];
+    for (const [, keys] of DATATYPE_GROUPS) for (const k of keys) if (cov[k] && !RES_EXCLUDED_DATA_TYPES.has(k)) out.push(k);
+    return out;
+}
+function renderResSamples() {
+    $('#res-sample-radios').html(SAMPLES.map((s,i)=>radio("res-sample",s.id,s.label,i===0)).join(''));
+    $('#res-sample-radios .ui.checkbox').checkbox();
+}
+function renderResDataTypes() {
+    const types = resAvailableDataTypes();
+    const isShort = d => DATATYPE_GROUPS[0][1].includes(d);
+    const group = (arr, label) => arr.length
+        ? `<span class="dt-group-label">${label}</span>` + arr.map(d => radio("res-datatype", d, DATA_TYPES[d].label, d === types[0])).join('')
+        : '';
+    $('#res-datatype-radios').html(group(types.filter(isShort), "short read:") + group(types.filter(d => !isShort(d)), "long read:"));
+    $('#res-datatype-radios .ui.checkbox').checkbox();
+}
+function renderResTools() {
+    // "all" (overlay every compatible tool) is the default; then one radio per tool.
+    const tools = resTools();
+    $('#res-tool-radios').html(radio("res-tool", "all", "<b>all</b>", true)
+        + tools.map(t => radio("res-tool", t, boldTool(t), false)).join(''));
+    $('#res-tool-radios .ui.checkbox').checkbox();
+}
+function renderResCoverages() {
+    const covs = resSampleObj().coverages[resDataType()];
+    $('#res-coverage-radios').html(covs.map((c,i)=>radio("res-coverage",c.tok,c.label.replace(/^(\d+)G$/,'$1 gigabases <span class="muted">(= read length x number of reads)</span>'),i===0)).join(''));
+    $('#res-coverage-radios .ui.checkbox').checkbox();
+}
+
+// Data JSON is per (individual, technology, coverage); all tools live in the one file.
+function resDataUrl() {
+    return `${BASE_URL}/${resSample()}/${resDataType()}/${resCoverage()}_coverage/resource_metrics.json`;
+}
+
+// {x: catalogSize, y: value} pairs, dropping null/missing entries (Chart.js spans the gaps).
+function resPoints(sizes, arr) {
+    if (!arr) return [];
+    const out = [];
+    for (let i = 0; i < sizes.length; i++) if (arr[i] !== null && arr[i] !== undefined) out.push({x: sizes[i], y: arr[i]});
+    return out;
+}
+
+const resCharts = {};        // metric.key -> Chart instance
+const resDataCache = {};     // url -> parsed JSON (or null when the file 404s)
+
+function makeResChart(metric, datasets, sizes, multi) {
+    if (resCharts[metric.key]) resCharts[metric.key].destroy();
+    resCharts[metric.key] = new Chart(document.getElementById(`res-chart-${metric.key}`), {
+        type: 'line',
+        data: { datasets },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'nearest', intersect: false },
+            scales: {
+                // catalog sizes span 2k–2M (~1000x), so a log x-axis keeps the ~2.5x-spaced
+                // benchmark points roughly evenly spread. Force ticks onto the actual sizes.
+                x: { type: 'logarithmic', title: { display: true, text: 'catalog size (# loci)' },
+                     min: sizes[0] * 0.85, max: sizes[sizes.length - 1] * 1.18,
+                     afterBuildTicks: a => { a.ticks = sizes.map(v => ({ value: v })); },
+                     // fall back to k/M formatting for any catalog size not in the canonical RES_CATALOG_LABELS map
+                     ticks: { autoSkip: false, callback: v => RES_CATALOG_LABELS[v]
+                              || (v >= 1e6 ? v / 1e6 + "M" : v >= 1e3 ? v / 1e3 + "k" : "" + v) } },
+                y: { title: { display: true, text: metric.label }, beginAtZero: true }
+            },
+            plugins: {
+                title: { display: true, text: metric.label, font: { size: 15 } },
+                // legend only useful when overlaying tools; bottom (not right) so long tool labels aren't truncated
+                legend: { display: multi, position: 'bottom' },
+                tooltip: { callbacks: { title: items => (RES_CATALOG_LABELS[items[0].parsed.x] || items[0].parsed.x) + " loci" } }
+            }
+        }
+    });
+}
+
+// Escape a command line so it's safe to drop into the metadata HTML line (commands can contain < > &).
+function escapeHtml(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+// A multi-line fixed-width block per shown tool, below the plots:
+//   <b>label</b>
+//       Command line: BINARY
+//          --flag value
+//          ...
+//      Machine: cpu=N, mem=MGb
+// Tools whose resource_metrics.json entry has no recorded vm/command are skipped.
+function renderResMetadata(data, shownTools) {
+    const blocks = shownTools.filter(t => data.tools[t] && data.tools[t].vm).map(t => {
+        const vm = data.tools[t].vm;
+        // command is a per-size array (aligned to catalog_sizes); show a representative one (first measured size).
+        // Fall back to a scalar for backward compatibility with older resource_metrics.json files.
+        const c = data.tools[t].command;
+        const cmd = Array.isArray(c) ? (c.find(x => x) || "") : (c || "");
+        // "BINARY --flag val --flag2 ..." -> the binary on the "Command line:" row, one indented row per --flag.
+        const parts = cmd.split(" --");
+        // IlluminaEHv5's binary is IlluminaExpansionHunter; display it as ExpansionHunter.
+        const binary = parts[0] === "IlluminaExpansionHunter" ? "ExpansionHunter" : parts[0];
+        const flagLines = parts.slice(1).map(f => "       --" + f).join("\n");
+        const body = "    Command line: " + binary
+                   + (flagLines ? "\n" + flagLines : "")
+                   + "\n   Machine: cpu=" + vm.cpu + ", mem=" + vm.mem_gb + "Gb, preemptible="
+                   + (vm.preemptible ? "True" : "False");
+        return `<div class="res-meta-block"><b>${TOOL_LABELS[t] || t}</b>\n${escapeHtml(body)}</div>`;
+    });
+    $('#res-metadata').html(blocks.join(""));
+}
+
+function drawResCharts(data, reqUrl) {
+    if (reqUrl !== resDataUrl()) return;   // a newer selection already superseded this response
+    $('#res-metadata').html('');           // repopulated below once data + a shown tool exist
+    if (!data || !data.tools) {
+        Object.values(resCharts).forEach(c => c.destroy());
+        for (const k in resCharts) delete resCharts[k];
+        $('#res-charts').hide();
+        $('#res-status').text("No runtime / memory / cost data available yet for this selection: " + reqUrl);
+        return;
+    }
+    const sizes = (data.catalog_sizes && data.catalog_sizes.length) ? data.catalog_sizes : RES_CATALOG_SIZES;
+    const tools = resTools();
+    const selected = resTool(), multi = selected === "all";
+    // No data for the current tool selection (single tool absent from the file, or "all" with no compatible tool
+    // present): show the same "no data" message instead of drawing empty, unexplained charts.
+    if (multi ? !tools.some(t => data.tools[t]) : !data.tools[selected]) {
+        Object.values(resCharts).forEach(c => c.destroy());
+        for (const k in resCharts) delete resCharts[k];
+        $('#res-charts').hide();
+        $('#res-status').text("No runtime / memory / cost data available yet for "
+            + (multi ? "these tools" : (TOOL_LABELS[selected] || selected)) + ": " + reqUrl);
+        return;
+    }
+    $('#res-status').text("");
+    $('#res-charts').show();
+    renderResMetadata(data, multi ? tools.filter(t => data.tools[t]) : [selected]);
+    RES_METRICS.forEach(metric => {
+        let datasets = [];
+        if (multi) {
+            // one line per compatible tool present in the data (color == tool)
+            tools.filter(t => data.tools[t]).forEach((t, i) => datasets.push({
+                label: TOOL_LABELS[t] || t,
+                data: resPoints(sizes, data.tools[t][metric.key]),
+                borderColor: RES_TOOL_PALETTE[i % RES_TOOL_PALETTE.length],
+                backgroundColor: RES_TOOL_PALETTE[i % RES_TOOL_PALETTE.length],
+                borderWidth: 2, pointRadius: 3, tension: 0.2, fill: false, spanGaps: true
+            }));
+        } else if (data.tools[selected]) {
+            // single line for the selected tool (color == metric)
+            datasets.push({
+                label: metric.label,
+                data: resPoints(sizes, data.tools[selected][metric.key]),
+                borderColor: metric.color, backgroundColor: metric.color,
+                borderWidth: 2, pointRadius: 3, tension: 0.2, fill: false, spanGaps: true
+            });
+        }
+        makeResChart(metric, datasets, sizes, multi);
+    });
+}
+
+// Fetch (successful loads cached per url) then draw. A tool-only change reuses the cached JSON since the URL
+// depends only on (individual, technology, coverage) -- every tool lives in the one file. A 404/error is NOT
+// cached, so revisiting a combo whose resource_metrics.json was written after the page loaded re-fetches and
+// shows the data (matching refreshRanking's no-cache behavior) instead of being stuck on "no data".
+function renderResCharts() {
+    const url = resDataUrl();
+    if (resDataCache[url]) { drawResCharts(resDataCache[url], url); return; }
+    $('#res-status').text("loading…");
+    $('#res-charts').hide();
+    fetch(url, { cache: 'no-cache' })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d) resDataCache[url] = d; drawResCharts(d, url); })
+        .catch(() => { drawResCharts(null, url); });
+}
+
+// technology change rebuilds tool + coverage radios (tool resets to "all"), then redraws
+function onResDataTypeChange() { renderResTools(); renderResCoverages(); renderResCharts(); }
+// individual change rebuilds technology (and everything downstream), then redraws
+function onResSampleChange() { renderResDataTypes(); onResDataTypeChange(); }
+
 $(function() {
     renderStatic(); renderSamples();   // technology radios are rendered below, after the individual default is set
     $('.ui.checkbox').checkbox();
@@ -493,11 +773,20 @@ $(function() {
         .checkbox(init.nc === "1" ? 'set checked' : 'set unchecked');
     refreshImage();                                          // first image + ranking; also normalizes the URL via writeHash()
 
+    // Resource section: build its own selectors (independent of the accuracy section) then draw.
+    renderResSamples(); renderResDataTypes(); renderResTools(); renderResCoverages(); renderResCharts();
+
     // Wire change handlers only AFTER restore. Technology change re-renders tools/coverages; everything
     // else just refreshes the image. Individual change rebuilds technology/tool/coverage.
     $(document).on('change', 'input[name="sample"]', onSampleChange);
     $(document).on('change', 'input[name="datatype"]', onDataTypeChange);
     $(document).on('change', 'input[name="tool"],input[name="coverage"],input[name="motif"],input[name="genotype"],input[name="purity"],input[name="chrom"],#exclude-tool-no-call-loci', refreshImage);
+
+    // Resource-section handlers: individual rebuilds technology/tool/coverage; technology rebuilds
+    // tool/coverage; tool/coverage just redraw.
+    $(document).on('change', 'input[name="res-sample"]', onResSampleChange);
+    $(document).on('change', 'input[name="res-datatype"]', onResDataTypeChange);
+    $(document).on('change', 'input[name="res-tool"],input[name="res-coverage"]', renderResCharts);
 });
 </script>
 </body>
