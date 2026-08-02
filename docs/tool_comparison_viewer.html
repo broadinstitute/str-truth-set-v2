@@ -29,6 +29,16 @@
     Q threshold      (pipeline forces --q-threshold 0)
     Pure/Interrupted (the IsPureRepeat split was removed)
     multi-allelic    (genotype_subset loop is ["all", "HET", "HOM"] only)
+
+  Three sections, each with its own independent copy of the selectors:
+    1. Accuracy         — repeat-count accuracy (the facets listed above)
+    2. Sequence Accuracy — edit distance between the tool's reported allele SEQUENCE and the assembly
+                           truth sequence, for the three tools whose VCF carries one (TRGT v5, ATaRVa,
+                           HipSTR). From plot_tool_sequence_accuracy.py. Adds a Metric facet (raw bp vs.
+                           normalized by the true allele length) and has no purity / chromosome facets.
+    3. Runtime, Memory, and Cost — Chart.js plots of resource_metrics.json
+  Sections 1 and 2 share one location.hash; section 2's keys are seq*-prefixed, so an older link that
+  has none of them still restores section 1 exactly as before.
 -->
 <html lang="en">
 <head>
@@ -49,14 +59,15 @@
         .muted { color: #999; margin-left: 10px; }
         .dt-group-label { color: #888; font-size: 0.8em; font-family: Consolas, "Courier New", monospace; margin: 0 6px 0 0; }
         .rank-pct { color: #80BF75; font-weight: bold; }
-        #plot-wrap { margin-top: 0; }
-        #plot-status { color: #b00; padding: 8px 0; min-height: 1.2em; font-size: 15px; }
+        #plot-wrap, #seq-plot-wrap { margin-top: 0; }
+        #plot-status, #seq-plot-status { color: #b00; padding: 8px 0; min-height: 1.2em; font-size: 15px; }
         /* inline-block so the box shrink-wraps the rendered image; (?) anchors to the image's actual top-right */
-        #plot-box { position: relative; display: inline-block; max-width: 90%; }
-        #plot-help { position: absolute; top: 0; right: 0; transform: translateY(-115%); margin: 0;
+        #plot-box, #seq-plot-box { position: relative; display: inline-block; max-width: 90%; }
+        #plot-help, #seq-plot-help { position: absolute; top: 0; right: 0; transform: translateY(-115%); margin: 0;
                      font-size: 1.7em; color: #555; cursor: pointer; }
-        #plot-help:hover { color: #333; }
-        #legend-popup { font-size: 15px; line-height: 1.55; }
+        #plot-help:hover, #seq-plot-help:hover { color: #333; }
+        #legend-popup, #seq-legend-popup { font-size: 15px; line-height: 1.55; }
+        #seq-note { max-width: 1200px; margin: 20px 0 6px; font-size: 14px; color: #555; line-height: 1.5; }
         /* Runtime / Memory / Cost section */
         hr.section-sep { border: 0; border-top: 1px solid #ddd; margin: 48px 0 26px; }
         #res-status { color: #b00; padding: 8px 0; min-height: 1.2em; font-size: 15px; }
@@ -142,6 +153,89 @@
             <i id="plot-help" class="question circle outline icon" title="Legend"></i>
             <img id="plot" style="max-width:100%; display:block" alt="" />
         </div>
+    </div>
+
+    <!-- ====================================================================
+         Sequence Accuracy section. The accuracy section above scores a tool by
+         how close its repeat COUNT is to the truth; this one scores the tools
+         that report an actual allele SEQUENCE (TRGT v5, ATaRVa, HipSTR) by the
+         edit distance between that sequence and the assembly truth sequence.
+         Independent copies of the Individual / Sequencing Type / Coverage /
+         Motif Size / Genotype selectors (prefixed seq-), plus a Metric radio.
+         Images come from
+           {BASE_URL}/{sample}/{dtype}/{tool}/{cov}_coverage/
+              tool_sequence_accuracy_by_true_allele_size
+                .{metric}.{motif}.{genotype}.{cov}.{tool}.svg
+         written by str-truth-set/figures_and_tables/plot_tool_sequence_accuracy.py.
+    ==================================================================== -->
+    <hr class="section-sep" />
+    <div id="seq-section">
+    <h2>Tandem Repeat Genotyping: Tool Benchmark &nbsp;<small style="color:#888">Sequence Accuracy (edit distance vs. the assembly truth allele sequence)</small></h2>
+
+    <div class="ui form">
+        <ul class="facets">
+            <li>
+                <span class="facet-label">Individual:</span>
+                <span class="navlinks">[<a class="prev-button" id="prev-seq-sample" href="#">←</a> <a class="next-button" id="next-seq-sample" href="#">→</a>]</span>
+                <span id="seq-sample-radios"></span>
+            </li>
+            <li>
+                <span class="facet-label">Sequencing Type:</span>
+                <span class="navlinks">[<a class="prev-button" id="prev-seq-datatype" href="#">←</a> <a class="next-button" id="next-seq-datatype" href="#">→</a>]</span>
+                <span id="seq-datatype-radios"></span>
+            </li>
+            <li>
+                <span class="facet-label">Coverage:</span>
+                <span class="navlinks">[<a class="prev-button" id="prev-seq-coverage" href="#">←</a> <a class="next-button" id="next-seq-coverage" href="#">→</a>]</span>
+                <span id="seq-coverage-radios"></span>
+            </li>
+            <li>
+                <span class="facet-label">Motif Size:</span>
+                <span class="navlinks">[<a class="prev-button" id="prev-seq-motif" href="#">←</a> <a class="next-button" id="next-seq-motif" href="#">→</a>]</span>
+                <span id="seq-motif-radios"></span>
+            </li>
+            <li>
+                <span class="facet-label">Genotype:</span>
+                <span class="navlinks">[<a class="prev-button" id="prev-seq-genotype" href="#">←</a> <a class="next-button" id="next-seq-genotype" href="#">→</a>]</span>
+                <span id="seq-genotype-radios"></span>
+            </li>
+            <li>
+                <span class="facet-label">Metric:</span>
+                <span class="navlinks">[<a class="prev-button" id="prev-seq-metric" href="#">←</a> <a class="next-button" id="next-seq-metric" href="#">→</a>]</span>
+                <span id="seq-metric-radios"></span>
+            </li>
+            <li style="list-style:none; margin:32px 0 0 -22px; line-height:2.4">
+                <span class="facet-label"><span style="color:#15499e">Sequence Accuracy Plot</span>:</span>
+                <span class="navlinks">[<a class="prev-button" id="prev-seq-tool" href="#">←</a> <a class="next-button" id="next-seq-tool" href="#">→</a>]</span>
+                <span id="seq-tool-radios"></span>
+            </li>
+        </ul>
+    </div>
+
+    <div class="ui popup" id="seq-legend-popup" style="max-width:620px;">
+        <b>x-axis:</b> true allele size — positive = expansion, negative = contraction.<br/>
+        <b>Left panel</b>: distribution of the per-allele edit distance in each x bin (box = median and IQR).<br/>
+        <b>Right panel</b>: fraction of alleles in each edit-distance category.<br/>
+        <b>Gray</b>: tool produced no allele sequence for this allele.<br/>
+        <b>Green</b>: the reported sequence matches the truth sequence exactly.<br/>
+        <b>Yellow → red</b>: increasingly large edit distance.<br/>
+        <b>Metric</b>: "edit distance (bp)" is the raw Levenshtein distance; "normalized" divides it by the length of
+        the true allele sequence, so a 5bp error counts differently on a 40bp allele than on a 4kb one.
+    </div>
+
+    <div id="seq-plot-wrap">
+        <div id="seq-plot-status"></div>
+        <div id="seq-plot-box">
+            <i id="seq-plot-help" class="question circle outline icon" title="Legend"></i>
+            <img id="seq-plot" style="max-width:100%; display:block" alt="" />
+        </div>
+    </div>
+    <div id="seq-note"><b>NOTE:</b> Only TRGT v5, ATaRVa and HipSTR report an allele sequence in their output VCF, so
+        only they can be scored this way; every other tool reports a repeat count only. HipSTR is a short-read caller,
+        so its numbers are not comparable to the long-read tools — the Sequencing Type selector keeps them in separate
+        plots. ATaRVa's reported sequence is a partial-order-alignment consensus of the reads supporting each allele
+        rather than an assembled haplotype, so a small non-zero floor relative to TRGT is expected rather than a
+        pipeline error.</div>
     </div>
 
     <!-- ====================================================================
@@ -495,6 +589,18 @@ function writeHash() {
     if (purity) p.set("p", purity);
     if (chrom)  p.set("ch", chrom);
     if ($('#exclude-tool-no-call-loci').is(':checked')) p.set("nc", "1");
+    // Sequence-accuracy section state, under seq*-prefixed keys so an older link (which has none of them) still
+    // restores the accuracy section exactly as before. Each key is written only once its radios exist, so the
+    // first writeHash() during init can't emit "undefined".
+    for (const [key, name] of [["seqs","seq-sample"], ["seqst","seq-datatype"], ["seqt","seq-tool"],
+                               ["seqc","seq-coverage"], ["seqmet","seq-metric"]]) {
+        const value = $(`input[name="${name}"]:checked`).val();
+        if (value) p.set(key, value);
+    }
+    const seqMotif = $('input[name="seq-motif"]:checked').val();
+    if (seqMotif) p.set("seqm", seqMotif.replace(/_motifs$/, ""));                    // 2to6bp_motifs -> 2to6bp
+    const seqGeno = $('input[name="seq-genotype"]:checked').val();
+    if (seqGeno) p.set("seqg", seqGeno === "all_genotypes" ? "all" : seqGeno);        // all_genotypes -> all
     history.replaceState(null, "", "#?" + p.toString());   // replaceState: don't spam the back stack on every click
 }
 
@@ -506,6 +612,93 @@ function setRadio(name, value) {
     $(el).closest('.ui.checkbox').checkbox('set checked');
     return true;
 }
+
+// ============================================================================
+// Sequence Accuracy section (independent of the accuracy section above).
+// Reuses the shared SAMPLES / DATA_TYPES / DATATYPE_GROUPS / TOOL_LABELS /
+// MOTIFS / GENOTYPES config, with its own seq- radio groups.
+//
+// Filename schema (from plot_tool_sequence_accuracy.py output_image_filename):
+//   tool_sequence_accuracy_by_true_allele_size
+//     .{metric} .{motif}_motifs .{genotype} .{cov} .{tool} .svg
+// No purity / chromosome-class stratification here (unlike the accuracy section).
+// ============================================================================
+
+// Only these tools report an allele sequence in their VCF == run_genotyping_tools.py SEQUENCE_ACCURACY_TOOLS.
+// The section's tool list is this set intersected with the data type's tools, so PacBio / ONT / Iso-Seq show
+// TRGT v5 + ATaRVa and the Illumina / Element technologies show HipSTR.
+const SEQ_TOOLS = ["TRGTv5", "ATaRVa", "HipSTR"];
+
+// token is the ".{metric}" filename segment == plot_tool_sequence_accuracy.py METRICS keys.
+const SEQ_METRICS = [
+    { label:"edit distance (bp)",                     token:"edit_distance_bp" },
+    { label:"normalized (÷ true allele length)",      token:"edit_distance_normalized" },
+];
+
+function seqSample()    { return $('input[name="seq-sample"]:checked').val(); }
+function seqSampleObj() { return SAMPLES.find(s=>s.id===seqSample()); }
+function seqDataType()  { return $('input[name="seq-datatype"]:checked').val(); }
+function seqTools()     { return DATA_TYPES[seqDataType()].tools.filter(t => SEQ_TOOLS.includes(t)); }
+
+// technologies the current individual has that also have at least one sequence-reporting tool
+function seqAvailableDataTypes() {
+    const cov = seqSampleObj().coverages, out = [];
+    for (const [, keys] of DATATYPE_GROUPS) for (const k of keys) {
+        if (cov[k] && DATA_TYPES[k].tools.some(t => SEQ_TOOLS.includes(t))) out.push(k);
+    }
+    return out;
+}
+
+function renderSeqSamples() {
+    $('#seq-sample-radios').html(SAMPLES.map((s,i)=>radio("seq-sample",s.id,s.label,i===0)).join(''));
+    $('#seq-sample-radios .ui.checkbox').checkbox();
+}
+function renderSeqDataTypes() {
+    const types = seqAvailableDataTypes();
+    const isShort = d => DATATYPE_GROUPS[0][1].includes(d);
+    const group = (arr, label) => arr.length
+        ? `<span class="dt-group-label">${label}</span>` + arr.map(d => radio("seq-datatype", d, DATA_TYPES[d].label, d === types[0])).join('')
+        : '';
+    $('#seq-datatype-radios').html(group(types.filter(isShort), "short read:") + group(types.filter(d => !isShort(d)), "long read:"));
+    $('#seq-datatype-radios .ui.checkbox').checkbox();
+}
+function renderSeqTools() {
+    const tools = seqTools();
+    $('#seq-tool-radios').html(tools.map((t,i)=>radio("seq-tool",t,boldTool(t),i===0)).join(''));
+    $('#seq-tool-radios .ui.checkbox').checkbox();
+}
+function renderSeqCoverages() {
+    const covs = seqSampleObj().coverages[seqDataType()];
+    $('#seq-coverage-radios').html(covs.map((c,i)=>radio("seq-coverage",c.tok,c.label.replace(/^(\d+)G$/,'$1 gigabases <span class="muted">(= read length x number of reads)</span>'),i===0)).join(''));
+    $('#seq-coverage-radios .ui.checkbox').checkbox();
+}
+function renderSeqStatic() {
+    $('#seq-motif-radios').html(MOTIFS.map((m,i)=>radio("seq-motif",m.token,m.label,i===7)).join(''));   // default 2-6bp, as in the accuracy section
+    $('#seq-genotype-radios').html(GENOTYPES.map((g,i)=>radio("seq-genotype",g.token,g.label,i===0)).join(''));
+    $('#seq-metric-radios').html(SEQ_METRICS.map((m,i)=>radio("seq-metric",m.token,m.label,i===0)).join(''));
+}
+
+function buildSeqImageUrl() {
+    const dtype  = seqDataType();
+    const tool   = $('input[name="seq-tool"]:checked').val();
+    const cov    = $('input[name="seq-coverage"]:checked').val();
+    const metric = $('input[name="seq-metric"]:checked').val();
+    const motif  = $('input[name="seq-motif"]:checked').val();
+    const geno   = $('input[name="seq-genotype"]:checked').val();
+    const name = `tool_sequence_accuracy_by_true_allele_size.${metric}.${motif}.${geno}.${cov}.${tool}.svg`;
+    return `${BASE_URL}/${seqSample()}/${dtype}/${tool}/${cov}_coverage/${name}`;
+}
+
+function refreshSeqImage() {
+    $('#seq-plot-status').text("");
+    $('#seq-plot').show().attr('src', buildSeqImageUrl());
+    writeHash();   // the seq params live in the same hash as the accuracy section's, under seq* keys
+}
+
+// technology change rebuilds tool + coverage radios, then refreshes the image
+function onSeqDataTypeChange() { renderSeqTools(); renderSeqCoverages(); refreshSeqImage(); }
+// individual change rebuilds technology (and everything downstream)
+function onSeqSampleChange() { renderSeqDataTypes(); onSeqDataTypeChange(); }
 
 // ============================================================================
 // Runtime / Memory / Cost section (independent of the accuracy section above).
@@ -726,10 +919,12 @@ function onResSampleChange() { renderResDataTypes(); onResDataTypeChange(); }
 
 $(function() {
     renderStatic(); renderSamples();   // technology radios are rendered below, after the individual default is set
+    renderSeqStatic(); renderSeqSamples();
     $('.ui.checkbox').checkbox();
 
     // click the (?) icon to toggle the legend popup (Semantic UI), anchored below-left of the icon.
     $('#plot-help').popup({ popup: $('#legend-popup'), on: 'click', position: 'top right', lastResort: true });
+    $('#seq-plot-help').popup({ popup: $('#seq-legend-popup'), on: 'click', position: 'top right', lastResort: true });
 
     // hide the <img> (and the floating (?)) when the SVG 404s (deleted / not yet regenerated) so no
     // broken-image icon shows — just the status message; show them again once a real plot loads.
@@ -740,6 +935,13 @@ $(function() {
         $('#plot-help').hide();
     });
     $('#plot').on('load', function() { $('#plot').show(); $('#plot-help').show(); });
+
+    $('#seq-plot').on('error', function() {
+        $('#seq-plot-status').text("No plot available for this combination of parameters: " + this.src);
+        $('#seq-plot').hide();
+        $('#seq-plot-help').hide();
+    });
+    $('#seq-plot').on('load', function() { $('#seq-plot').show(); $('#seq-plot-help').show(); });
 
     // prev / next arrows step through the radios of the matching group
     $(document).on('click', '.prev-button,.next-button', function(e) {
@@ -771,7 +973,23 @@ $(function() {
     setRadio('chrom',  init.ch || "");
     $('#exclude-tool-no-call-loci').closest('.ui.checkbox')
         .checkbox(init.nc === "1" ? 'set checked' : 'set unchecked');
+
+    // Sequence-accuracy section: same top-down restore, under the seq* hash keys. Built BEFORE the first
+    // refreshImage() so that writeHash() emits both sections' state (rather than dropping the seq params until
+    // the first seq interaction). Hidden entirely if no technology of any individual has a sequence-reporting tool.
+    setRadio('seq-sample',
+        (init.seqs && SAMPLES.some(s => s.id === init.seqs)) ? init.seqs : SAMPLES[0].id);
+    renderSeqDataTypes();
+    if (init.seqst) setRadio('seq-datatype', init.seqst);
+    renderSeqTools(); renderSeqCoverages();
+    if (init.seqt)   setRadio('seq-tool', init.seqt);
+    if (init.seqc)   setRadio('seq-coverage', init.seqc);
+    if (init.seqm)   setRadio('seq-motif', init.seqm + "_motifs");
+    if (init.seqg)   setRadio('seq-genotype', init.seqg === "all" ? "all_genotypes" : init.seqg);
+    if (init.seqmet) setRadio('seq-metric', init.seqmet);
+
     refreshImage();                                          // first image + ranking; also normalizes the URL via writeHash()
+    if (seqAvailableDataTypes().length) refreshSeqImage(); else $('#seq-section').hide();
 
     // Resource section: build its own selectors (independent of the accuracy section) then draw.
     renderResSamples(); renderResDataTypes(); renderResTools(); renderResCoverages(); renderResCharts();
@@ -781,6 +999,11 @@ $(function() {
     $(document).on('change', 'input[name="sample"]', onSampleChange);
     $(document).on('change', 'input[name="datatype"]', onDataTypeChange);
     $(document).on('change', 'input[name="tool"],input[name="coverage"],input[name="motif"],input[name="genotype"],input[name="purity"],input[name="chrom"],#exclude-tool-no-call-loci', refreshImage);
+
+    // Sequence-accuracy-section handlers, mirroring the accuracy section's.
+    $(document).on('change', 'input[name="seq-sample"]', onSeqSampleChange);
+    $(document).on('change', 'input[name="seq-datatype"]', onSeqDataTypeChange);
+    $(document).on('change', 'input[name="seq-tool"],input[name="seq-coverage"],input[name="seq-motif"],input[name="seq-genotype"],input[name="seq-metric"]', refreshSeqImage);
 
     // Resource-section handlers: individual rebuilds technology/tool/coverage; technology rebuilds
     // tool/coverage; tool/coverage just redraw.

@@ -54,6 +54,16 @@ LONG_READ_TOOLS = {
     "ATaRVa",
 }
 
+# Tools whose output VCF carries an actual allele sequence in REF/ALT, so their sequence accuracy can be scored by
+# edit distance against the assembly truth allele sequences (see create_extract_allele_sequences_step). Every other
+# tool reports only a repeat count, which the accuracy plots already cover. This is the single place that decides
+# which tools get the extra extract step, the extra add-columns invocation, and the extra plot loop.
+SEQUENCE_ACCURACY_TOOLS = {
+    "TRGTv5",
+    "ATaRVa",
+    "HipSTR",
+}
+
 # The add-columns and plot steps use the /str-truth-set baked into FILTER_VCFS_DOCKER_IMAGE (rebuild that image and
 # update its digest to pick up new str-truth-set scripts).
 
@@ -88,7 +98,7 @@ RNASEQ_DATA_TYPES = {
 REFERENCE_FASTA_PATH = "gs://str-truth-set/hg38/ref/hg38.fa"
 REFERENCE_FASTA_FAI_PATH = "gs://str-truth-set/hg38/ref/hg38.fa.fai"
 
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:cddf1c643b514d84d8fabad41a2ed1d485da13ec10c2192156a900baa965a7e6"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:1766601136da106186d2e1393ef94a5734e57a73af88b1610f9e431b58e7cb9c"
 
 # Image for run_tools scripts run as Hail Batch steps (built by .github/workflows/build_run_tools_image.yml from
 # run_tools/docker/Dockerfile). Used by the per-sample build-catalogs step, which runs
@@ -560,6 +570,32 @@ def main():
                 raise ValueError(f"Unknown tool: {tool}")
 
 
+            # TRGT, ATaRVa and HipSTR report an allele sequence in their VCF, so extract those sequences from the
+            # VCF the genotyping step already wrote. No re-genotyping is involved -- this just re-reads that VCF.
+            allele_sequences_step = allele_sequences_path = None
+            if tool in SEQUENCE_ACCURACY_TOOLS:
+                if tool == "HipSTR":
+                    # HipSTR writes one vcf per catalog shard under {output_dir}/vcf/, named after the shard's bed
+                    # file. Derive the expected path(s) from this run's own catalog shards -- globbing
+                    # {output_dir}/vcf/ would also pick up stale shard vcfs left over from an older, differently-
+                    # sharded catalog (older runs used a 6-way split) and silently mix them with this run's output.
+                    tool_vcf_paths = [
+                        os.path.join(output_dir, "vcf",
+                                     re.sub(r"\.bed(\.gz)?$", "", os.path.basename(catalog_path)) + ".vcf.gz")
+                        for catalog_path in repeat_catalog_paths]
+                else:
+                    tool_vcf_paths = [os.path.join(output_dir, f"{row.sample_id}.{tool}.vcf.gz")]
+
+                allele_sequences_step, allele_sequences_path = create_extract_allele_sequences_step(
+                    bp,
+                    current_step,
+                    tool=tool,
+                    vcf_paths=tool_vcf_paths,
+                    output_prefix=f"{row.sample_id}.{tool}",
+                    output_dir=output_dir,
+                    reference_fasta=REFERENCE_FASTA_PATH,
+                    reference_fasta_fai=REFERENCE_FASTA_FAI_PATH)
+
             # EHv5, EHv5-bw2-optimized, and IlluminaEHv5 each keep their own label downstream (all three are
             # registered in add_tool_results_columns.py / add_concordance_columns.py / plot_tool_accuracy_by_allele_size.py).
             add_columns_step = add_tool_comparison_columns_step(
@@ -572,6 +608,8 @@ def main():
                 truth_set_genotypes_path=os.path.join(
                     args.truth_set_genotypes_dir, row.sample_id, f"{row.sample_id}.tandem_repeat_genotypes.tsv.gz"),
                 tool2="Truth",
+                allele_sequences_step=allele_sequences_step,
+                allele_sequences_path=allele_sequences_path,
                 download_to_dir=download_to_dir)
 
             plot_tool_accuracy_step = create_plot_tool_accuracy_steps(
@@ -1302,7 +1340,65 @@ PYEOF""")
     return step, filtered_catalog_path
 
 
-def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage_label, sample_id, output_dir, truth_set_genotypes_path, tool2="Truth", download_to_dir=None):
+def create_extract_allele_sequences_step(bp, tool_results_step, *, tool, vcf_paths, output_prefix, output_dir,
+                                         reference_fasta, reference_fasta_fai):
+    """Build a step that extracts the tool's per-allele sequences from the VCF it already wrote.
+
+    This is what makes the sequence-accuracy benchmark cheap: every tool VCF is already on GCS, so nothing has to be
+    re-genotyped. The step just re-reads that VCF at cpu=1, resolves each record's GT to the REF/ALT sequences, trims
+    them to the truth locus interval, and writes a small side-car table that add_sequence_accuracy_columns.py joins
+    onto the comparison table.
+
+    Args:
+        bp: the step_pipeline pipeline object.
+        tool_results_step: the tool's genotyping/combine step, depended on so the VCF exists before this step runs.
+        tool: "TRGTv5", "ATaRVa", or "HipSTR" (one of SEQUENCE_ACCURACY_TOOLS).
+        vcf_paths: gs:// path(s) of the tool's output VCF(s). HipSTR writes one per catalog shard.
+        output_prefix: filename prefix for the output table ("{sample_id}.{tool}").
+        output_dir: the tool's {coverage}_coverage output dir.
+        reference_fasta: gs:// path of the reference fasta, used to confirm each record's REF matches the reference
+            genome over the locus interval (a locus that doesn't match is reported rather than silently mis-scored).
+        reference_fasta_fai: gs:// path of the reference fasta .fai index.
+
+    Returns:
+        A (step, allele_sequences_path) tuple; allele_sequences_path is the gs:// path of the output table.
+    """
+    allele_sequences_filename = f"{output_prefix}.allele_sequences.tsv.gz"
+
+    step = bp.new_step(
+        name=f"Extract {tool} allele sequences for {os.path.basename(output_dir)}",
+        arg_suffix="extract-allele-sequences-step",
+        image=FILTER_VCFS_DOCKER_IMAGE,
+        cpu=1,
+        memory="standard",
+        storage="20Gi",
+        localize_by=Localize.GSUTIL_COPY,
+        output_dir=output_dir)
+
+    step.depends_on(tool_results_step)
+
+    # set -ex before the inputs, matching the other step factories here: the GSUTIL_COPY localization commands are
+    # emitted at .input() time, so this makes a failed localization abort the job instead of falling through to the
+    # extractor with a missing file.
+    step.command("set -ex")
+    local_fasta = step.input(reference_fasta)
+    step.input(reference_fasta_fai)
+    local_vcfs = [step.input(vcf_path) for vcf_path in vcf_paths]
+
+    step.command(
+        f"python3 -u -m str_analysis.extract_allele_sequences_from_vcf "
+        f"--tool {tool} "
+        f"-R {local_fasta} "
+        f"-o {allele_sequences_filename} "
+        + " ".join(str(local_vcf) for local_vcf in local_vcfs))
+    step.command("ls -lhrt")
+
+    step.output(allele_sequences_filename)
+
+    return step, os.path.join(output_dir, allele_sequences_filename)
+
+
+def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage_label, sample_id, output_dir, truth_set_genotypes_path, tool2="Truth", allele_sequences_step=None, allele_sequences_path=None, download_to_dir=None):
     tool_results_path = None
     for output_spec in tool_results_step.get_outputs():
         if output_spec.output_path.endswith(".variants.tsv.gz"):
@@ -1332,6 +1428,13 @@ def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage_la
     # the truth set is the v2 genotype table; compute_truth_set_tsv_for_comparisons.py normalizes its columns and
     # carries the per-allele repeat purity (RepeatPurity: Allele 1/2) used by the purity-stratified plots
     local_truth_set_genotypes = add_columns_step.input(truth_set_genotypes_path)
+
+    # for the tools that report allele sequences, also localize the extract step's side-car table so the
+    # sequence-accuracy columns can be added between add_tool_results_columns and add_concordance_columns
+    local_allele_sequences = None
+    if allele_sequences_step is not None:
+        add_columns_step.depends_on(allele_sequences_step)
+        local_allele_sequences = add_columns_step.input(allele_sequences_path)
 
     add_columns_step.command(f"""python3 <<EOF
 import pandas as pd
@@ -1364,6 +1467,19 @@ EOF
 
     local_tsv_file_path = for_comparison_filename.replace(".tsv.gz", "") + f".with_{tool}_results.tsv.gz"
     output_filename = for_comparison_filename.replace(".tsv.gz", "") + f".with_{tool}_vs_{tool2}_columns.tsv.gz"
+
+    # add the per-allele edit distances in place, before add_concordance_columns.py melts the table into the alleles
+    # table (which is what the plots read). The sequences themselves are dropped inside this script, so they never
+    # reach the variants / alleles tables.
+    if local_allele_sequences is not None:
+        add_columns_step.command(
+            f"python3 -u /str-truth-set/tool_comparison/scripts/add_sequence_accuracy_columns.py "
+            f"--tool {tool} "
+            f"--truth-set-genotypes {local_truth_set_genotypes} "
+            f"--allele-sequences {local_allele_sequences} "
+            f"{local_tsv_file_path}")
+        add_columns_step.command("ls -lhrt")
+
     add_columns_step.command(f"python3 -u /str-truth-set/tool_comparison/scripts/add_concordance_columns.py "
                f"--tool {tool} "
                f"--compare-to {tool2} "
@@ -1431,12 +1547,39 @@ def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage_labe
     # (Delocalize.GSUTIL_COPY), since Delocalize.COPY needs an explicit filename per output. Setting the headers at
     # upload time avoids a separate "gcloud storage objects update" step, which intermittently hit "HTTPError 409 ...
     # edited during the operation" when updating freshly-created objects.
+    # For the tools that report allele sequences, also plot how close those sequences are to the truth sequences.
+    # add_sequence_accuracy_columns.py put the per-allele edit distances into the same alleles table, so this reuses
+    # the input that's already localized. One invocation per motif bin (each emits 2 metrics x 3 genotype subsets),
+    # matching the motif loop above, plus the unstratified all-motifs invocation.
+    if tool in SEQUENCE_ACCURACY_TOOLS:
+        for min_motif_size, max_motif_size in MOTIF_SIZE_BINS + [(None, None)]:
+            plot_tool_accuracy_step.command(
+                f"python3 -u /str-truth-set/figures_and_tables/plot_tool_sequence_accuracy.py "
+                f"--tool {tool} "
+                f"--coverage {coverage_label} "
+                f"--sequencing-data-type {sequencing_data_type} "
+                + (f"--min-motif-size {min_motif_size} --max-motif-size {max_motif_size} "
+                   if min_motif_size is not None else "")
+                + "--image-type svg "
+                "--show-title "
+                f"{local_alleles_tsv} ")
+            plot_tool_accuracy_step.command("ls -lhrt")
+
     plot_tool_accuracy_step.command('for f in tool_accuracy_by_true_allele_size.*.svg; do gzip "$f"; mv "$f.gz" "$f"; done')
     plot_tool_accuracy_step.output(
         "tool_accuracy_by_true_allele_size.*.svg",
         delocalize_by=Delocalize.GSUTIL_COPY,
         content_encoding="gzip",
         content_type="image/svg+xml")
+
+    if tool in SEQUENCE_ACCURACY_TOOLS:
+        plot_tool_accuracy_step.command(
+            'for f in tool_sequence_accuracy_by_true_allele_size.*.svg; do gzip "$f"; mv "$f.gz" "$f"; done')
+        plot_tool_accuracy_step.output(
+            "tool_sequence_accuracy_by_true_allele_size.*.svg",
+            delocalize_by=Delocalize.GSUTIL_COPY,
+            content_encoding="gzip",
+            content_type="image/svg+xml")
 
     #plot_tool_accuracy_step.command(f"python3 -u /str-truth-set/figures_and_tables/plot_tool_accuracy_vs_Q.py "
     #                                "--verbose "
