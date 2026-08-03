@@ -204,6 +204,10 @@
                 <span class="navlinks">[<a class="prev-button" id="prev-seq-metric" href="#">←</a> <a class="next-button" id="next-seq-metric" href="#">→</a>]</span>
                 <span id="seq-metric-radios"></span>
             </li>
+            <li id="seq-ranking-li" style="list-style:none; margin-left:-22px; margin-top:25px">
+                <span class="facet-label"><span style="color:#15499e">Accuracy Summary</span> (<span style="color:#80BF75">% green</span>):</span>
+                <span id="seq-ranking-row" style="vertical-align:middle; padding-left:10px"></span>
+            </li>
             <li style="list-style:none; margin:32px 0 0 -22px; line-height:2.4">
                 <span class="facet-label"><span style="color:#15499e">Sequence Accuracy Plot</span>:</span>
                 <span class="navlinks">[<a class="prev-button" id="prev-seq-tool" href="#">←</a> <a class="next-button" id="next-seq-tool" href="#">→</a>]</span>
@@ -700,16 +704,85 @@ function buildSeqImageUrl() {
     return `${BASE_URL}/${seqSample()}/${dtype}/${tool}/${cov}_coverage/${name}`;
 }
 
+// The bin portion of the filename minus the leading "{metric}." segment -- exact-match (edit distance == 0)
+// doesn't depend on which distance column it's read off, so seq_rankings.json has no metric dimension.
+// run_tools/generate_seq_tool_ranking_json.py builds the identical string.
+function buildSeqRankingKey() {
+    const cov   = $('input[name="seq-coverage"]:checked').val();
+    const motif = $('input[name="seq-motif"]:checked').val();
+    const geno  = $('input[name="seq-genotype"]:checked').val();
+    return `${motif}.${geno}.${cov}`;
+}
+
+// Same rendering as renderRankingRow (tool name bold, percent green, ties joined by "and"), scoped to the
+// sequence-reporting tools available for the current seq-datatype instead of DATA_TYPES[...].tools.
+function renderSeqRankingRow(perBin) {
+    const tools = seqTools();
+    const entries = (perBin || []).filter(e => tools.includes(e.tool));
+    if (!entries.length) { $('#seq-ranking-row').html('<span class="muted">no data for this bin yet</span>'); return; }
+    let html = "", prev = null;
+    entries.forEach((e, i) => {
+        const pct = e.pct.toFixed(1);
+        const label = TOOL_LABELS[e.tool] || e.tool;
+        const m = label.match(/^(.*?)(\s*\(.*)$/);
+        const labelHtml = m ? `<b>${m[1]}</b>${m[2]}` : `<b>${label}</b>`;
+        html += (i === 0 ? "" : (pct === prev ? "&nbsp;&nbsp;and&nbsp;&nbsp;" : "&nbsp;&nbsp;&nbsp;&gt;&nbsp;&nbsp;&nbsp;")) + `${labelHtml}: <span class="rank-pct">${pct}%</span>`;
+        prev = pct;
+    });
+    $('#seq-ranking-row').html(html);
+}
+
+let lastSeqRankingKey = null;
+function refreshSeqRanking() {
+    // Same staleness/no-refetch guard as refreshRanking(): the ranking depends only on (sample, data type, bin
+    // key), not the selected tool, and 'no-cache' picks up a regenerated seq_rankings.json immediately.
+    const reqSample = seqSample(), reqDataType = seqDataType(), reqBinKey = buildSeqRankingKey();
+    const reqKey = `${reqSample}|${reqDataType}|${reqBinKey}`;
+    if (reqKey === lastSeqRankingKey) return;
+    lastSeqRankingKey = reqKey;
+    const stillCurrent = () => reqSample === seqSample() && reqDataType === seqDataType() && reqBinKey === buildSeqRankingKey();
+    $('#seq-ranking-row').html('<span class="muted">loading…</span>');
+    fetch(`${BASE_URL}/${reqSample}/${reqDataType}/seq_rankings.json`, {cache: 'no-cache'})
+        .then(r => r.ok ? r.json() : null)
+        .then(data => { if (stillCurrent()) renderSeqRankingRow(data && data[reqBinKey]); })
+        .catch(() => { if (stillCurrent()) renderSeqRankingRow(null); });
+}
+
 function refreshSeqImage() {
     $('#seq-plot-status').text("");
     $('#seq-plot').show().attr('src', buildSeqImageUrl());
+    refreshSeqRanking();
     writeHash();   // the seq params live in the same hash as the accuracy section's, under seq* keys
 }
 
 // technology change rebuilds tool + coverage radios, then refreshes the image
 function onSeqDataTypeChange() { renderSeqTools(); renderSeqCoverages(); refreshSeqImage(); }
-// individual change rebuilds technology (and everything downstream)
-function onSeqSampleChange() { renderSeqDataTypes(); onSeqDataTypeChange(); }
+
+// Rows below Individual (Sequencing Type through the Sequence Accuracy Plot tool selector) -- hidden, along
+// with the image, when the current seq-sample has no benchmarked sequencing type at all. NOT #seq-section
+// itself: that div also contains the Individual selector, and hiding it would leave no way to switch back to
+// a sample that does have data (dead end).
+const $seqRowsBelowSample = $('#seq-datatype-radios, #seq-coverage-radios, #seq-motif-radios, #seq-genotype-radios, #seq-metric-radios, #seq-ranking-row, #seq-tool-radios').closest('li');
+
+// Shows/hides those rows based on seqAvailableDataTypes(); when hidden, shows an explanatory message in place
+// of the plot (reusing #seq-plot-status, the same element the <img> error handler uses for "No plot
+// available"). Returns whether data is available, so callers can skip refreshSeqImage() when it isn't.
+function applySeqAvailability() {
+    const available = seqAvailableDataTypes().length > 0;
+    $seqRowsBelowSample.toggle(available);
+    if (!available) {
+        $('#seq-plot').hide();
+        $('#seq-plot-status').text(`No sequence-accuracy data available yet for ${seqSampleObj().label.replace(/<[^>]+>/g, "")}.`);
+    }
+    return available;
+}
+
+// individual change rebuilds technology (and everything downstream), unless the newly-selected individual has
+// no benchmarked sequencing type at all, in which case applySeqAvailability() already showed the message.
+function onSeqSampleChange() {
+    renderSeqDataTypes();
+    if (applySeqAvailability()) onSeqDataTypeChange();
+}
 
 // ============================================================================
 // Runtime / Memory / Cost section (independent of the accuracy section above).
@@ -987,7 +1060,8 @@ $(function() {
 
     // Sequence-accuracy section: same top-down restore, under the seq* hash keys. Built BEFORE the first
     // refreshImage() so that writeHash() emits both sections' state (rather than dropping the seq params until
-    // the first seq interaction). Hidden entirely if no technology of any individual has a sequence-reporting tool.
+    // the first seq interaction). Rows below Individual are hidden (see applySeqAvailability) if the chosen
+    // individual has no benchmarked sequencing type at all.
     setRadio('seq-sample',
         (init.seqs && SAMPLES.some(s => s.id === init.seqs)) ? init.seqs : SAMPLES[0].id);
     renderSeqDataTypes();
@@ -1000,7 +1074,7 @@ $(function() {
     if (init.seqmet) setRadio('seq-metric', init.seqmet);
 
     refreshImage();                                          // first image + ranking; also normalizes the URL via writeHash()
-    if (seqAvailableDataTypes().length) refreshSeqImage(); else $('#seq-section').hide();
+    if (applySeqAvailability()) refreshSeqImage();
 
     // Resource section: build its own selectors (independent of the accuracy section) then draw.
     renderResSamples(); renderResDataTypes(); renderResTools(); renderResCoverages(); renderResCharts();
