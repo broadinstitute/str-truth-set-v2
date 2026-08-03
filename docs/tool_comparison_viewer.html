@@ -772,6 +772,7 @@ function applySeqAvailability() {
     $seqRowsBelowSample.toggle(available);
     if (!available) {
         $('#seq-plot').hide();
+        $('#seq-plot-help').hide();   // <img>'s src is left as-is (no load/error event fires), so hide it explicitly
         $('#seq-plot-status').text(`No sequence-accuracy data available yet for ${seqSampleObj().label.replace(/<[^>]+>/g, "")}.`);
     }
     return available;
