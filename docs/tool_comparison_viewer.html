@@ -629,6 +629,15 @@ function setRadio(name, value) {
 // TRGT v5 + ATaRVa and the Illumina / Element technologies show HipSTR.
 const SEQ_TOOLS = ["TRGTv5", "ATaRVa", "HipSTR"];
 
+// (sample id -> sequencing types) this benchmark has actually been run for. Unlike the main accuracy section
+// (which covers every combo), sequence accuracy is new and only covers what's been generated so far -- every
+// technology is nominally SEQ_TOOLS-compatible per DATA_TYPES, so without this the section would offer types
+// with no plot behind them. Update this as more (sample, sequencing type) combos get benchmarked.
+const SEQ_AVAILABLE_DATA_TYPES = {
+    HG002: ["illumina", "pacbio"],
+    CHM1_CHM13: [],
+};
+
 // token is the ".{metric}" filename segment == plot_tool_sequence_accuracy.py METRICS keys.
 const SEQ_METRICS = [
     { label:"edit distance (bp)",                     token:"edit_distance_bp" },
@@ -640,11 +649,13 @@ function seqSampleObj() { return SAMPLES.find(s=>s.id===seqSample()); }
 function seqDataType()  { return $('input[name="seq-datatype"]:checked').val(); }
 function seqTools()     { return DATA_TYPES[seqDataType()].tools.filter(t => SEQ_TOOLS.includes(t)); }
 
-// technologies the current individual has that also have at least one sequence-reporting tool
+// technologies the current individual has that also have at least one sequence-reporting tool AND have
+// actually been benchmarked (SEQ_AVAILABLE_DATA_TYPES)
 function seqAvailableDataTypes() {
     const cov = seqSampleObj().coverages, out = [];
+    const benchmarked = SEQ_AVAILABLE_DATA_TYPES[seqSample()] || [];
     for (const [, keys] of DATATYPE_GROUPS) for (const k of keys) {
-        if (cov[k] && DATA_TYPES[k].tools.some(t => SEQ_TOOLS.includes(t))) out.push(k);
+        if (benchmarked.includes(k) && cov[k] && DATA_TYPES[k].tools.some(t => SEQ_TOOLS.includes(t))) out.push(k);
     }
     return out;
 }
