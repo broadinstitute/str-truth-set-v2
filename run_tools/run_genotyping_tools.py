@@ -103,7 +103,7 @@ RNASEQ_DATA_TYPES = {
 REFERENCE_FASTA_PATH = "gs://str-truth-set/hg38/ref/hg38.fa"
 REFERENCE_FASTA_FAI_PATH = "gs://str-truth-set/hg38/ref/hg38.fa.fai"
 
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:025432ff71ee297d21f4d72dafd898c45ec35bd54512f65b45ea7dc57dc42062"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:e1380316aa65ebf87f3fd17f3491fc58a5b8b1f2a9e9a57d29624b887a6875e3"
 
 # Image for run_tools scripts run as Hail Batch steps (built by .github/workflows/build_run_tools_image.yml from
 # run_tools/docker/Dockerfile). Used by the per-sample build-catalogs step, which runs
@@ -1446,8 +1446,12 @@ def create_extract_expansion_hunter_allele_sequences_step(bp, combine_step, *, j
         name=f"Extract EHv5-bw2-optimized allele sequences for {os.path.basename(output_dir)}",
         arg_suffix="extract-allele-sequences-step",
         image=FILTER_VCFS_DOCKER_IMAGE,
-        cpu=1,
-        memory="standard",
+        # json.load() holds the whole parsed json in memory at once -- with ConsensusSequences enabled the same
+        # file OOM-killed cpu=1/standard (3.75GB) on CHM1_CHM13's 93MB-compressed json.gz. Match the combine step's
+        # sizing for the same file (create_expansion_hunter_steps' step2, which parses the same json into a full
+        # pandas table -- a heavier job than this one, so this has headroom).
+        cpu=4,
+        memory="highmem",
         storage="20Gi",
         localize_by=Localize.GSUTIL_COPY,
         output_dir=output_dir)
