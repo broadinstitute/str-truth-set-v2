@@ -54,14 +54,19 @@ LONG_READ_TOOLS = {
     "ATaRVa",
 }
 
-# Tools whose output VCF carries an actual allele sequence in REF/ALT, so their sequence accuracy can be scored by
-# edit distance against the assembly truth allele sequences (see create_extract_allele_sequences_step). Every other
-# tool reports only a repeat count, which the accuracy plots already cover. This is the single place that decides
-# which tools get the extra extract step, the extra add-columns invocation, and the extra plot loop.
+# Tools whose sequence accuracy can be scored by edit distance against the assembly truth allele sequences (see
+# create_extract_allele_sequences_step / create_extract_expansion_hunter_allele_sequences_step). TRGTv5/ATaRVa/HipSTR
+# carry an actual allele sequence in their VCF's REF/ALT; EHv5-bw2-optimized doesn't (its VCF ALT is symbolic,
+# "<STRnn>"), so scoring it instead uses the bw2-fork-only ConsensusSequences JSON field, which requires genotyping
+# it with enable_consensus_sequences=True (see the create_expansion_hunter_steps call further down -- gated on this
+# same set). Every other tool reports only a repeat count, which the accuracy plots already cover. This is the
+# single place that decides which tools get the extra extract step, the extra add-columns invocation, and the extra
+# plot loop.
 SEQUENCE_ACCURACY_TOOLS = {
     "TRGTv5",
     "ATaRVa",
     "HipSTR",
+    "EHv5-bw2-optimized",
 }
 
 # The add-columns and plot steps use the /str-truth-set baked into FILTER_VCFS_DOCKER_IMAGE (rebuild that image and
@@ -350,6 +355,8 @@ def main():
             output_dir = os.path.join(args.output_dir, row.sample_id, row.sequencing_data_type, tool, f"{coverage_label}_coverage")
             if args.output_subdir:
                 output_dir = os.path.join(output_dir, args.output_subdir)
+            eh_json_paths = None  # only set below for EHv5/EHv5-bw2-optimized/IlluminaEHv5 -- the extract-step
+                                   # branch reads it for EHv5-bw2-optimized's sequence-accuracy allele extraction
             if tool in ("EHv5", "EHv5-bw2-optimized", "IlluminaEHv5"):
                 # Three ExpansionHunter v5 variants, all genotyped with create_expansion_hunter_steps:
                 #   EHv5               - bw2 fork, --analysis-mode low-mem-streaming
@@ -398,7 +405,7 @@ def main():
                     # genotyping reads the build-catalogs step's EHv5 json, so gate it on that step
                     catalog_prefilter_step = build_catalogs_step
 
-                current_step = create_expansion_hunter_steps(
+                current_step, eh_json_paths = create_expansion_hunter_steps(
                     bp,
                     reference_fasta=REFERENCE_FASTA_PATH,
                     reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
@@ -424,7 +431,10 @@ def main():
                     num_shards=1,
                     streaming_cpu=2,
                     streaming_threads=4,
-                    streaming_memory="highmem")
+                    streaming_memory="highmem",
+                    # only worth the extra runtime/JSON-size cost when this tool is actually going to be scored by
+                    # the sequence-accuracy benchmark, which is the only consumer of ConsensusSequences
+                    enable_consensus_sequences=(tool in SEQUENCE_ACCURACY_TOOLS))
             elif tool == "GangSTR":
                 current_step = create_gangstr_steps(
                     bp,
@@ -571,30 +581,40 @@ def main():
 
 
             # TRGT, ATaRVa and HipSTR report an allele sequence in their VCF, so extract those sequences from the
-            # VCF the genotyping step already wrote. No re-genotyping is involved -- this just re-reads that VCF.
+            # VCF the genotyping step already wrote. EHv5-bw2-optimized has no such VCF (its ALT is symbolic), so it
+            # extracts from the genotyping step's own JSON output instead (see eh_json_paths above). Neither path
+            # re-genotypes anything -- both just re-read output the genotyping step already wrote.
             allele_sequences_step = allele_sequences_path = None
             if tool in SEQUENCE_ACCURACY_TOOLS:
-                if tool == "HipSTR":
-                    # HipSTR writes one vcf per catalog shard under {output_dir}/vcf/, named after the shard's bed
-                    # file. Derive the expected path(s) from this run's own catalog shards -- globbing
-                    # {output_dir}/vcf/ would also pick up stale shard vcfs left over from an older, differently-
-                    # sharded catalog (older runs used a 6-way split) and silently mix them with this run's output.
-                    tool_vcf_paths = [
-                        os.path.join(output_dir, "vcf",
-                                     re.sub(r"\.bed(\.gz)?$", "", os.path.basename(catalog_path)) + ".vcf.gz")
-                        for catalog_path in repeat_catalog_paths]
+                if tool == "EHv5-bw2-optimized":
+                    allele_sequences_step, allele_sequences_path = create_extract_expansion_hunter_allele_sequences_step(
+                        bp,
+                        current_step,
+                        json_paths=eh_json_paths,
+                        output_prefix=f"{row.sample_id}.{tool}",
+                        output_dir=output_dir)
                 else:
-                    tool_vcf_paths = [os.path.join(output_dir, f"{row.sample_id}.{tool}.vcf.gz")]
+                    if tool == "HipSTR":
+                        # HipSTR writes one vcf per catalog shard under {output_dir}/vcf/, named after the shard's bed
+                        # file. Derive the expected path(s) from this run's own catalog shards -- globbing
+                        # {output_dir}/vcf/ would also pick up stale shard vcfs left over from an older, differently-
+                        # sharded catalog (older runs used a 6-way split) and silently mix them with this run's output.
+                        tool_vcf_paths = [
+                            os.path.join(output_dir, "vcf",
+                                         re.sub(r"\.bed(\.gz)?$", "", os.path.basename(catalog_path)) + ".vcf.gz")
+                            for catalog_path in repeat_catalog_paths]
+                    else:
+                        tool_vcf_paths = [os.path.join(output_dir, f"{row.sample_id}.{tool}.vcf.gz")]
 
-                allele_sequences_step, allele_sequences_path = create_extract_allele_sequences_step(
-                    bp,
-                    current_step,
-                    tool=tool,
-                    vcf_paths=tool_vcf_paths,
-                    output_prefix=f"{row.sample_id}.{tool}",
-                    output_dir=output_dir,
-                    reference_fasta=REFERENCE_FASTA_PATH,
-                    reference_fasta_fai=REFERENCE_FASTA_FAI_PATH)
+                    allele_sequences_step, allele_sequences_path = create_extract_allele_sequences_step(
+                        bp,
+                        current_step,
+                        tool=tool,
+                        vcf_paths=tool_vcf_paths,
+                        output_prefix=f"{row.sample_id}.{tool}",
+                        output_dir=output_dir,
+                        reference_fasta=REFERENCE_FASTA_PATH,
+                        reference_fasta_fai=REFERENCE_FASTA_FAI_PATH)
 
             # EHv5, EHv5-bw2-optimized, and IlluminaEHv5 each keep their own label downstream (all three are
             # registered in add_tool_results_columns.py / add_concordance_columns.py / plot_tool_accuracy_by_allele_size.py).
@@ -1391,6 +1411,56 @@ def create_extract_allele_sequences_step(bp, tool_results_step, *, tool, vcf_pat
         f"-R {local_fasta} "
         f"-o {allele_sequences_filename} "
         + " ".join(str(local_vcf) for local_vcf in local_vcfs))
+    step.command("ls -lhrt")
+
+    step.output(allele_sequences_filename)
+
+    return step, os.path.join(output_dir, allele_sequences_filename)
+
+
+def create_extract_expansion_hunter_allele_sequences_step(bp, combine_step, *, json_paths, output_prefix, output_dir):
+    """Build a step that extracts EHv5-bw2-optimized's per-allele consensus sequences from its genotyping JSON.
+
+    Sibling of create_extract_allele_sequences_step for the one tool with no usable VCF sequence (ExpansionHunter's
+    VCF ALT is symbolic, "<STRnn>"). Its actual per-allele sequence -- the bw2-fork-only ConsensusSequences JSON
+    field -- only exists when the genotyping step was run with enable_consensus_sequences=True (see the
+    create_expansion_hunter_steps call above, gated on SEQUENCE_ACCURACY_TOOLS membership). No re-genotyping happens
+    here either; this just re-reads the JSON that step already wrote.
+
+    Args:
+        bp: the step_pipeline pipeline object.
+        combine_step: the tool's combine-json-files step (create_expansion_hunter_steps' return value), depended on
+            so the per-shard JSON exists before this step runs.
+        json_paths: gs:// path(s) of the tool's per-shard genotyping JSON(.gz) output (eh_json_paths from
+            create_expansion_hunter_steps). This pipeline always runs EHv5-bw2-optimized unsharded, so there's
+            normally just one.
+        output_prefix: filename prefix for the output table ("{sample_id}.{tool}").
+        output_dir: the tool's {coverage}_coverage output dir.
+
+    Returns:
+        A (step, allele_sequences_path) tuple; allele_sequences_path is the gs:// path of the output table.
+    """
+    allele_sequences_filename = f"{output_prefix}.allele_sequences.tsv.gz"
+
+    step = bp.new_step(
+        name=f"Extract EHv5-bw2-optimized allele sequences for {os.path.basename(output_dir)}",
+        arg_suffix="extract-allele-sequences-step",
+        image=FILTER_VCFS_DOCKER_IMAGE,
+        cpu=1,
+        memory="standard",
+        storage="20Gi",
+        localize_by=Localize.GSUTIL_COPY,
+        output_dir=output_dir)
+
+    step.depends_on(combine_step)
+
+    step.command("set -ex")
+    local_json_paths = [step.input(json_path) for json_path in json_paths]
+
+    step.command(
+        f"python3 -u -m str_analysis.extract_allele_sequences_from_expansion_hunter_json "
+        f"-o {allele_sequences_filename} "
+        + " ".join(str(local_json_path) for local_json_path in local_json_paths))
     step.command("ls -lhrt")
 
     step.output(allele_sequences_filename)

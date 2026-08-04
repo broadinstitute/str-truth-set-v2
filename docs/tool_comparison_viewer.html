@@ -33,9 +33,11 @@
   Three sections, each with its own independent copy of the selectors:
     1. Accuracy         — repeat-count accuracy (the facets listed above)
     2. Sequence Accuracy — edit distance between the tool's reported allele SEQUENCE and the assembly
-                           truth sequence, for the three tools whose VCF carries one (TRGT v5, ATaRVa,
-                           HipSTR). From plot_tool_sequence_accuracy.py. Adds a Metric facet (raw bp vs.
-                           normalized by the true allele length) and has no purity / chromosome facets.
+                           truth sequence, for the four tools that report one (TRGT v5, ATaRVa, HipSTR
+                           via their VCF's REF/ALT; EHv5-bw2-optimized via its JSON's ConsensusSequences,
+                           only present when genotyped with consensus sequences enabled). From
+                           plot_tool_sequence_accuracy.py. Adds a Metric facet (raw bp vs. normalized by
+                           the true allele length) and has no purity / chromosome facets.
     3. Runtime, Memory, and Cost — Chart.js plots of resource_metrics.json
   Sections 1 and 2 share one location.hash; section 2's keys are seq*-prefixed, so an older link that
   has none of them still restores section 1 exactly as before.
@@ -158,8 +160,9 @@
     <!-- ====================================================================
          Sequence Accuracy section. The accuracy section above scores a tool by
          how close its repeat COUNT is to the truth; this one scores the tools
-         that report an actual allele SEQUENCE (TRGT v5, ATaRVa, HipSTR) by the
-         edit distance between that sequence and the assembly truth sequence.
+         that report an actual allele SEQUENCE (TRGT v5, ATaRVa, HipSTR,
+         EHv5-bw2-optimized) by the edit distance between that sequence and
+         the assembly truth sequence.
          Independent copies of the Individual / Sequencing Type / Coverage /
          Motif Size / Genotype selectors (prefixed seq-), plus a Metric radio.
          Images come from
@@ -234,12 +237,14 @@
             <img id="seq-plot" style="max-width:100%; display:block" alt="" />
         </div>
     </div>
-    <div id="seq-note"><b>NOTE:</b> Only TRGT v5, ATaRVa and HipSTR report an allele sequence in their output VCF, so
-        only they can be scored this way; every other tool reports a repeat count only. HipSTR is a short-read caller,
-        so its numbers are not comparable to the long-read tools — the Sequencing Type selector keeps them in separate
-        plots. ATaRVa's reported sequence is a partial-order-alignment consensus of the reads supporting each allele
-        rather than an assembled haplotype, so a small non-zero floor relative to TRGT is expected rather than a
-        pipeline error.</div>
+    <div id="seq-note"><b>NOTE:</b> Only TRGT v5, ATaRVa, HipSTR, and ExpansionHunter (optimized-streaming) report an
+        allele sequence, so only they can be scored this way; every other tool reports a repeat count only. HipSTR and
+        ExpansionHunter are short-read callers, so their numbers are not comparable to the long-read tools — the
+        Sequencing Type selector keeps them in separate plots. ATaRVa's and ExpansionHunter's reported sequences are
+        each a consensus built from the reads supporting an allele rather than an assembled haplotype, so a small
+        non-zero floor relative to TRGT is expected rather than a pipeline error. ExpansionHunter also marks bases it
+        couldn't resolve as 'N', which always counts as a mismatch, never a match — including against a genuine 'N' in
+        the truth sequence.</div>
     </div>
 
     <!-- ====================================================================
@@ -628,10 +633,10 @@ function setRadio(name, value) {
 // No purity / chromosome-class stratification here (unlike the accuracy section).
 // ============================================================================
 
-// Only these tools report an allele sequence in their VCF == run_genotyping_tools.py SEQUENCE_ACCURACY_TOOLS.
-// The section's tool list is this set intersected with the data type's tools, so PacBio / ONT / Iso-Seq show
-// TRGT v5 + ATaRVa and the Illumina / Element technologies show HipSTR.
-const SEQ_TOOLS = ["TRGTv5", "ATaRVa", "HipSTR"];
+// Only these tools report an allele sequence == run_genotyping_tools.py SEQUENCE_ACCURACY_TOOLS. The section's
+// tool list is this set intersected with the data type's tools, so PacBio / ONT / Iso-Seq show TRGT v5 + ATaRVa
+// and the Illumina / Element technologies show HipSTR + EHv5-bw2-optimized.
+const SEQ_TOOLS = ["TRGTv5", "ATaRVa", "HipSTR", "EHv5-bw2-optimized"];
 
 // (sample id -> sequencing types) this benchmark has actually been run for. Unlike the main accuracy section
 // (which covers every combo), sequence accuracy is new and only covers what's been generated so far -- every
