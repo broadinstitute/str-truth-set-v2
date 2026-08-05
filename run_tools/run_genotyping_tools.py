@@ -103,7 +103,7 @@ RNASEQ_DATA_TYPES = {
 REFERENCE_FASTA_PATH = "gs://str-truth-set/hg38/ref/hg38.fa"
 REFERENCE_FASTA_FAI_PATH = "gs://str-truth-set/hg38/ref/hg38.fa.fai"
 
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:e1380316aa65ebf87f3fd17f3491fc58a5b8b1f2a9e9a57d29624b887a6875e3"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:2bc2c51b0df5becfb45cb67f3207322a6bd9ca2362a646403d44fdface832349"
 
 # Image for run_tools scripts run as Hail Batch steps (built by .github/workflows/build_run_tools_image.yml from
 # run_tools/docker/Dockerfile). Used by the per-sample build-catalogs step, which runs
