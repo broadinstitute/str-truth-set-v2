@@ -59,7 +59,7 @@ RUN cp /bin/zcat /bin/gzcat
 RUN python3 -m pip install --no-cache-dir --upgrade cmake pip
 
 # pinned to a specific str-analysis commit for reproducible builds (previously tracked main HEAD via a randbyte cache-buster)
-RUN python3 -m pip install --no-cache-dir git+https://github.com/broadinstitute/str-analysis@0c6df9150eda699d8a0e058c8ac071bd336be438
+RUN python3 -m pip install --no-cache-dir git+https://github.com/broadinstitute/str-analysis@c2656e0d48e6bd486ee5f6b182f61b929fae5716
 
 
 # install str-truth-set repo

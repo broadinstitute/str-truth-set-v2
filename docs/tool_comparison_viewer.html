@@ -244,12 +244,12 @@
         each a consensus built from the reads supporting an allele rather than an assembled haplotype, so a small
         non-zero floor relative to TRGT is expected rather than a pipeline error. ExpansionHunter also marks bases it
         couldn't resolve as 'N', which always counts as a mismatch, never a match — including against a genuine 'N' in
-        the truth sequence. <b>Coverage caveat:</b> ExpansionHunter's optimized-streaming mode only builds a
-        sequence-level consensus for loci where its fast spanning-read heuristic couldn't resolve a genotype and it
-        fell back to full graph-alignment — about 11% of genotyped loci in this benchmark. The rest are called (and
-        scored in the repeat-count Accuracy section above) but have no sequence to score here. So this section's
-        ExpansionHunter numbers cover a harder-than-average, non-random subset of loci and aren't directly comparable
-        to the near-complete coverage the other three tools get.</div>
+        the truth sequence. <b>Fast-path caveat:</b> ExpansionHunter's optimized-streaming mode resolves most loci
+        with a fast spanning-read heuristic and only falls through to full graph-alignment for the harder ones. Both
+        paths report a consensus, but the fast path derives it without realigning reads and from whole-repeat-spanning
+        reads only, so its sequences will not always match what full genotyping would have produced for the same
+        locus. An allele left with no usable spanning read is reported as all 'N', which scores as a complete
+        mismatch.</div>
     </div>
 
     <!-- ====================================================================
