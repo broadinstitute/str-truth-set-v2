@@ -245,10 +245,11 @@
     <!-- ====================================================================
          Runtime / Memory / Cost section. Same Individual / Sequencing Type /
          Coverage selectors as the accuracy section above (independent copies,
-         prefixed res-), plus a Tool selector with an extra "all" option that
-         overlays every compatible tool in one plot. Catalog size is the shared
-         x-axis (not a selector). Three vertically-stacked Chart.js line plots:
-         Runtime (blue), Memory (orange), Cost (green). Data is fetched from
+         prefixed res-), plus a multi-select Tool checkbox row (all checked by
+         default) that overlays every checked tool in each plot, one line per
+         tool. Catalog size is the shared x-axis (not a selector). Three
+         vertically-stacked Chart.js line plots: Runtime, Memory, Cost, with
+         color identifying the tool. Data is fetched from
              {BASE_URL}/{sample}/{datatype}/{cov}_coverage/resource_metrics.json
          (schema documented above the resource JS module); until that file
          exists the plots show a "no data yet" message.
@@ -275,7 +276,6 @@
             </li>
             <li>
                 <span class="facet-label"><span style="color:#15499e">Tool</span>:</span>
-                <span class="navlinks">[<a class="prev-button" id="prev-res-tool" href="#">←</a> <a class="next-button" id="next-res-tool" href="#">→</a>]</span>
                 <span id="res-tool-radios"></span>
             </li>
         </ul>
@@ -454,6 +454,13 @@ function buildBinKey() {
 function radio(name, value, label, checked) {
     return `<span class="field"><div class="ui radio checkbox">`
          + `<input type="radio" name="${name}" value="${value}" ${checked?'checked':''}>`
+         + `<label>${label}</label></div></span>`;
+}
+// Multi-select counterpart of radio(), for facets where several values can be shown at once (the resource
+// section's Tool row, where every checked tool becomes its own line on each chart).
+function checkbox(name, value, label, checked) {
+    return `<span class="field"><div class="ui checkbox">`
+         + `<input type="checkbox" name="${name}" value="${value}" ${checked?'checked':''}>`
          + `<label>${label}</label></div></span>`;
 }
 function currentSample()    { return $('input[name="sample"]:checked').val(); }
@@ -808,11 +815,11 @@ function onSeqSampleChange() {
 const RES_CATALOG_SIZES = [2000, 5000, 10000, 20000, 50000, 100000, 200000, 500000, 1000000, 2000000];
 const RES_CATALOG_LABELS = {2000:"2k",5000:"5k",10000:"10k",20000:"20k",50000:"50k",100000:"100k",200000:"200k",500000:"500k",1000000:"1M",2000000:"2M"};
 const RES_METRICS = [
-    { key:"runtime", label:"Runtime (CPU-hours)",       color:"#2f7ed8" },  // blue
-    { key:"memory",  label:"Memory (GB)",               color:"#f28e2b" },  // orange
-    { key:"cost",    label:"Google Cloud cost (USD)",   color:"#59a14f" },  // green
+    { key:"runtime", label:"Runtime (CPU-hours)" },
+    { key:"memory",  label:"Memory (GB)" },
+    { key:"cost",    label:"Google Cloud cost (USD)" },
 ];
-// One color per tool for the "all" overlay (Tableau-10 + extras).
+// One color per tool, shared by all three charts (Tableau-10 + extras).
 const RES_TOOL_PALETTE = ["#4E79A7","#F28E2B","#59A14F","#E15759","#B07AA1","#76B7B2","#EDC948","#FF9DA7","#9C755F","#BAB0AC","#86BCB6","#D37295","#8CD17D"];
 // Tools omitted from the resource section only (the accuracy section's DATA_TYPES tool lists are unchanged):
 // the EHv5 low-mem-streaming variant and the EnsembleTR consensus tools aren't benchmarked here.
@@ -823,7 +830,8 @@ const RES_EXCLUDED_DATA_TYPES = new Set(["element", "illumina_rnaseq", "pacbio_i
 function resSample()    { return $('input[name="res-sample"]:checked').val(); }
 function resSampleObj() { return SAMPLES.find(s=>s.id===resSample()); }
 function resDataType()  { return $('input[name="res-datatype"]:checked').val(); }
-function resTool()      { return $('input[name="res-tool"]:checked').val(); }
+// Every checked tool is drawn as its own line on each chart (multi-select, unlike the other facets).
+function resSelectedTools() { return $('input[name="res-tool"]:checked').map((_, e) => e.value).get(); }
 function resCoverage()  { return $('input[name="res-coverage"]:checked').val(); }
 // tools shown in the resource section = the data type's tools minus RES_EXCLUDED_TOOLS
 function resTools()     { return DATA_TYPES[resDataType()].tools.filter(t => !RES_EXCLUDED_TOOLS.has(t)); }
@@ -847,10 +855,8 @@ function renderResDataTypes() {
     $('#res-datatype-radios .ui.checkbox').checkbox();
 }
 function renderResTools() {
-    // "all" (overlay every compatible tool) is the default; then one radio per tool.
-    const tools = resTools();
-    $('#res-tool-radios').html(radio("res-tool", "all", "<b>all</b>", true)
-        + tools.map(t => radio("res-tool", t, boldTool(t), false)).join(''));
+    // One checkbox per compatible tool, all checked, so the default view overlays every tool.
+    $('#res-tool-radios').html(resTools().map(t => checkbox("res-tool", t, boldTool(t), true)).join(''));
     $('#res-tool-radios .ui.checkbox').checkbox();
 }
 function renderResCoverages() {
@@ -875,7 +881,7 @@ function resPoints(sizes, arr) {
 const resCharts = {};        // metric.key -> Chart instance
 const resDataCache = {};     // url -> parsed JSON (or null when the file 404s)
 
-function makeResChart(metric, datasets, sizes, multi) {
+function makeResChart(metric, datasets, sizes) {
     if (resCharts[metric.key]) resCharts[metric.key].destroy();
     resCharts[metric.key] = new Chart(document.getElementById(`res-chart-${metric.key}`), {
         type: 'line',
@@ -896,8 +902,8 @@ function makeResChart(metric, datasets, sizes, multi) {
             },
             plugins: {
                 title: { display: true, text: metric.label, font: { size: 15 } },
-                // legend only useful when overlaying tools; bottom (not right) so long tool labels aren't truncated
-                legend: { display: multi, position: 'bottom' },
+                // one entry per shown tool; bottom (not right) so long tool labels aren't truncated
+                legend: { display: true, position: 'bottom' },
                 tooltip: { callbacks: { title: items => (RES_CATALOG_LABELS[items[0].parsed.x] || items[0].parsed.x) + " loci" } }
             }
         }
@@ -946,42 +952,33 @@ function drawResCharts(data, reqUrl) {
         return;
     }
     const sizes = (data.catalog_sizes && data.catalog_sizes.length) ? data.catalog_sizes : RES_CATALOG_SIZES;
+    // Color is assigned from the full compatible-tool list, not the checked subset, so a given tool keeps the
+    // same color as others are checked on and off.
     const tools = resTools();
-    const selected = resTool(), multi = selected === "all";
-    // No data for the current tool selection (single tool absent from the file, or "all" with no compatible tool
-    // present): show the same "no data" message instead of drawing empty, unexplained charts.
-    if (multi ? !tools.some(t => data.tools[t]) : !data.tools[selected]) {
+    const shownTools = resSelectedTools().filter(t => data.tools[t]);
+    // Nothing to draw: every checked tool is absent from this file, or nothing is checked at all.
+    if (!shownTools.length) {
         Object.values(resCharts).forEach(c => c.destroy());
         for (const k in resCharts) delete resCharts[k];
         $('#res-charts').hide();
-        $('#res-status').text("No runtime / memory / cost data available yet for "
-            + (multi ? "these tools" : (TOOL_LABELS[selected] || selected)) + ": " + reqUrl);
+        $('#res-status').text(resSelectedTools().length
+            ? "No runtime / memory / cost data available yet for the selected tool(s): " + reqUrl
+            : "Select at least one tool.");
         return;
     }
     $('#res-status').text("");
     $('#res-charts').show();
-    renderResMetadata(data, multi ? tools.filter(t => data.tools[t]) : [selected]);
+    renderResMetadata(data, shownTools);
     RES_METRICS.forEach(metric => {
-        let datasets = [];
-        if (multi) {
-            // one line per compatible tool present in the data (color == tool)
-            tools.filter(t => data.tools[t]).forEach((t, i) => datasets.push({
-                label: TOOL_LABELS[t] || t,
-                data: resPoints(sizes, data.tools[t][metric.key]),
-                borderColor: RES_TOOL_PALETTE[i % RES_TOOL_PALETTE.length],
-                backgroundColor: RES_TOOL_PALETTE[i % RES_TOOL_PALETTE.length],
-                borderWidth: 2, pointRadius: 3, tension: 0.2, fill: false, spanGaps: true
-            }));
-        } else if (data.tools[selected]) {
-            // single line for the selected tool (color == metric)
-            datasets.push({
-                label: metric.label,
-                data: resPoints(sizes, data.tools[selected][metric.key]),
-                borderColor: metric.color, backgroundColor: metric.color,
-                borderWidth: 2, pointRadius: 3, tension: 0.2, fill: false, spanGaps: true
-            });
-        }
-        makeResChart(metric, datasets, sizes, multi);
+        // one line per checked tool present in the data (color == tool)
+        const datasets = shownTools.map(t => ({
+            label: TOOL_LABELS[t] || t,
+            data: resPoints(sizes, data.tools[t][metric.key]),
+            borderColor: RES_TOOL_PALETTE[tools.indexOf(t) % RES_TOOL_PALETTE.length],
+            backgroundColor: RES_TOOL_PALETTE[tools.indexOf(t) % RES_TOOL_PALETTE.length],
+            borderWidth: 2, pointRadius: 3, tension: 0.2, fill: false, spanGaps: true
+        }));
+        makeResChart(metric, datasets, sizes);
     });
 }
 
