@@ -37,7 +37,8 @@
                            via their VCF's REF/ALT; EHv5-bw2-optimized via its JSON's ConsensusSequences,
                            only present when genotyped with consensus sequences enabled). From
                            plot_tool_sequence_accuracy.py. Adds a Metric facet (raw bp vs. normalized by
-                           the true allele length) and has no purity / chromosome facets.
+                           the true allele length), keeps the Hide "No Call" loci variant, and has no
+                           purity / chromosome facets.
     3. Runtime, Memory, and Cost — Chart.js plots of resource_metrics.json
   Sections 1 and 2 share one location.hash; section 2's keys are seq*-prefixed, so an older link that
   has none of them still restores section 1 exactly as before.
@@ -69,7 +70,6 @@
                      font-size: 1.7em; color: #555; cursor: pointer; }
         #plot-help:hover, #seq-plot-help:hover { color: #333; }
         #legend-popup, #seq-legend-popup { font-size: 15px; line-height: 1.55; }
-        #seq-note { max-width: 1200px; margin: 20px 0 6px; font-size: 14px; color: #555; line-height: 1.5; }
         /* Runtime / Memory / Cost section */
         hr.section-sep { border: 0; border-top: 1px solid #ddd; margin: 48px 0 26px; }
         #res-status { color: #b00; padding: 8px 0; min-height: 1.2em; font-size: 15px; }
@@ -168,7 +168,7 @@
          Images come from
            {BASE_URL}/{sample}/{dtype}/{tool}/{cov}_coverage/
               tool_sequence_accuracy_by_true_allele_size
-                .{metric}.{motif}.{genotype}.{cov}.{tool}.svg
+                .{metric}.{motif}.{genotype}.{cov}[.exclude_no_call_loci].{tool}.svg
          written by str-truth-set/figures_and_tables/plot_tool_sequence_accuracy.py.
     ==================================================================== -->
     <hr class="section-sep" />
@@ -215,6 +215,9 @@
                 <span class="facet-label"><span style="color:#15499e">Sequence Accuracy Plot</span>:</span>
                 <span class="navlinks">[<a class="prev-button" id="prev-seq-tool" href="#">←</a> <a class="next-button" id="next-seq-tool" href="#">→</a>]</span>
                 <span id="seq-tool-radios"></span>
+                <span style="padding-left:15px">
+                    <span class="ui checkbox"><input type="checkbox" id="exclude-seq-no-call-loci" name="exclude-seq-no-call-loci"><label>Hide "No Call" loci</label></span>
+                </span>
             </li>
         </ul>
     </div>
@@ -237,19 +240,6 @@
             <img id="seq-plot" style="max-width:100%; display:block" alt="" />
         </div>
     </div>
-    <div id="seq-note"><b>NOTE:</b> Only TRGT v5, ATaRVa, HipSTR, and ExpansionHunter (optimized-streaming) report an
-        allele sequence, so only they can be scored this way; every other tool reports a repeat count only. HipSTR and
-        ExpansionHunter are short-read callers, so their numbers are not comparable to the long-read tools — the
-        Sequencing Type selector keeps them in separate plots. ATaRVa's and ExpansionHunter's reported sequences are
-        each a consensus built from the reads supporting an allele rather than an assembled haplotype, so a small
-        non-zero floor relative to TRGT is expected rather than a pipeline error. ExpansionHunter also marks bases it
-        couldn't resolve as 'N', which always counts as a mismatch, never a match — including against a genuine 'N' in
-        the truth sequence. <b>Fast-path caveat:</b> ExpansionHunter's optimized-streaming mode resolves most loci
-        with a fast spanning-read heuristic and only falls through to full graph-alignment for the harder ones. Both
-        paths report a consensus, but the fast path derives it without realigning reads and from whole-repeat-spanning
-        reads only, so its sequences will not always match what full genotyping would have produced for the same
-        locus. An allele left with no usable spanning read is reported as all 'N', which scores as a complete
-        mismatch.</div>
     </div>
 
     <!-- ====================================================================
@@ -615,6 +605,7 @@ function writeHash() {
     if (seqMotif) p.set("seqm", seqMotif.replace(/_motifs$/, ""));                    // 2to6bp_motifs -> 2to6bp
     const seqGeno = $('input[name="seq-genotype"]:checked').val();
     if (seqGeno) p.set("seqg", seqGeno === "all_genotypes" ? "all" : seqGeno);        // all_genotypes -> all
+    if ($('#exclude-seq-no-call-loci').is(':checked')) p.set("seqnc", "1");
     history.replaceState(null, "", "#?" + p.toString());   // replaceState: don't spam the back stack on every click
 }
 
@@ -634,7 +625,7 @@ function setRadio(name, value) {
 //
 // Filename schema (from plot_tool_sequence_accuracy.py output_image_filename):
 //   tool_sequence_accuracy_by_true_allele_size
-//     .{metric} .{motif}_motifs .{genotype} .{cov} .{tool} .svg
+//     .{metric} .{motif}_motifs .{genotype} .{cov} [.exclude_no_call_loci] .{tool} .svg
 // No purity / chromosome-class stratification here (unlike the accuracy section).
 // ============================================================================
 
@@ -649,7 +640,7 @@ const SEQ_TOOLS = ["TRGTv5", "ATaRVa", "HipSTR", "EHv5-bw2-optimized"];
 // with no plot behind them. Update this as more (sample, sequencing type) combos get benchmarked.
 const SEQ_AVAILABLE_DATA_TYPES = {
     HG002: ["illumina", "pacbio"],
-    CHM1_CHM13: [],
+    CHM1_CHM13: ["illumina", "pacbio"],
 };
 
 // token is the ".{metric}" filename segment == plot_tool_sequence_accuracy.py METRICS keys.
@@ -710,7 +701,8 @@ function buildSeqImageUrl() {
     const metric = $('input[name="seq-metric"]:checked').val();
     const motif  = $('input[name="seq-motif"]:checked').val();
     const geno   = $('input[name="seq-genotype"]:checked').val();
-    const name = `tool_sequence_accuracy_by_true_allele_size.${metric}.${motif}.${geno}.${cov}.${tool}.svg`;
+    const hideNoCall = $('#exclude-seq-no-call-loci').is(':checked') ? ".exclude_no_call_loci" : "";
+    const name = `tool_sequence_accuracy_by_true_allele_size.${metric}.${motif}.${geno}.${cov}${hideNoCall}.${tool}.svg`;
     return `${BASE_URL}/${seqSample()}/${dtype}/${tool}/${cov}_coverage/${name}`;
 }
 
@@ -721,7 +713,8 @@ function buildSeqRankingKey() {
     const cov   = $('input[name="seq-coverage"]:checked').val();
     const motif = $('input[name="seq-motif"]:checked').val();
     const geno  = $('input[name="seq-genotype"]:checked').val();
-    return `${motif}.${geno}.${cov}`;
+    const hideNoCall = $('#exclude-seq-no-call-loci').is(':checked') ? ".exclude_no_call_loci" : "";
+    return `${motif}.${geno}.${cov}${hideNoCall}`;
 }
 
 // Same rendering as renderRankingRow (tool name bold, percent green, ties joined by "and"), scoped to the
@@ -1083,6 +1076,8 @@ $(function() {
     if (init.seqm)   setRadio('seq-motif', init.seqm + "_motifs");
     if (init.seqg)   setRadio('seq-genotype', init.seqg === "all" ? "all_genotypes" : init.seqg);
     if (init.seqmet) setRadio('seq-metric', init.seqmet);
+    $('#exclude-seq-no-call-loci').closest('.ui.checkbox')
+        .checkbox(init.seqnc === "1" ? 'set checked' : 'set unchecked');
 
     refreshImage();                                          // first image + ranking; also normalizes the URL via writeHash()
     if (applySeqAvailability()) refreshSeqImage();
@@ -1099,7 +1094,7 @@ $(function() {
     // Sequence-accuracy-section handlers, mirroring the accuracy section's.
     $(document).on('change', 'input[name="seq-sample"]', onSeqSampleChange);
     $(document).on('change', 'input[name="seq-datatype"]', onSeqDataTypeChange);
-    $(document).on('change', 'input[name="seq-tool"],input[name="seq-coverage"],input[name="seq-motif"],input[name="seq-genotype"],input[name="seq-metric"]', refreshSeqImage);
+    $(document).on('change', 'input[name="seq-tool"],input[name="seq-coverage"],input[name="seq-motif"],input[name="seq-genotype"],input[name="seq-metric"],#exclude-seq-no-call-loci', refreshSeqImage);
 
     // Resource-section handlers: individual rebuilds technology/tool/coverage; technology rebuilds
     // tool/coverage; tool/coverage just redraw.

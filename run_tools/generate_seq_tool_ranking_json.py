@@ -16,7 +16,8 @@ Input  (already produced by run_genotyping_tools.py):
 Output (one per sample x dtype):
     gs://.../tool_results/{sample}/{dtype}/seq_rankings.json
 
-JSON shape -- keyed by "{motif_token}.{genotype_token}.{coverage_label}" (see buildSeqRankingKey() in
+JSON shape -- keyed by "{motif_token}.{genotype_token}.{coverage_label}", with a trailing
+".exclude_no_call_loci" on the Hide "No Call" loci variant (see buildSeqRankingKey() in
 docs/tool_comparison_viewer.html). Each value is the tools sorted by descending exact-match percent (tie-
 broken by tool name for determinism):
 
@@ -56,9 +57,11 @@ MOTIF_BINS = [
 GENOTYPE_BINS = [("all_genotypes", "all"), ("HET", "HET"), ("HOM", "HOM")]
 
 
-def build_bin_key(motif_token, genotype_token, coverage_label):
-    """Returns "{motif_token}.{genotype_token}.{coverage_label}", the key the viewer looks up."""
-    return f"{motif_token}.{genotype_token}.{coverage_label}"
+def build_bin_key(motif_token, genotype_token, coverage_label, exclude_no_call_loci=False):
+    """Returns the key the viewer looks up: "{motif_token}.{genotype_token}.{coverage_label}", plus a trailing
+    ".exclude_no_call_loci" for the Hide "No Call" loci variant. See buildSeqRankingKey() in the viewer."""
+    return (f"{motif_token}.{genotype_token}.{coverage_label}"
+            + (".exclude_no_call_loci" if exclude_no_call_loci else ""))
 
 
 def compute_tool_accuracy(tsv_path, tool, coverage_label):
@@ -105,11 +108,16 @@ def compute_tool_accuracy(tsv_path, tool, coverage_label):
                 df_geno = df_motif[df_motif["SummaryString"].str.contains(":HET")]
             else:
                 df_geno = df_motif[df_motif["SummaryString"].str.contains(":HOM")]
-            if len(df_geno) < 10:  # plot script skip_condition2: not enough alleles to draw a histogram
-                continue
-            exact = int((df_geno[distance_column] == 0).sum())
-            result[build_bin_key(motif_token, genotype_token, coverage_label)] = {
-                "exact": exact, "total": len(df_geno), "pct": round(100.0 * exact / len(df_geno), 1)}
+            # Both no-call variants, matching the plot script's exclude_no_call_loci loop. Dropping the
+            # unscored (NaN) alleles shrinks the denominator but never the numerator, so the two keys report
+            # different percentages for the same locus set.
+            for exclude_no_call_loci in (False, True):
+                df_plot = df_geno[~df_geno[distance_column].isna()] if exclude_no_call_loci else df_geno
+                if len(df_plot) < 10:  # plot script skip_condition2: not enough alleles to draw a histogram
+                    continue
+                exact = int((df_plot[distance_column] == 0).sum())
+                result[build_bin_key(motif_token, genotype_token, coverage_label, exclude_no_call_loci)] = {
+                    "exact": exact, "total": len(df_plot), "pct": round(100.0 * exact / len(df_plot), 1)}
     return result
 
 
