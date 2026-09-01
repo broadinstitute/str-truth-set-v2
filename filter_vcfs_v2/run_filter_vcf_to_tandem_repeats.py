@@ -62,13 +62,34 @@ def create_filter_step(bp, row, input_dir, output_dir,
         os.path.join(dipcall_input_dir, f"{row.sample_id}.dip.vcf.gz"),
         os.path.join(dipcall_input_dir, f"{row.sample_id}.dip.bed.gz"))
 
+    normalize_haploid_genotypes_input = filter_step.input(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "normalize_haploid_genotypes.py"),
+        localize_by=Localize.COPY)
+
+    uppercase_ref_and_alt_input = filter_step.input(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "uppercase_ref_and_alt.py"),
+        localize_by=Localize.COPY)
+
     filter_step.command("set -exuo pipefail")
 
     filter_step.command(f"[ -s {dipcall_high_confidence_regions_bed_input} ] || exit 1")  # check that the bed file isn't emtpy
 
+    # Two things about dipcall's output break benchmarking tools, and both are fixed here, before anything else reads
+    # the VCF, so that every file this pipeline publishes carries the fix.
+    #
+    # It writes the regions it genotyped from a single assembly haplotype (a male sample's chrX outside the PAR, and
+    # all of its chrY) as a diploid genotype with one missing haplotype, like ".|1", which no benchmarking tool can
+    # match. And it carries the reference's soft-masking through into REF and ALT, so most records in repeat regions
+    # come out lowercase and a tool that compares alleles as written scores them as mismatches.
+    #
+    # Uppercasing here rather than after the catalog step is safe: str_analysis.filter_vcf_to_tandem_repeats
+    # uppercases REF, ALT and the reference sequence as it reads them, so the catalog it produces is identical
+    # either way.
     filter_step.command(f"bedtools intersect -header -f 1 -wa -u \
             -a {dipcall_vcf_input}  \
             -b {dipcall_high_confidence_regions_bed_input} \
+            | python3 -u {normalize_haploid_genotypes_input} --sex {row.sex} \
+            | python3 -u {uppercase_ref_and_alt_input} \
             | bgzip > {row.sample_id}.high_confidence_regions.vcf.gz")
     filter_step.command(f"tabix -f {row.sample_id}.high_confidence_regions.vcf.gz")
     #filter_step.command(f"python3 -u -m str_analysis.filter_vcf_to_tandem_repeats catalog -h || true")
@@ -214,6 +235,15 @@ def main():
 
     if args.n:
         df = df.iloc[:args.n]
+
+    # The filter step needs each sample's sex to know which chrX/chrY genotypes dipcall wrote as haploid, so check it
+    # here rather than letting the batch fail one sample at a time.
+    if "sex" not in df.columns:
+        raise ValueError(f"{args.metadata_tsv} has no 'sex' column")
+    samples_without_a_sex = df[~df["sex"].isin(["male", "female"])]
+    if len(samples_without_a_sex) > 0:
+        raise ValueError(f"{len(samples_without_a_sex):,d} sample(s) in {args.metadata_tsv} have a sex other than "
+                         f"'male' or 'female': {', '.join(samples_without_a_sex.sample_id)}")
 
     filter_steps = []
     for row_i, (_, row) in enumerate(df.iterrows()):
