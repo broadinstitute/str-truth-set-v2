@@ -179,3 +179,6 @@ docs/PLAN_tool_comparison_viewer.md
 
 # Generated sample table (produced + uploaded to GCS by run_tools/generate_sample_read_data_table.py)
 run_tools/HPRC_all_aligned_short_read_and_long_read_samples.tsv
+
+# Working directory for run_truthset_release_check.py (cached GIAB downloads, intermediate BEDs and VCFs)
+filter_vcfs_v2/truthset_release_check/

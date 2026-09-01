@@ -1,0 +1,62 @@
+# Baseline metrics for run_truthset_release_check.py.
+#
+# Source: HG002.high_confidence_regions.normalized.vcf.gz scored against GIAB GRCh38_HG2-T2TQ100-V1.1_smvar.vcf.gz over catalog loci padded 50bp and intersected with both the GIAB and the dipcall confident regions.
+#
+# Regenerate with --update-baseline, and only when the truth set legitimately changed. Say why in the
+# commit message, because these numbers are what every later release is judged against.
+# metric	baseline
+BASEPAIR/ALL/f1	0.993238
+BASEPAIR/ALL/precision	0.992547
+BASEPAIR/ALL/recall	0.993929
+BASEPAIR/chr1/recall	0.994293
+BASEPAIR/chr2/recall	0.993116
+BASEPAIR/chr3/recall	0.993026
+BASEPAIR/chr4/recall	0.993927
+BASEPAIR/chr5/recall	0.994778
+BASEPAIR/chr6/recall	0.993542
+BASEPAIR/chr7/recall	0.992847
+BASEPAIR/chr8/recall	0.992794
+BASEPAIR/chr9/recall	0.994115
+BASEPAIR/chr10/recall	0.994621
+BASEPAIR/chr11/recall	0.994278
+BASEPAIR/chr12/recall	0.994357
+BASEPAIR/chr13/recall	0.994836
+BASEPAIR/chr14/recall	0.993115
+BASEPAIR/chr15/recall	0.992531
+BASEPAIR/chr16/recall	0.994182
+BASEPAIR/chr17/recall	0.992107
+BASEPAIR/chr18/recall	0.994517
+BASEPAIR/chr19/recall	0.994124
+BASEPAIR/chr20/recall	0.995025
+BASEPAIR/chr21/recall	0.994871
+BASEPAIR/chr22/recall	0.994762
+BASEPAIR/chrX/recall	0.997594
+BASEPAIR/chrY/recall	0.981097
+GT/ALL/f1	0.979359
+GT/ALL/precision	0.978671
+GT/ALL/recall	0.980049
+GT/ALL/zygosity_agreement	0.999387
+GT/chr1/recall	0.980781
+GT/chr2/recall	0.977901
+GT/chr3/recall	0.978332
+GT/chr4/recall	0.979879
+GT/chr5/recall	0.981745
+GT/chr6/recall	0.979568
+GT/chr7/recall	0.978640
+GT/chr8/recall	0.978681
+GT/chr9/recall	0.981590
+GT/chr10/recall	0.981550
+GT/chr11/recall	0.979452
+GT/chr12/recall	0.980433
+GT/chr13/recall	0.981513
+GT/chr14/recall	0.980336
+GT/chr15/recall	0.979083
+GT/chr16/recall	0.979784
+GT/chr17/recall	0.977278
+GT/chr18/recall	0.980864
+GT/chr19/recall	0.980269
+GT/chr20/recall	0.981824
+GT/chr21/recall	0.982817
+GT/chr22/recall	0.981421
+GT/chrX/recall	0.987256
+GT/chrY/recall	0.932407
