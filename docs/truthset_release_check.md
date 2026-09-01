@@ -110,6 +110,8 @@ value entirely.
   which is why the catalog intervals are padded 50bp before intersecting, but it does reduce coverage.
 - **GIAB Q100 is itself a draft benchmark**, not ground truth. Some disagreements will be GIAB's.
 - **The check uppercases REF and ALT before scoring.** dipcall carries hg38's soft-masking through into the alleles,
-  and the catalog lives in repeat regions, which is exactly where hg38 is soft-masked. The published VCF still
-  carries the lowercase bases, so anyone benchmarking it against an uppercase truth set sees mismatches the check
-  itself does not. It reports the count so the size of that gap stays visible.
+  and the catalog lives in repeat regions, which is exactly where hg38 is soft-masked. The filter step now uppercases
+  them (`uppercase_ref_and_alt.py`), so a VCF built by the current pipeline has none left. The check still uppercases,
+  both so it can score VCFs produced before that change and so its numbers stay comparable across the change, and it
+  reports how many records it had to rewrite. A non-zero count on a fresh release means the filter step did not run
+  that stage.
