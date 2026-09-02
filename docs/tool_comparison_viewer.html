@@ -32,13 +32,14 @@
 
   Three sections, each with its own independent copy of the selectors:
     1. Accuracy         — repeat-count accuracy (the facets listed above)
-    2. Sequence Accuracy — edit distance between the tool's reported allele SEQUENCE and the assembly
-                           truth sequence, for the four tools that report one (TRGT v5, ATaRVa, HipSTR
+    2. Sequence Accuracy — how close the tool's reported allele SEQUENCE is to the assembly truth
+                           sequence, for the five tools that report one (TRGT v5, LongTR, ATaRVa, HipSTR
                            via their VCF's REF/ALT; EHv5-bw2-optimized via its JSON's ConsensusSequences,
                            only present when genotyped with consensus sequences enabled). From
-                           plot_tool_sequence_accuracy.py. Adds a Metric facet (raw bp vs. normalized by
-                           the true allele length), keeps the Hide "No Call" loci variant, and has no
-                           purity / chromosome facets.
+                           plot_tool_sequence_accuracy.py. Adds a Metric facet (edit distance in raw bp,
+                           edit distance normalized by the true allele length, or signed base-pair size
+                           difference), keeps the Hide "No Call" loci variant, and has no purity /
+                           chromosome facets.
     3. Runtime, Memory, and Cost — Chart.js plots of resource_metrics.json
   Sections 1 and 2 share one location.hash; section 2's keys are seq*-prefixed, so an older link that
   has none of them still restores section 1 exactly as before.
@@ -160,9 +161,10 @@
     <!-- ====================================================================
          Sequence Accuracy section. The accuracy section above scores a tool by
          how close its repeat COUNT is to the truth; this one scores the tools
-         that report an actual allele SEQUENCE (TRGT v5, ATaRVa, HipSTR,
-         EHv5-bw2-optimized) by the edit distance between that sequence and
-         the assembly truth sequence.
+         that report an actual allele SEQUENCE (TRGT v5, LongTR, ATaRVa,
+         HipSTR, EHv5-bw2-optimized) against the assembly truth sequence, by
+         edit distance (raw or normalized) or by signed base-pair size
+         difference.
          Independent copies of the Individual / Sequencing Type / Coverage /
          Motif Size / Genotype selectors (prefixed seq-), plus a Metric radio.
          Images come from
@@ -173,7 +175,7 @@
     ==================================================================== -->
     <hr class="section-sep" />
     <div id="seq-section">
-    <h2>Tandem Repeat Genotyping: Tool Benchmark &nbsp;<small style="color:#888">Sequence Accuracy (edit distance vs. the assembly truth allele sequence)</small></h2>
+    <h2>Tandem Repeat Genotyping: Tool Benchmark &nbsp;<small style="color:#888">Sequence Accuracy (vs. the assembly truth allele sequence)</small></h2>
 
     <div class="ui form">
         <ul class="facets">
@@ -224,13 +226,20 @@
 
     <div class="ui popup" id="seq-legend-popup" style="max-width:620px;">
         <b>x-axis:</b> true allele size — positive = expansion, negative = contraction.<br/>
-        <b>Left panel</b>: distribution of the per-allele edit distance in each x bin (box = median and IQR).<br/>
-        <b>Right panel</b>: fraction of alleles in each edit-distance category.<br/>
+        <b>Left panel</b>: distribution of the selected metric in each x bin (box = median and IQR).<br/>
+        <b>Right panel</b>: fraction of alleles in each category of that metric.<br/>
         <b>Gray</b>: tool produced no allele sequence for this allele.<br/>
-        <b>Green</b>: the reported sequence matches the truth sequence exactly.<br/>
-        <b>Yellow → red</b>: increasingly large edit distance.<br/>
-        <b>Metric</b>: "edit distance (bp)" is the raw Levenshtein distance; "normalized" divides it by the length of
-        the true allele sequence, so a 5bp error counts differently on a 40bp allele than on a 4kb one.
+        <b>Green</b>: the best category — see per-metric meanings below.<br/>
+        <b>Yellow → red</b>: increasingly wrong.<br/>
+        <b>Metrics</b>:<br/>
+        &nbsp;&nbsp;• "edit distance (bp)" — raw Levenshtein distance between the reported and truth sequences.
+        Green means the bases match exactly.<br/>
+        &nbsp;&nbsp;• "normalized" — the same distance divided by the length of the true allele sequence, so a 5bp
+        error counts differently on a 40bp allele than on a 4kb one.<br/>
+        &nbsp;&nbsp;• "size difference (bp)" — reported allele length minus true allele length. The box plot keeps
+        the <i>sign</i> (negative = the tool called the allele too short, positive = too long), while the categories
+        bin its <i>absolute</i> value. Green means only that the length matched; the bases can still differ, so this
+        is a weaker claim than the edit distance.
     </div>
 
     <div id="seq-plot-wrap">
@@ -637,9 +646,9 @@ function setRadio(name, value) {
 // ============================================================================
 
 // Only these tools report an allele sequence == run_genotyping_tools.py SEQUENCE_ACCURACY_TOOLS. The section's
-// tool list is this set intersected with the data type's tools, so PacBio / ONT / Iso-Seq show TRGT v5 + ATaRVa
-// and the Illumina / Element technologies show HipSTR + EHv5-bw2-optimized.
-const SEQ_TOOLS = ["TRGTv5", "ATaRVa", "HipSTR", "EHv5-bw2-optimized"];
+// tool list is this set intersected with the data type's tools, so PacBio / ONT / Iso-Seq show
+// TRGT v5 + LongTR + ATaRVa and the Illumina / Element technologies show HipSTR + EHv5-bw2-optimized.
+const SEQ_TOOLS = ["TRGTv5", "LongTR", "ATaRVa", "HipSTR", "EHv5-bw2-optimized"];
 
 // (sample id -> sequencing types) this benchmark has actually been run for. Unlike the main accuracy section
 // (which covers every combo), sequence accuracy is new and only covers what's been generated so far -- every
@@ -654,6 +663,7 @@ const SEQ_AVAILABLE_DATA_TYPES = {
 const SEQ_METRICS = [
     { label:"edit distance (bp)",                     token:"edit_distance_bp" },
     { label:"normalized (÷ true allele length)",      token:"edit_distance_normalized" },
+    { label:"size difference (bp)",                   token:"size_diff_bp" },
 ];
 
 function seqSample()    { return $('input[name="seq-sample"]:checked').val(); }
@@ -713,8 +723,15 @@ function buildSeqImageUrl() {
     return `${BASE_URL}/${seqSample()}/${dtype}/${tool}/${cov}_coverage/${name}`;
 }
 
-// The bin portion of the filename minus the leading "{metric}." segment -- exact-match (edit distance == 0)
-// doesn't depend on which distance column it's read off, so seq_rankings.json has no metric dimension.
+// The metrics seq_rankings.json actually covers. run_tools/generate_seq_tool_ranking_json.py scores exact matches
+// off the SequenceEditDistance column only, and exact-match there is the same for both edit-distance metrics (a
+// distance of 0 is 0 either way), which is why the file has no metric dimension. It is NOT the same for
+// "size_diff_bp": a same-length allele with substituted bases is green in that plot but not an exact sequence
+// match, so the ranking row would contradict the plot beside it. Until the JSON gains a metric dimension, the row
+// says so instead of showing a number that doesn't match.
+const SEQ_RANKING_METRICS = ["edit_distance_bp", "edit_distance_normalized"];
+
+// The bin portion of the filename minus the leading "{metric}." segment.
 // run_tools/generate_seq_tool_ranking_json.py builds the identical string.
 function buildSeqRankingKey() {
     const cov   = $('input[name="seq-coverage"]:checked').val();
@@ -747,10 +764,22 @@ function refreshSeqRanking() {
     // Same staleness/no-refetch guard as refreshRanking(): the ranking depends only on (sample, data type, bin
     // key), not the selected tool, and 'no-cache' picks up a regenerated seq_rankings.json immediately.
     const reqSample = seqSample(), reqDataType = seqDataType(), reqBinKey = buildSeqRankingKey();
-    const reqKey = `${reqSample}|${reqDataType}|${reqBinKey}`;
+    const reqMetric = $('input[name="seq-metric"]:checked').val();
+    // the metric is part of the key even though the JSON has no metric dimension, so that switching to (or away
+    // from) a metric the ranking doesn't cover re-evaluates instead of being skipped by the no-refetch guard
+    const reqKey = `${reqSample}|${reqDataType}|${reqBinKey}|${reqMetric}`;
     if (reqKey === lastSeqRankingKey) return;
     lastSeqRankingKey = reqKey;
-    const stillCurrent = () => reqSample === seqSample() && reqDataType === seqDataType() && reqBinKey === buildSeqRankingKey();
+    if (!SEQ_RANKING_METRICS.includes(reqMetric)) {
+        $('#seq-ranking-row').html('<span class="muted">not available for this metric — the summary ranks by exact '
+            + 'sequence match, which is not what green means on the size-difference plot</span>');
+        return;
+    }
+    // the metric is in this check too: without it, a fetch started under an edit-distance metric would still
+    // render when it resolves after the user switched to a metric the ranking doesn't cover, overwriting the
+    // message above with a percentage that contradicts the plot beside it
+    const stillCurrent = () => reqSample === seqSample() && reqDataType === seqDataType()
+        && reqBinKey === buildSeqRankingKey() && reqMetric === $('input[name="seq-metric"]:checked').val();
     $('#seq-ranking-row').html('<span class="muted">loading…</span>');
     fetch(`${BASE_URL}/${reqSample}/${reqDataType}/seq_rankings.json`, {cache: 'no-cache'})
         .then(r => r.ok ? r.json() : null)

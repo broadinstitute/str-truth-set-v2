@@ -54,16 +54,17 @@ LONG_READ_TOOLS = {
     "ATaRVa",
 }
 
-# Tools whose sequence accuracy can be scored by edit distance against the assembly truth allele sequences (see
-# create_extract_allele_sequences_step / create_extract_expansion_hunter_allele_sequences_step). TRGTv5/ATaRVa/HipSTR
-# carry an actual allele sequence in their VCF's REF/ALT; EHv5-bw2-optimized doesn't (its VCF ALT is symbolic,
-# "<STRnn>"), so scoring it instead uses the bw2-fork-only ConsensusSequences JSON field, which requires genotyping
-# it with enable_consensus_sequences=True (see the create_expansion_hunter_steps call further down -- gated on this
-# same set). Every other tool reports only a repeat count, which the accuracy plots already cover. This is the
-# single place that decides which tools get the extra extract step, the extra add-columns invocation, and the extra
-# plot loop.
+# Tools whose reported allele sequences can be scored against the assembly truth allele sequences, by edit distance
+# and by base-pair size difference (see create_extract_allele_sequences_step /
+# create_extract_expansion_hunter_allele_sequences_step). TRGTv5/LongTR/ATaRVa/HipSTR carry an actual allele sequence
+# in their VCF's REF/ALT; EHv5-bw2-optimized doesn't (its VCF ALT is symbolic, "<STRnn>"), so scoring it instead uses
+# the bw2-fork-only ConsensusSequences JSON field, which requires genotyping it with enable_consensus_sequences=True
+# (see the create_expansion_hunter_steps call further down -- gated on this same set). Every other tool reports only a
+# repeat count, which the accuracy plots already cover. This is the single place that decides which tools get the
+# extra extract step, the extra add-columns invocation, and the extra plot loop.
 SEQUENCE_ACCURACY_TOOLS = {
     "TRGTv5",
+    "LongTR",
     "ATaRVa",
     "HipSTR",
     "EHv5-bw2-optimized",
@@ -580,8 +581,8 @@ def main():
                 raise ValueError(f"Unknown tool: {tool}")
 
 
-            # TRGT, ATaRVa and HipSTR report an allele sequence in their VCF, so extract those sequences from the
-            # VCF the genotyping step already wrote. EHv5-bw2-optimized has no such VCF (its ALT is symbolic), so it
+            # TRGT, LongTR, ATaRVa and HipSTR report an allele sequence in their VCF, so extract those sequences
+            # from the VCF the genotyping step already wrote. EHv5-bw2-optimized has no such VCF (its ALT is symbolic), so it
             # extracts from the genotyping step's own JSON output instead (see eh_json_paths above). Neither path
             # re-genotypes anything -- both just re-read output the genotyping step already wrote.
             allele_sequences_step = allele_sequences_path = None
@@ -594,9 +595,9 @@ def main():
                         output_prefix=f"{row.sample_id}.{tool}",
                         output_dir=output_dir)
                 else:
-                    if tool == "HipSTR":
-                        # HipSTR writes one vcf per catalog shard under {output_dir}/vcf/, named after the shard's bed
-                        # file. Derive the expected path(s) from this run's own catalog shards -- globbing
+                    if tool in ("HipSTR", "LongTR"):
+                        # HipSTR and LongTR write one vcf per catalog shard under {output_dir}/vcf/, named after the
+                        # shard's bed file. Derive the expected path(s) from this run's own catalog shards -- globbing
                         # {output_dir}/vcf/ would also pick up stale shard vcfs left over from an older, differently-
                         # sharded catalog (older runs used a 6-way split) and silently mix them with this run's output.
                         tool_vcf_paths = [
@@ -1372,8 +1373,8 @@ def create_extract_allele_sequences_step(bp, tool_results_step, *, tool, vcf_pat
     Args:
         bp: the step_pipeline pipeline object.
         tool_results_step: the tool's genotyping/combine step, depended on so the VCF exists before this step runs.
-        tool: "TRGTv5", "ATaRVa", or "HipSTR" (one of SEQUENCE_ACCURACY_TOOLS).
-        vcf_paths: gs:// path(s) of the tool's output VCF(s). HipSTR writes one per catalog shard.
+        tool: "TRGTv5", "LongTR", "ATaRVa", or "HipSTR" (the SEQUENCE_ACCURACY_TOOLS whose VCF carries a sequence).
+        vcf_paths: gs:// path(s) of the tool's output VCF(s). HipSTR and LongTR write one per catalog shard.
         output_prefix: filename prefix for the output table ("{sample_id}.{tool}").
         output_dir: the tool's {coverage}_coverage output dir.
         reference_fasta: gs:// path of the reference fasta, used to confirm each record's REF matches the reference
@@ -1623,7 +1624,7 @@ def create_plot_tool_accuracy_steps(bp, add_columns_step, *, tool, coverage_labe
     # edited during the operation" when updating freshly-created objects.
     # For the tools that report allele sequences, also plot how close those sequences are to the truth sequences.
     # add_sequence_accuracy_columns.py put the per-allele edit distances into the same alleles table, so this reuses
-    # the input that's already localized. One invocation per motif bin (each emits 2 metrics x 3 genotype subsets),
+    # the input that's already localized. One invocation per motif bin (each emits 3 metrics x 3 genotype subsets),
     # matching the motif loop above, plus the unstratified all-motifs invocation.
     if tool in SEQUENCE_ACCURACY_TOOLS:
         for min_motif_size, max_motif_size in MOTIF_SIZE_BINS + [(None, None)]:
