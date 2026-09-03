@@ -7,7 +7,11 @@ import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
-DOCKER_IMAGE = "weisburd/str-analysis@sha256:b7b3f53c5b7cd75388ba84f336bc6b4eae2e1cc84afde9f2fd8197114451c1da"
+# Built by the str-analysis "build docker images" workflow (run 33690694318) from commit 54fd419, which
+# makes a non-repeat insertion on either allele set the whole locus to no call. That run's digest-commit
+# step was skipped because an unrelated image (docker_with_expansion_hunter) failed to build, so this
+# digest was read from the "build docker" job log rather than from the repo's sha256_dockerhub.txt.
+DOCKER_IMAGE = "weisburd/str-analysis@sha256:4fa33584da2ab7cb2acaac2472eb6a78b8b9eff773244fa311df61e0514d4387"
 #DOCKER_IMAGE = "us-central1-docker.pkg.dev/cmg-analysis/docker-repo/str-analysis@sha256:16191eb046706d19f2cc031f06e12c4da65e3e5f2e6d2a606b1aa8331bc2acae"
 
 def parse_args(bp):
@@ -131,7 +135,17 @@ def create_filter_step(bp, row, input_dir, output_dir,
 
 def create_combine_step(bp, filter_steps, data_dir, cpu=2, memory="highmem"):
 
-    output_prefix = f"combined.{len(filter_steps)}_catalogs"
+    # A single-catalog run named its output "combined.1_catalogs", which every other single-sample run into the
+    # same directory also writes, so the second one silently overwrote the first (this is how HG002's catalog was
+    # lost on 2026-06-12). Name a single-catalog merge after the sample instead. The merge subcommand's own
+    # default already derives the prefix from the input filename; this keeps the pipeline consistent with that.
+    if len(filter_steps) == 1:
+        sample_id = next(o.filename for o in filter_steps[0].get_outputs()
+                         if o.filename.endswith(".tandem_repeats.detailed.bed.gz")).split(".")[0]
+        output_prefix = f"combined.{sample_id}_catalog"
+    else:
+        output_prefix = f"combined.{len(filter_steps)}_catalogs"
+
     combine_step = bp.new_step(
         f"combine (cpu={cpu}): {len(filter_steps):,d} catalogs",
         image=DOCKER_IMAGE,
