@@ -7,11 +7,11 @@ import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
-# Built by the str-analysis "build docker images" workflow (run 33690694318) from commit 54fd419, which
-# makes a non-repeat insertion on either allele set the whole locus to no call. That run's digest-commit
-# step was skipped because an unrelated image (docker_with_expansion_hunter) failed to build, so this
-# digest was read from the "build docker" job log rather than from the repo's sha256_dockerhub.txt.
-DOCKER_IMAGE = "weisburd/str-analysis@sha256:4fa33584da2ab7cb2acaac2472eb6a78b8b9eff773244fa311df61e0514d4387"
+# Built by the str-analysis "build docker images" workflow and recorded in its docker/sha256_dockerhub.txt by
+# commit a2aa5b4, which includes 964ad5d (trviz as the recommended --add-motif-composition method). The image
+# installs the trviz python library (docker/Dockerfile).
+DOCKER_IMAGE = "weisburd/str-analysis@sha256:ea30c4500de79b5114471ef111ff8f4c2457f5c28042b1e5d6734aa1e06200af"
+#DOCKER_IMAGE = "weisburd/str-analysis@sha256:4fa33584da2ab7cb2acaac2472eb6a78b8b9eff773244fa311df61e0514d4387"
 #DOCKER_IMAGE = "us-central1-docker.pkg.dev/cmg-analysis/docker-repo/str-analysis@sha256:16191eb046706d19f2cc031f06e12c4da65e3e5f2e6d2a606b1aa8331bc2acae"
 
 def parse_args(bp):
@@ -22,6 +22,11 @@ def parse_args(bp):
     parser.add_argument("--genotype-catalog", help="If specified, genotype each sample against this catalog BED instead "
                         "of the combined catalog produced by the merge step. Lets you --skip-filter-step --skip-combine-step "
                         "and genotype a subset of samples (via -s) against an existing catalog.")
+    parser.add_argument("--genotype-catalog-name", help="Name of the catalog used by the genotype step. Its outputs "
+                        "go in a <sample>/<name>_genotypes/ subdirectory. Defaults to the catalog BED filename up to "
+                        "'.tandem_repeats' or '.bed', with '.' replaced by '_' (eg. combined_321_catalogs).")
+    parser.add_argument("--add-motif-composition", default="trviz", choices=["trviz", "trf", "basic"],
+                        help="Method the genotype step uses to split each allele sequence into motifs.")
     parser.add_argument("--show-progress-bar", action="store_true", help="Show a progress bar in the genotype step.")
     parser.add_argument("-n", type=int, help="Number of samples to process")
     parser.add_argument("-s", "--sample-id", action="append", help="Process only this sample. Can be specified more than once.")
@@ -35,7 +40,71 @@ def parse_args(bp):
     return args
 
 
-def create_filter_step(bp, row, input_dir, output_dir,
+def create_high_confidence_regions_vcf_step(bp, row, input_dir, output_dir, use_preemptibles=True):
+    """Restrict the sample's dipcall VCF to its high-confidence regions and fix the two dipcall quirks described below.
+
+    This is its own step, rather than part of the filter step, so that the VCF can be regenerated (eg. after a fix to
+    normalize_haploid_genotypes.py) and re-genotyped without re-running the much more expensive catalog step.
+    """
+
+    vcf_step = bp.new_step(
+        f"high_confidence_regions_vcf: {row.sample_id}",
+        image=DOCKER_IMAGE,
+        arg_suffix="vcf-step",
+        preemptible=use_preemptibles,
+        cpu=1,
+        storage="10G",
+        memory="standard",
+        localize_by=Localize.GSUTIL_COPY,
+        output_dir=output_dir)
+
+    dipcall_input_dir = input_dir
+    if row.get("subdirectory") and not pd.isna(row.get("subdirectory")):
+        dipcall_input_dir = os.path.join(input_dir, row.subdirectory)
+    dipcall_input_dir = os.path.join(dipcall_input_dir, row.sample_id)
+
+    dipcall_vcf_input, dipcall_high_confidence_regions_bed_input = vcf_step.inputs(
+        os.path.join(dipcall_input_dir, f"{row.sample_id}.dip.vcf.gz"),
+        os.path.join(dipcall_input_dir, f"{row.sample_id}.dip.bed.gz"))
+
+    normalize_haploid_genotypes_input = vcf_step.input(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "normalize_haploid_genotypes.py"),
+        localize_by=Localize.COPY)
+
+    uppercase_ref_and_alt_input = vcf_step.input(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "uppercase_ref_and_alt.py"),
+        localize_by=Localize.COPY)
+
+    vcf_step.command("set -exuo pipefail")
+
+    vcf_step.command(f"[ -s {dipcall_high_confidence_regions_bed_input} ] || exit 1")  # check that the bed file isn't emtpy
+
+    # Two things about dipcall's output break benchmarking tools, and both are fixed here, before anything else reads
+    # the VCF, so that every file this pipeline publishes carries the fix.
+    #
+    # It writes the regions it genotyped from a single assembly haplotype (a male sample's chrX outside the PAR, and
+    # all of its chrY) as a diploid genotype with one missing haplotype, like ".|1", which no benchmarking tool can
+    # match. And it carries the reference's soft-masking through into REF and ALT, so most records in repeat regions
+    # come out lowercase and a tool that compares alleles as written scores them as mismatches.
+    #
+    # Uppercasing here rather than after the catalog step is safe: str_analysis.filter_vcf_to_tandem_repeats
+    # uppercases REF, ALT and the reference sequence as it reads them, so the catalog it produces is identical
+    # either way.
+    vcf_step.command(f"bedtools intersect -header -f 1 -wa -u \
+            -a {dipcall_vcf_input}  \
+            -b {dipcall_high_confidence_regions_bed_input} \
+            | python3 -u {normalize_haploid_genotypes_input} --sex {row.sex} \
+            | python3 -u {uppercase_ref_and_alt_input} \
+            | bgzip > {row.sample_id}.high_confidence_regions.vcf.gz")
+    vcf_step.command(f"tabix -f {row.sample_id}.high_confidence_regions.vcf.gz")
+
+    vcf_step.output(f"{row.sample_id}.high_confidence_regions.vcf.gz")
+    vcf_step.output(f"{row.sample_id}.high_confidence_regions.vcf.gz.tbi")
+
+    return vcf_step
+
+
+def create_filter_step(bp, row, vcf_step, output_dir,
                        allow_multiple_trf_results_per_locus=False,
                        exclude_homopolymers=False,
                        use_preemptibles=True,
@@ -53,49 +122,18 @@ def create_filter_step(bp, row, input_dir, output_dir,
         localize_by=Localize.GSUTIL_COPY,
         output_dir=output_dir)
 
+    filter_step.depends_on(vcf_step)
+
     hg38_fasta_input, _ = filter_step.inputs(
         "gs://str-truth-set/hg38/ref/hg38.fa",
         "gs://str-truth-set/hg38/ref/hg38.fa.fai")
 
-    dipcall_input_dir = input_dir
-    if row.get("subdirectory") and not pd.isna(row.get("subdirectory")):
-        dipcall_input_dir = os.path.join(input_dir, row.subdirectory)
-    dipcall_input_dir = os.path.join(dipcall_input_dir, row.sample_id)
-
-    dipcall_vcf_input, dipcall_high_confidence_regions_bed_input = filter_step.inputs(
-        os.path.join(dipcall_input_dir, f"{row.sample_id}.dip.vcf.gz"),
-        os.path.join(dipcall_input_dir, f"{row.sample_id}.dip.bed.gz"))
-
-    normalize_haploid_genotypes_input = filter_step.input(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "normalize_haploid_genotypes.py"),
-        localize_by=Localize.COPY)
-
-    uppercase_ref_and_alt_input = filter_step.input(
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "uppercase_ref_and_alt.py"),
-        localize_by=Localize.COPY)
+    high_confidence_regions_vcf_input, _ = filter_step.inputs(
+        os.path.join(output_dir, f"{row.sample_id}.high_confidence_regions.vcf.gz"),
+        os.path.join(output_dir, f"{row.sample_id}.high_confidence_regions.vcf.gz.tbi"))
 
     filter_step.command("set -exuo pipefail")
 
-    filter_step.command(f"[ -s {dipcall_high_confidence_regions_bed_input} ] || exit 1")  # check that the bed file isn't emtpy
-
-    # Two things about dipcall's output break benchmarking tools, and both are fixed here, before anything else reads
-    # the VCF, so that every file this pipeline publishes carries the fix.
-    #
-    # It writes the regions it genotyped from a single assembly haplotype (a male sample's chrX outside the PAR, and
-    # all of its chrY) as a diploid genotype with one missing haplotype, like ".|1", which no benchmarking tool can
-    # match. And it carries the reference's soft-masking through into REF and ALT, so most records in repeat regions
-    # come out lowercase and a tool that compares alleles as written scores them as mismatches.
-    #
-    # Uppercasing here rather than after the catalog step is safe: str_analysis.filter_vcf_to_tandem_repeats
-    # uppercases REF, ALT and the reference sequence as it reads them, so the catalog it produces is identical
-    # either way.
-    filter_step.command(f"bedtools intersect -header -f 1 -wa -u \
-            -a {dipcall_vcf_input}  \
-            -b {dipcall_high_confidence_regions_bed_input} \
-            | python3 -u {normalize_haploid_genotypes_input} --sex {row.sex} \
-            | python3 -u {uppercase_ref_and_alt_input} \
-            | bgzip > {row.sample_id}.high_confidence_regions.vcf.gz")
-    filter_step.command(f"tabix -f {row.sample_id}.high_confidence_regions.vcf.gz")
     #filter_step.command(f"python3 -u -m str_analysis.filter_vcf_to_tandem_repeats catalog -h || true")
 
     min_repeat_unit_length = 2 if exclude_homopolymers else 1
@@ -115,12 +153,10 @@ def create_filter_step(bp, row, input_dir, output_dir,
             --write-vcf \
             --verbose  {allow_multiple_arg} \
             --output-prefix {row.sample_id} \
-            {row.sample_id}.high_confidence_regions.vcf.gz |& tee {row.sample_id}.filter_vcf.log")
+            {high_confidence_regions_vcf_input} |& tee {row.sample_id}.filter_vcf.log")
 
     filter_step.command("ls -lhtr")
 
-    filter_step.output(f"{row.sample_id}.high_confidence_regions.vcf.gz")
-    filter_step.output(f"{row.sample_id}.high_confidence_regions.vcf.gz.tbi")
     filter_step.output(f"{row.sample_id}.tandem_repeats.bed.gz")
     filter_step.output(f"{row.sample_id}.tandem_repeats.bed.gz.tbi")
     filter_step.output(f"{row.sample_id}.tandem_repeats.detailed.bed.gz")
@@ -188,8 +224,25 @@ def create_combine_step(bp, filter_steps, data_dir, cpu=2, memory="highmem"):
     return combine_step
 
 
-def create_genotype_step(bp, row, combined_catalog_bed_path, filter_step, combine_step, output_dir,
-                         cpu=4, memory="standard", use_preemptibles=True, show_progress_bar=False):
+def get_catalog_name_from_catalog_bed_path(catalog_bed_path):
+    """Derive a short catalog name from its BED filename, for naming the genotype step's output subdirectory.
+
+    Args:
+        catalog_bed_path (str): Path of the catalog BED file.
+
+    Returns:
+        str: The filename up to '.tandem_repeats' or '.bed', with '.' replaced by '_'
+            (eg. "combined.321_catalogs.tandem_repeats.bed.gz" -> "combined_321_catalogs").
+    """
+    catalog_name = os.path.basename(catalog_bed_path)
+    for suffix in ".tandem_repeats", ".bed":
+        catalog_name = catalog_name.split(suffix)[0]
+    return catalog_name.replace(".", "_")
+
+
+def create_genotype_step(bp, row, combined_catalog_bed_path, vcf_step, filter_step, combine_step, sample_dir,
+                         output_dir, add_motif_composition="trviz", cpu=4, memory="standard", use_preemptibles=True,
+                         show_progress_bar=False):
 
     genotype_step = bp.new_step(
         f"genotype (cpu={cpu}): {row.sample_id}",
@@ -202,6 +255,7 @@ def create_genotype_step(bp, row, combined_catalog_bed_path, filter_step, combin
         localize_by=Localize.GSUTIL_COPY,
         output_dir=output_dir)
 
+    genotype_step.depends_on(vcf_step)
     genotype_step.depends_on(filter_step)
     if combine_step is not None:
         genotype_step.depends_on(combine_step)
@@ -212,18 +266,17 @@ def create_genotype_step(bp, row, combined_catalog_bed_path, filter_step, combin
 
     catalog_bed_input = genotype_step.input(combined_catalog_bed_path)
     high_confidence_regions_vcf_input, _ = genotype_step.inputs(
-        os.path.join(output_dir, f"{row.sample_id}.high_confidence_regions.vcf.gz"),
-        os.path.join(output_dir, f"{row.sample_id}.high_confidence_regions.vcf.gz.tbi"))
+        os.path.join(sample_dir, f"{row.sample_id}.high_confidence_regions.vcf.gz"),
+        os.path.join(sample_dir, f"{row.sample_id}.high_confidence_regions.vcf.gz.tbi"))
 
     genotype_step.command("set -exuo pipefail")
 
+    trf_args = f"--trf-executable-path /usr/bin/trf --trf-threads {int(2*cpu)}" if add_motif_composition == "trf" else ""
     genotype_step.command(f"python3 -u -m str_analysis.filter_vcf_to_tandem_repeats genotype \
             -R {hg38_fasta_input} \
             --catalog-bed {catalog_bed_input} \
             --write-json \
-            --add-motif-composition trf \
-            --trf-executable-path /usr/bin/trf \
-            --trf-threads {int(2*cpu)} \
+            --add-motif-composition {add_motif_composition} {trf_args} \
             {'--show-progress-bar' if show_progress_bar else ''} \
             --output-prefix {row.sample_id} \
             {high_confidence_regions_vcf_input} |& tee {row.sample_id}.genotype.log")
@@ -250,7 +303,7 @@ def main():
     if args.n:
         df = df.iloc[:args.n]
 
-    # The filter step needs each sample's sex to know which chrX/chrY genotypes dipcall wrote as haploid, so check it
+    # The vcf step needs each sample's sex to know which chrX/chrY genotypes dipcall wrote as haploid, so check it
     # here rather than letting the batch fail one sample at a time.
     if "sex" not in df.columns:
         raise ValueError(f"{args.metadata_tsv} has no 'sex' column")
@@ -259,16 +312,20 @@ def main():
         raise ValueError(f"{len(samples_without_a_sex):,d} sample(s) in {args.metadata_tsv} have a sex other than "
                          f"'male' or 'female': {', '.join(samples_without_a_sex.sample_id)}")
 
+    vcf_steps = []
     filter_steps = []
     for row_i, (_, row) in enumerate(df.iterrows()):
         output_dir = os.path.join(args.output_dir, row.sample_id)
-        filter_step = create_filter_step(bp, row, args.input_dir, output_dir,
+        vcf_step = create_high_confidence_regions_vcf_step(bp, row, args.input_dir, output_dir,
+                                                           use_preemptibles=not args.use_nonpreemptibles)
+        filter_step = create_filter_step(bp, row, vcf_step, output_dir,
                                          allow_multiple_trf_results_per_locus=args.allow_multiple_trf_results_per_locus,
                                          exclude_homopolymers=args.exclude_homopolymers,
                                          use_preemptibles=not args.use_nonpreemptibles,
                                          cpu=args.cpu,
                                          memory=args.memory)
-        
+
+        vcf_steps.append(vcf_step)
         filter_steps.append(filter_step)
 
 
@@ -276,10 +333,14 @@ def main():
     combine_step = None if args.genotype_catalog else create_combine_step(bp, filter_steps, args.output_dir)
 
     genotype_catalog_bed_path = args.genotype_catalog or combine_step.get_outputs()[0].output_path
-    for (_, row), filter_step in zip(df.iterrows(), filter_steps):
-        create_genotype_step(bp, row, genotype_catalog_bed_path, filter_step,
+    genotype_subdir = f"{args.genotype_catalog_name or get_catalog_name_from_catalog_bed_path(genotype_catalog_bed_path)}_genotypes"
+    for (_, row), vcf_step, filter_step in zip(df.iterrows(), vcf_steps, filter_steps):
+        sample_dir = os.path.join(args.output_dir, row.sample_id)
+        create_genotype_step(bp, row, genotype_catalog_bed_path, vcf_step, filter_step,
                              None if args.genotype_catalog else combine_step,
-                             output_dir=os.path.join(args.output_dir, row.sample_id),
+                             sample_dir=sample_dir,
+                             output_dir=os.path.join(sample_dir, genotype_subdir),
+                             add_motif_composition=args.add_motif_composition,
                              cpu=args.cpu,
                              memory=args.memory,
                              use_preemptibles=not args.use_nonpreemptibles,
