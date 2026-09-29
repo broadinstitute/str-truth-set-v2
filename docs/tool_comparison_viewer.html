@@ -344,7 +344,6 @@ const SAMPLES = [
 // label is just the friendlier display text for that tool.
 const TOOL_LABELS = {
     IlluminaEHv5:         "Illumina/EHv5 (streaming)",
-    EHv5:                 "bw2/EHv5 (low-mem-streaming)",
     "EHv5-bw2-optimized": "bw2/EHv5 (optimized-streaming)",
     GangSTR:              "GangSTR",
     HipSTR:               "HipSTR",
@@ -365,10 +364,10 @@ const TOOL_LABELS = {
 // rules). Which technologies (and their coverages) a given individual actually has
 // lives in SAMPLES above.
 const DATA_TYPES = {
-    illumina:        { label: "Illumina Genome", tools: ["EHv5-bw2-optimized", "EHv5", "IlluminaEHv5", "GangSTR", "HipSTR", "EnsembleTR-EH+HipSTR", "EnsembleTR-EH+HipSTR+GangSTR"] },
-    illumina_exome:  { label: "Illumina Exome",  tools: ["EHv5-bw2-optimized", "EHv5", "IlluminaEHv5", "GangSTR", "HipSTR", "EnsembleTR-EH+HipSTR", "EnsembleTR-EH+HipSTR+GangSTR"] },
-    element:         { label: "Element",         tools: ["EHv5-bw2-optimized", "EHv5", "HipSTR", "EnsembleTR-EH+HipSTR"] },
-    illumina_rnaseq: { label: "Illumina RNA-seq",tools: ["EHv5-bw2-optimized", "EHv5", "HipSTR"] },
+    illumina:        { label: "Illumina Genome", tools: ["EHv5-bw2-optimized", "IlluminaEHv5", "GangSTR", "HipSTR", "EnsembleTR-EH+HipSTR", "EnsembleTR-EH+HipSTR+GangSTR"] },
+    illumina_exome:  { label: "Illumina Exome",  tools: ["EHv5-bw2-optimized", "IlluminaEHv5", "GangSTR", "HipSTR", "EnsembleTR-EH+HipSTR", "EnsembleTR-EH+HipSTR+GangSTR"] },
+    element:         { label: "Element",         tools: ["EHv5-bw2-optimized", "HipSTR", "EnsembleTR-EH+HipSTR"] },
+    illumina_rnaseq: { label: "Illumina RNA-seq",tools: ["EHv5-bw2-optimized", "HipSTR"] },
     pacbio:          { label: "PacBio HiFi",     tools: ["TRGTv5", "TRGTv3", "inquiSTR", "LongTR", "vamos", "ATaRVa"] },
     ONT:             { label: "ONT",             tools: ["TRGTv5", "TRGTv3", "inquiSTR", "LongTR", "vamos", "ATaRVa"] },
     pacbio_isoseq:   { label: "PacBio Iso-Seq",  tools: ["TRGTv5", "TRGTv3", "inquiSTR", "LongTR", "ATaRVa"] },
@@ -851,8 +850,8 @@ const RES_METRICS = [
 // One color per tool, shared by all three charts (Tableau-10 + extras).
 const RES_TOOL_PALETTE = ["#4E79A7","#F28E2B","#59A14F","#E15759","#B07AA1","#76B7B2","#EDC948","#FF9DA7","#9C755F","#BAB0AC","#86BCB6","#D37295","#8CD17D"];
 // Tools omitted from the resource section only (the accuracy section's DATA_TYPES tool lists are unchanged):
-// the EHv5 low-mem-streaming variant and the EnsembleTR consensus tools aren't benchmarked here.
-const RES_EXCLUDED_TOOLS = new Set(["EHv5", "EnsembleTR-EH+HipSTR", "EnsembleTR-EH+HipSTR+GangSTR"]);
+// the EnsembleTR consensus tools aren't benchmarked here.
+const RES_EXCLUDED_TOOLS = new Set(["EnsembleTR-EH+HipSTR", "EnsembleTR-EH+HipSTR+GangSTR"]);
 // Sequencing data types omitted from the resource section only (accuracy section unchanged): not benchmarked here.
 const RES_EXCLUDED_DATA_TYPES = new Set(["element", "illumina_rnaseq", "pacbio_isoseq"]);
 

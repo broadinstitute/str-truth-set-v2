@@ -39,7 +39,6 @@ ENSEMBLETR_TOOLS = {
 
 SHORT_READ_TOOLS = {
     "IlluminaEHv5",
-    "EHv5",
     "EHv5-bw2-optimized",
     "GangSTR",
     "HipSTR",
@@ -207,6 +206,13 @@ def main():
                         help="Name of the catalog the truth set was genotyped against, which names its subdirectory "
                              "under each sample in --truth-set-genotypes-dir (eg. combined_43_catalog or "
                              "combined_321_catalog). The truth set exists once per catalog, so there is no default.")
+    parser.add_argument("--restrict-truth-set-to-tool-catalog-loci", action="store_true",
+                        help="Score each tool only at the truth set loci that are also in the sample's existing tool "
+                             "catalog ({filter-vcf-dir}/{sample_id}/{sample_id}.bed.gz). Without this, a truth locus the "
+                             "tool was never run on counts as a No Call for the tool. Meant for re-scoring existing tool "
+                             "results against a newer truth set, together with --skip-build-variant-catalogs-step and "
+                             "skipping the genotyping steps. Not used with --custom-catalog-path, whose runs are scored "
+                             "against a truth set genotyped on that same catalog.")
     parser.add_argument("--custom-catalog-path", help="If specified, use this catalog instead of the filter_vcf catalogs")
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--output-subdir", help="If specified, append this extra subdirectory after the "
@@ -272,7 +278,7 @@ def main():
     # that tool's handful of coverage dirs (seconds). *.tsv.gz covers the add-columns for_comparison table and the
     # combine-step .tsv.gz outputs, so skip detection works for those steps. It does NOT cover ExpansionHunter's
     # per-shard genotyping outputs, which are written as json/*.json (create_expansion_hunter_steps step1), so a
-    # plain re-run RE-GENOTYPES EHv5/EHv5-bw2-optimized/IlluminaEHv5 instead of skipping. To replot those without
+    # plain re-run RE-GENOTYPES EHv5-bw2-optimized/IlluminaEHv5 instead of skipping. To replot those without
     # re-genotyping, pass --skip-run-expansion-hunter-step --skip-combine-expansion-hunter-step --skip-add-columns-step
     # together with --force-plot-accuracy-step.
     precache_tools = args.tool
@@ -284,7 +290,7 @@ def main():
                 # also precache the per-shard genotyping json so existing shards are skipped without re-genotyping
                 # (lists only the json dirs -- ~20 files per combo, fast). This makes a no-force re-run surgical:
                 # only shards whose json is absent are re-run, the rest are reused. The *.json* glob matches both
-                # the uncompressed .json and the .json.gz the bw2 fork writes (-z is always on for EHv5/EHv5-bw2-optimized).
+                # the uncompressed .json and the .json.gz the bw2 fork writes (-z is always on for EHv5-bw2-optimized).
                 bp.precache_file_paths(os.path.join(
                     args.output_dir, precache_sample, precache_data_type, precache_tool, "**/json/*.json*"))
     # precache the prefiltered IlluminaEHv5 catalog(s) so the prefilter step is skipped once it already exists
@@ -361,8 +367,8 @@ def main():
                 # inquiSTR and ATaRVa both genotype from the plain {sample_id}.bed.gz loci catalog
                 # (chrom, start0, end, motif, motif_length; bgzipped + tabix-indexed)
                 repeat_catalog_paths = [catalog_paths_by_tool["inquiSTR"]]
-            elif tool == "vamos" or tool in ("EHv5", "EHv5-bw2-optimized", "IlluminaEHv5") or tool in ENSEMBLETR_TOOLS:
-                # vamos, all three ExpansionHunter v5 variants, and both EnsembleTR modes read the single unsharded
+            elif tool == "vamos" or tool in ("EHv5-bw2-optimized", "IlluminaEHv5") or tool in ENSEMBLETR_TOOLS:
+                # vamos, both ExpansionHunter v5 variants, and both EnsembleTR modes read the single unsharded
                 # EHv5 catalog json (IlluminaEHv5 prefilters it first; vamos/EnsembleTR derive from it in-step)
                 repeat_catalog_paths = [catalog_paths_by_tool["EHv5"]]
             elif tool in ("TRGTv3", "TRGTv5"):
@@ -375,17 +381,14 @@ def main():
             output_dir = os.path.join(args.output_dir, row.sample_id, row.sequencing_data_type, tool, f"{coverage_label}_coverage")
             if args.output_subdir:
                 output_dir = os.path.join(output_dir, args.output_subdir)
-            eh_json_paths = None  # only set below for EHv5/EHv5-bw2-optimized/IlluminaEHv5 -- the extract-step
+            eh_json_paths = None  # only set below for EHv5-bw2-optimized/IlluminaEHv5 -- the extract-step
                                    # branch reads it for EHv5-bw2-optimized's sequence-accuracy allele extraction
-            if tool in ("EHv5", "EHv5-bw2-optimized", "IlluminaEHv5"):
-                # Three ExpansionHunter v5 variants, all genotyped with create_expansion_hunter_steps:
-                #   EHv5               - bw2 fork, --analysis-mode low-mem-streaming
+            if tool in ("EHv5-bw2-optimized", "IlluminaEHv5"):
+                # Two ExpansionHunter v5 variants, both genotyped with create_expansion_hunter_steps:
                 #   EHv5-bw2-optimized - bw2 fork, --analysis-mode optimized-streaming --improved-genotyping
                 #   IlluminaEHv5       - original Illumina build, --analysis-mode streaming
                 use_illumina_expansion_hunter = (tool == "IlluminaEHv5")
-                if tool == "EHv5":
-                    analysis_mode = "low-mem-streaming"
-                elif tool == "EHv5-bw2-optimized":
+                if tool == "EHv5-bw2-optimized":
                     # optimized-streaming implies --improved-genotyping inside create_expansion_hunter_steps.
                     # EHV5_ANALYSIS_MODE overrides this (e.g. "streaming") to benchmark other bw2-fork modes
                     # with the same binary; cpu/threads/memory then come from EHV5_STREAMING_* as usual.
@@ -417,7 +420,7 @@ def main():
                     catalog_prefilter_step, filtered_catalog_path = illumina_eh_prefilter_steps[source_eh_catalog_path]
                     variant_catalog_file_paths = [filtered_catalog_path]
                 else:
-                    # the streaming EHv5 / EHv5-bw2-optimized variants use the single unsharded catalog; match the
+                    # the streaming EHv5-bw2-optimized variant uses the single unsharded catalog; match the
                     # exact .EHv5.001_of_001.json so the IlluminaEHv5 prefilter outputs that share the
                     # EHv5.001_of_001 stem (.for_illumina_eh.json, .without_loci_with_flanking_Ns.json/.filtered_loci.txt)
                     # are excluded
@@ -441,7 +444,7 @@ def main():
                     use_illumina_expansion_hunter=use_illumina_expansion_hunter,
                     # IlluminaEHv5 genotypes the single prefiltered catalog and must wait for the prefilter step
                     catalog_prefilter_step=catalog_prefilter_step,
-                    # EHv5/EHv5-bw2-optimized stream single-threaded. Always run UNSHARDED (one job over the whole
+                    # EHv5-bw2-optimized streams single-threaded. Always run UNSHARDED (one job over the whole
                     # catalog) -- both for the in-run per-sample build (whose catalog doesn't exist at construction,
                     # so it can't be sharded) and for a --custom-catalog-path (sharding it would re-download +
                     # re-scan the full CRAM once per shard). The single job is sized cpu=2 / --threads 4 / highmem,
@@ -636,7 +639,7 @@ def main():
                         reference_fasta=REFERENCE_FASTA_PATH,
                         reference_fasta_fai=REFERENCE_FASTA_FAI_PATH)
 
-            # EHv5, EHv5-bw2-optimized, and IlluminaEHv5 each keep their own label downstream (all three are
+            # EHv5-bw2-optimized and IlluminaEHv5 each keep their own label downstream (both are
             # registered in add_tool_results_columns.py / add_concordance_columns.py / plot_tool_accuracy_by_allele_size.py).
             add_columns_step = add_tool_comparison_columns_step(
                 bp,
@@ -646,6 +649,9 @@ def main():
                 sample_id=row.sample_id,
                 output_dir=output_dir,
                 truth_set_genotypes_path=get_truth_set_genotypes_tsv_path(args, row.sample_id),
+                tool_catalog_loci_bed_path=(
+                    catalog_paths_by_tool["inquiSTR"]
+                    if args.restrict_truth_set_to_tool_catalog_loci and not args.custom_catalog_path else None),
                 tool2="Truth",
                 allele_sequences_step=allele_sequences_step,
                 allele_sequences_path=allele_sequences_path,
@@ -1491,7 +1497,7 @@ def create_extract_expansion_hunter_allele_sequences_step(bp, combine_step, *, j
     return step, os.path.join(output_dir, allele_sequences_filename)
 
 
-def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage_label, sample_id, output_dir, truth_set_genotypes_path, tool2="Truth", allele_sequences_step=None, allele_sequences_path=None, download_to_dir=None):
+def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage_label, sample_id, output_dir, truth_set_genotypes_path, tool_catalog_loci_bed_path=None, tool2="Truth", allele_sequences_step=None, allele_sequences_path=None, download_to_dir=None):
     tool_results_path = None
     for output_spec in tool_results_step.get_outputs():
         if output_spec.output_path.endswith(".variants.tsv.gz"):
@@ -1521,6 +1527,29 @@ def add_tool_comparison_columns_step(bp, tool_results_step, *, tool, coverage_la
     # the truth set is the v2 genotype table; compute_truth_set_tsv_for_comparisons.py normalizes its columns and
     # carries the per-allele repeat purity (RepeatPurity: Allele 1/2) used by the purity-stratified plots
     local_truth_set_genotypes = add_columns_step.input(truth_set_genotypes_path)
+
+    # add_tool_results_columns.py left-joins the truth set to the tool results, so a truth locus missing from the
+    # tool's catalog would count as a tool No Call. When re-scoring existing results against a newer truth set, keep
+    # only the truth loci the tool was run on. The filtered table keeps the input's basename, since the downstream
+    # scripts derive their output filenames from it.
+    if tool_catalog_loci_bed_path is not None:
+        local_tool_catalog_loci_bed = add_columns_step.input(tool_catalog_loci_bed_path)
+        restricted_truth_set_genotypes = os.path.join("truth_set_restricted_to_tool_catalog_loci",
+                                                      os.path.basename(truth_set_genotypes_path))
+        add_columns_step.command(f"mkdir -p {os.path.dirname(restricted_truth_set_genotypes)}")
+        add_columns_step.command(f"""python3 <<EOF
+import gzip
+import pandas as pd
+with gzip.open("{local_tool_catalog_loci_bed}", "rt") as f:
+    tool_catalog_locus_ids = {{"-".join(line.split("\\t")[:4]).strip() for line in f}}
+truth_df = pd.read_table("{local_truth_set_genotypes}", dtype=str, keep_default_na=False)
+restricted_truth_df = truth_df[truth_df["LocusId"].isin(tool_catalog_locus_ids)]
+print(f"Kept {{len(restricted_truth_df):,d}} of {{len(truth_df):,d}} truth set loci that are in the tool catalog "
+      f"({{len(tool_catalog_locus_ids):,d}} loci)")
+restricted_truth_df.to_csv("{restricted_truth_set_genotypes}", sep="\\t", index=False)
+EOF
+""")
+        local_truth_set_genotypes = restricted_truth_set_genotypes
 
     # for the tools that report allele sequences, also localize the extract step's side-car table so the
     # sequence-accuracy columns can be added between add_tool_results_columns and add_concordance_columns

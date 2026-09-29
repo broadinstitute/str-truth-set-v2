@@ -89,9 +89,10 @@ def generate_set_of_positive_loci(df):
 def write_expansion_hunter_variant_catalogs(locus_set, output_path_prefix, loci_per_run):
     """Write the EHv5 variant catalog json, sorted by canonical motif.
 
-    Writes a single unsharded `<prefix>.001_of_001.json` used by all three ExpansionHunter variants
-    (EHv5, EHv5-bw2-optimized, IlluminaEHv5) and by vamos. Sharding was dropped now that every variant
-    runs 16-threaded on the one catalog. loci_per_run is accepted but unused.
+    Writes a single unsharded `<prefix>.001_of_001.json` used by both ExpansionHunter variants
+    (EHv5-bw2-optimized, IlluminaEHv5) and by vamos. Sharding was dropped because each variant genotypes
+    the whole catalog in one multi-threaded job (sharding would re-scan the full CRAM once per shard).
+    loci_per_run is accepted but unused.
     """
     variant_catalog = []
     for unmodified_chrom, start_0based, end_1based, motif in sorted(
@@ -104,7 +105,7 @@ def write_expansion_hunter_variant_catalogs(locus_set, output_path_prefix, loci_
             "VariantType": "Repeat",
         })
 
-    # All three ExpansionHunter variants now run 16-threaded on this single unsharded catalog, so it is never sharded.
+    # Both ExpansionHunter variants genotype this single unsharded catalog in one job, so it is never sharded.
     with open(f"{output_path_prefix}.001_of_001.json", "wt") as f:
         json.dump(variant_catalog, f, indent=3)
     print(f"Wrote 1 ExpansionHunter variant catalog ({len(variant_catalog):,d} loci) to "
