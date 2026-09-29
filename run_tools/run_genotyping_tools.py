@@ -163,6 +163,21 @@ BENCHMARK_PRIMARY_CONTIGS = [str(i) for i in range(1, 23)] + ["X", "Y"]
 BENCHMARK_MAX_MOTIF_SIZE_BP = 9
 BENCHMARK_MAX_LOCUS_SPAN_BP = 120
 
+
+def get_truth_set_genotypes_tsv_path(args, sample_id):
+    """Return the path of a sample's truth set genotypes TSV for the catalog named by --truth-set-catalog-name.
+
+    Args:
+        args (argparse.Namespace): parsed command-line args, with truth_set_genotypes_dir and truth_set_catalog_name
+        sample_id (str): sample id
+
+    Returns:
+        str: {truth_set_genotypes_dir}/{sample_id}/{truth_set_catalog_name}_genotypes/{sample_id}.tandem_repeat_genotypes.tsv.gz
+    """
+    return os.path.join(args.truth_set_genotypes_dir, sample_id, f"{args.truth_set_catalog_name}_genotypes",
+                        f"{sample_id}.tandem_repeat_genotypes.tsv.gz")
+
+
 def main():
     sample_table_path = "HPRC_all_aligned_short_read_and_long_read_samples.tsv"
     df = pd.read_table(sample_table_path)
@@ -185,8 +200,13 @@ def main():
                              "--truth-set-genotypes-dir) and the genotyping steps read them back from here.")
     parser.add_argument("--truth-set-genotypes-dir", default="gs://str-truth-set-v2/filter_vcf_v2",
                         help="Base dir for the filter_vcf_to_tandem_repeats genotype step output "
-                             "({sample_id}/{sample_id}.tandem_repeat_genotypes.tsv.gz), used as the truth set "
-                             "(it carries the per-allele repeat purity used by the purity-stratified plots)")
+                             "({sample_id}/{truth-set-catalog-name}_genotypes/{sample_id}.tandem_repeat_genotypes.tsv.gz), "
+                             "used as the truth set (it carries the per-allele repeat purity used by the "
+                             "purity-stratified plots)")
+    parser.add_argument("--truth-set-catalog-name", required=True,
+                        help="Name of the catalog the truth set was genotyped against, which names its subdirectory "
+                             "under each sample in --truth-set-genotypes-dir (eg. combined_43_catalog or "
+                             "combined_321_catalog). The truth set exists once per catalog, so there is no default.")
     parser.add_argument("--custom-catalog-path", help="If specified, use this catalog instead of the filter_vcf catalogs")
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--output-subdir", help="If specified, append this extra subdirectory after the "
@@ -328,8 +348,7 @@ def main():
                     variant_catalog_steps[row.sample_id] = create_variant_catalogs_step(
                         bp,
                         sample_id=row.sample_id,
-                        genotypes_tsv_path=os.path.join(args.truth_set_genotypes_dir, row.sample_id,
-                            f"{row.sample_id}.tandem_repeat_genotypes.tsv.gz"),
+                        genotypes_tsv_path=get_truth_set_genotypes_tsv_path(args, row.sample_id),
                         output_dir=os.path.join(args.filter_vcf_dir, row.sample_id))
                 build_catalogs_step, catalog_paths_by_tool = variant_catalog_steps[row.sample_id]
 
@@ -626,8 +645,7 @@ def main():
                 coverage_label=coverage_label,
                 sample_id=row.sample_id,
                 output_dir=output_dir,
-                truth_set_genotypes_path=os.path.join(
-                    args.truth_set_genotypes_dir, row.sample_id, f"{row.sample_id}.tandem_repeat_genotypes.tsv.gz"),
+                truth_set_genotypes_path=get_truth_set_genotypes_tsv_path(args, row.sample_id),
                 tool2="Truth",
                 allele_sequences_step=allele_sequences_step,
                 allele_sequences_path=allele_sequences_path,

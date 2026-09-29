@@ -50,6 +50,21 @@ def parse_args(bp):
     return args
 
 
+def get_dipcall_input_dir(row, input_dir):
+    """Return the directory holding a sample's dipcall outputs (<sample>.dip.vcf.gz and <sample>.dip.bed.gz).
+
+    Args:
+        row (pandas.Series): the sample's row of the metadata table, with sample_id and optionally subdirectory
+        input_dir (str): base directory of the dipcall pipeline outputs
+
+    Returns:
+        str: {input_dir}/[{subdirectory}/]{sample_id}
+    """
+    if row.get("subdirectory") and not pd.isna(row.get("subdirectory")):
+        input_dir = os.path.join(input_dir, row.subdirectory)
+    return os.path.join(input_dir, row.sample_id)
+
+
 def create_high_confidence_regions_vcf_step(bp, row, input_dir, output_dir, use_preemptibles=True):
     """Restrict the sample's dipcall VCF to its high-confidence regions and fix the two dipcall quirks described below.
 
@@ -68,11 +83,7 @@ def create_high_confidence_regions_vcf_step(bp, row, input_dir, output_dir, use_
         localize_by=Localize.GSUTIL_COPY,
         output_dir=output_dir)
 
-    dipcall_input_dir = input_dir
-    if row.get("subdirectory") and not pd.isna(row.get("subdirectory")):
-        dipcall_input_dir = os.path.join(input_dir, row.subdirectory)
-    dipcall_input_dir = os.path.join(dipcall_input_dir, row.sample_id)
-
+    dipcall_input_dir = get_dipcall_input_dir(row, input_dir)
     dipcall_vcf_input, dipcall_high_confidence_regions_bed_input = vcf_step.inputs(
         os.path.join(dipcall_input_dir, f"{row.sample_id}.dip.vcf.gz"),
         os.path.join(dipcall_input_dir, f"{row.sample_id}.dip.bed.gz"))
@@ -250,8 +261,8 @@ def get_catalog_name_from_catalog_bed_path(catalog_bed_path):
     return catalog_name.replace(".", "_")
 
 
-def create_genotype_step(bp, row, combined_catalog_bed_path, vcf_step, filter_step, combine_step, sample_dir,
-                         output_dir, add_motif_composition="trviz", threads=1, cpu=4, memory="standard",
+def create_genotype_step(bp, row, combined_catalog_bed_path, vcf_step, filter_step, combine_step, input_dir,
+                         sample_dir, output_dir, add_motif_composition="trviz", threads=1, cpu=4, memory="standard",
                          use_preemptibles=True, show_progress_bar=False):
 
     genotype_step = bp.new_step(
@@ -280,13 +291,27 @@ def create_genotype_step(bp, row, combined_catalog_bed_path, vcf_step, filter_st
     high_confidence_regions_vcf_input, _ = genotype_step.inputs(
         os.path.join(sample_dir, f"{row.sample_id}.high_confidence_regions.vcf.gz"),
         os.path.join(sample_dir, f"{row.sample_id}.high_confidence_regions.vcf.gz.tbi"))
+    dipcall_high_confidence_regions_bed_input = genotype_step.input(
+        os.path.join(get_dipcall_input_dir(row, input_dir), f"{row.sample_id}.dip.bed.gz"))
 
     genotype_step.command("set -exuo pipefail")
+
+    # Genotype only the catalog loci that lie entirely inside this sample's dipcall high-confidence regions. The
+    # genotype subcommand reports a locus with no overlapping variant as homozygous reference, and the VCF it reads
+    # was already restricted to these regions, so a locus outside them would otherwise get an unsupported reference
+    # call. bedtools merge also joins book-ended intervals, so a locus spanning two adjacent intervals is kept.
+    catalog_within_regions_path = "catalog_loci_within_high_confidence_regions.bed.gz"
+    genotype_step.command(f"gzip -dc {dipcall_high_confidence_regions_bed_input} | cut -f 1-3 | sort -k1,1 -k2,2n "
+                          f"| bedtools merge > high_confidence_regions.merged.bed")
+    genotype_step.command(f"bedtools intersect -a {catalog_bed_input} -b high_confidence_regions.merged.bed -f 1.0 -u "
+                          f"| bgzip > {catalog_within_regions_path}")
+    genotype_step.command(f"echo \"Catalog loci within {row.sample_id}'s high-confidence regions: "
+                          f"$(gzip -dc {catalog_within_regions_path} | wc -l) of $(gzip -dc {catalog_bed_input} | wc -l)\"")
 
     trf_args = f"--trf-executable-path /usr/bin/trf --trf-threads {int(2*cpu)}" if add_motif_composition == "trf" else ""
     genotype_step.command(f"python3 -u -m str_analysis.filter_vcf_to_tandem_repeats genotype \
             -R {hg38_fasta_input} \
-            --catalog-bed {catalog_bed_input} \
+            --catalog-bed {catalog_within_regions_path} \
             --write-json \
             --add-motif-composition {add_motif_composition} {trf_args} \
             --threads {threads} \
@@ -356,6 +381,7 @@ def main():
         sample_dir = os.path.join(args.output_dir, row.sample_id)
         create_genotype_step(bp, row, genotype_catalog_bed_path, vcf_step, filter_step,
                              None if args.genotype_catalog else combine_step,
+                             input_dir=args.input_dir,
                              sample_dir=sample_dir,
                              output_dir=os.path.join(sample_dir, genotype_subdir),
                              add_motif_composition=args.add_motif_composition,
