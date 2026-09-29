@@ -13,7 +13,7 @@ from step_pipeline import pipeline, Backend, Localize, files_exist
 from str_analysis.utils.file_utils import open_file
 
 
-FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:ceea479fcadac72813986411be2fc50549a4e80e3a47f97d431e3a68330956e4"
+FILTER_VCFS_DOCKER_IMAGE = "weisburd/filter-vcfs@sha256:ce0fb27c94f69caa82e89e4caa785a15d7d2f6d2da416e43cc9b25e6742e585b"
 
 REFERENCE_FASTA_PATH = "gs://str-truth-set/hg38/ref/hg38.fa"
 REFERENCE_FASTA_INDEX_PATH = "gs://str-truth-set/hg38/ref/hg38.fa.fai"

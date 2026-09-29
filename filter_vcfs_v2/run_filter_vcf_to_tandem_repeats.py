@@ -7,10 +7,13 @@ import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
-# Built by the str-analysis "build docker images" workflow and recorded in its docker/sha256_dockerhub.txt by
-# commit a2aa5b4, which includes 964ad5d (trviz as the recommended --add-motif-composition method). The image
-# installs the trviz python library (docker/Dockerfile).
-DOCKER_IMAGE = "weisburd/str-analysis@sha256:ea30c4500de79b5114471ef111ff8f4c2457f5c28042b1e5d6734aa1e06200af"
+# Built by the str-analysis "build docker images" workflow (run 36515684683) from commit b79d91c, which computes
+# the trviz motif composition inside the genotype subcommand's --threads worker processes and streams the JSON
+# output; the image's org.opencontainers.image.revision label names that commit. The image installs the trviz
+# python library (docker/Dockerfile).
+DOCKER_IMAGE = "weisburd/str-analysis@sha256:e6b94be0ed54b5169f0a4356e07f8e336b3fc1f8a5b4a1e3113a8052fdb61593"
+#DOCKER_IMAGE = "weisburd/str-analysis@sha256:2545406b14c2280d53238c86dfbc82cad883d6edf3c85d1e0f719bdaa01be7fa"
+#DOCKER_IMAGE = "weisburd/str-analysis@sha256:ea30c4500de79b5114471ef111ff8f4c2457f5c28042b1e5d6734aa1e06200af"
 #DOCKER_IMAGE = "weisburd/str-analysis@sha256:4fa33584da2ab7cb2acaac2472eb6a78b8b9eff773244fa311df61e0514d4387"
 #DOCKER_IMAGE = "us-central1-docker.pkg.dev/cmg-analysis/docker-repo/str-analysis@sha256:16191eb046706d19f2cc031f06e12c4da65e3e5f2e6d2a606b1aa8331bc2acae"
 
@@ -27,10 +30,14 @@ def parse_args(bp):
                         "'.tandem_repeats' or '.bed', with '.' replaced by '_' (eg. combined_321_catalogs).")
     parser.add_argument("--add-motif-composition", default="trviz", choices=["trviz", "trf", "basic"],
                         help="Method the genotype step uses to split each allele sequence into motifs.")
+    parser.add_argument("--genotype-threads", type=int, default=1, help="Number of worker processes the genotype "
+                        "step uses (passed to the genotype subcommand's --threads).")
     parser.add_argument("--show-progress-bar", action="store_true", help="Show a progress bar in the genotype step.")
     parser.add_argument("-n", type=int, help="Number of samples to process")
     parser.add_argument("-s", "--sample-id", action="append", help="Process only this sample. Can be specified more than once.")
     parser.add_argument("--metadata-tsv", default="../dipcall_pipeline/all_assemblies.tsv")
+    parser.add_argument("--exclude-samples-tsv", help="Skip the samples listed in the sample_id column of this table "
+                        "(eg. samples_excluded_from_downstream_analyses.tsv).")
     parser.add_argument("--input-dir", default="gs://str-truth-set-v2/dipcall_pipeline")
     parser.add_argument("--output-dir", default="gs://str-truth-set-v2/filter_vcf_v2")
     parser.add_argument("--cpu", type=float, default=4)
@@ -241,8 +248,8 @@ def get_catalog_name_from_catalog_bed_path(catalog_bed_path):
 
 
 def create_genotype_step(bp, row, combined_catalog_bed_path, vcf_step, filter_step, combine_step, sample_dir,
-                         output_dir, add_motif_composition="trviz", cpu=4, memory="standard", use_preemptibles=True,
-                         show_progress_bar=False):
+                         output_dir, add_motif_composition="trviz", threads=1, cpu=4, memory="standard",
+                         use_preemptibles=True, show_progress_bar=False):
 
     genotype_step = bp.new_step(
         f"genotype (cpu={cpu}): {row.sample_id}",
@@ -250,7 +257,9 @@ def create_genotype_step(bp, row, combined_catalog_bed_path, vcf_step, filter_st
         arg_suffix="genotype-step",
         preemptible=use_preemptibles,
         cpu=cpu,
-        storage="50G",
+        # The inputs and outputs fit in ~4G; the extra room is only for the temporary FASTA and TRF output files
+        # that --add-motif-composition trf writes.
+        storage="50G" if add_motif_composition == "trf" else "10G",
         memory=memory,
         localize_by=Localize.GSUTIL_COPY,
         output_dir=output_dir)
@@ -277,6 +286,7 @@ def create_genotype_step(bp, row, combined_catalog_bed_path, vcf_step, filter_st
             --catalog-bed {catalog_bed_input} \
             --write-json \
             --add-motif-composition {add_motif_composition} {trf_args} \
+            --threads {threads} \
             {'--show-progress-bar' if show_progress_bar else ''} \
             --output-prefix {row.sample_id} \
             {high_confidence_regions_vcf_input} |& tee {row.sample_id}.genotype.log")
@@ -299,6 +309,11 @@ def main():
     df = pd.read_table(args.metadata_tsv)
     if args.sample_id:
         df = df[df.sample_id.isin(args.sample_id)]
+
+    if args.exclude_samples_tsv:
+        excluded_sample_ids = set(pd.read_table(args.exclude_samples_tsv).sample_id)
+        print(f"Excluding {df.sample_id.isin(excluded_sample_ids).sum():,d} sample(s) listed in {args.exclude_samples_tsv}")
+        df = df[~df.sample_id.isin(excluded_sample_ids)]
 
     if args.n:
         df = df.iloc[:args.n]
@@ -341,6 +356,7 @@ def main():
                              sample_dir=sample_dir,
                              output_dir=os.path.join(sample_dir, genotype_subdir),
                              add_motif_composition=args.add_motif_composition,
+                             threads=args.genotype_threads,
                              cpu=args.cpu,
                              memory=args.memory,
                              use_preemptibles=not args.use_nonpreemptibles,

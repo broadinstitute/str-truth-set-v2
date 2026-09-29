@@ -1,0 +1,17 @@
+sample_id	reason
+HG00096	HGSVC2 male: h1/h2 assemblies are not split into X-carrying and Y-carrying haplotypes, so dipcall male mode dropped almost all of chrX (2.9 Mb) and chrY (3.7 Mb) from the confident regions
+HG00512	HGSVC2 male: h1/h2 assemblies are not split into X-carrying and Y-carrying haplotypes, so dipcall male mode dropped almost all of chrX (0.6 Mb) and chrY (1.7 Mb) from the confident regions
+HG00731	HGSVC2 male: h1/h2 assemblies are not split into X-carrying and Y-carrying haplotypes, so dipcall male mode dropped almost all of chrX (0.6 Mb) and chrY (1.0 Mb) from the confident regions
+HG01505	HGSVC2 male: h1/h2 assemblies are not split into X-carrying and Y-carrying haplotypes, so dipcall male mode dropped almost all of chrX (1.9 Mb) and chrY (3.3 Mb) from the confident regions
+HG01596	HGSVC2 male: h1/h2 assemblies are not split into X-carrying and Y-carrying haplotypes, so dipcall male mode dropped almost all of chrX (1.8 Mb) and chrY (2.6 Mb) from the confident regions
+HG02011	HGSVC2 male: h1/h2 assemblies are not split into X-carrying and Y-carrying haplotypes, so dipcall male mode dropped almost all of chrX (0.4 Mb) and chrY (0.9 Mb) from the confident regions
+HG02492	HGSVC2 male: h1/h2 assemblies are not split into X-carrying and Y-carrying haplotypes, so dipcall male mode dropped almost all of chrX (1.7 Mb) and chrY (2.0 Mb) from the confident regions
+HG03009	HGSVC2 male: h1/h2 assemblies are not split into X-carrying and Y-carrying haplotypes, so dipcall male mode dropped almost all of chrX (0.3 Mb) and chrY (1.1 Mb) from the confident regions
+HG03065	HGSVC2 male: h1/h2 assemblies are not split into X-carrying and Y-carrying haplotypes, so dipcall male mode dropped almost all of chrX (1.6 Mb) and chrY (3.1 Mb) from the confident regions
+HG03371	HGSVC2 male: h1/h2 assemblies are not split into X-carrying and Y-carrying haplotypes, so dipcall male mode dropped almost all of chrX (2.2 Mb) and chrY (2.9 Mb) from the confident regions
+HG03732	HGSVC2 male: h1/h2 assemblies are not split into X-carrying and Y-carrying haplotypes, so dipcall male mode dropped almost all of chrX (1.6 Mb) and chrY (2.4 Mb) from the confident regions
+NA18534	HGSVC2 male: h1/h2 assemblies are not split into X-carrying and Y-carrying haplotypes, so dipcall male mode dropped almost all of chrX (0.3 Mb) and chrY (1.0 Mb) from the confident regions
+NA19239	HGSVC2 male: h1/h2 assemblies are not split into X-carrying and Y-carrying haplotypes, so dipcall male mode dropped almost all of chrX (1.9 Mb) and chrY (3.0 Mb) from the confident regions
+NA19650	HGSVC2 male: h1/h2 assemblies are not split into X-carrying and Y-carrying haplotypes, so dipcall male mode dropped almost all of chrX (3.1 Mb) and chrY (3.7 Mb) from the confident regions
+NA20509	HGSVC2 male: h1/h2 assemblies are not split into X-carrying and Y-carrying haplotypes, so dipcall male mode dropped almost all of chrX (2.8 Mb) and chrY (4.3 Mb) from the confident regions
+APR041	APR male: dipcall confident regions cover only 75.1 Mb of chrX (other males 146.6-149.1 Mb) even though OpenHGL assigns chrY to hap1 and chrX to hap2

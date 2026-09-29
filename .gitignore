@@ -182,3 +182,8 @@ run_tools/HPRC_all_aligned_short_read_and_long_read_samples.tsv
 
 # Working directory for run_truthset_release_check.py (cached GIAB downloads, intermediate BEDs and VCFs)
 filter_vcfs_v2/truthset_release_check/
+
+# Local scratch work, Claude history logs, and downloaded results
+scratch/
+.memory/
+results_*
