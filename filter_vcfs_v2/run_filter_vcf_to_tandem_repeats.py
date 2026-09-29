@@ -7,11 +7,14 @@ import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
-# Built by the str-analysis "build docker images" workflow (run 36515684683) from commit b79d91c, which computes
-# the trviz motif composition inside the genotype subcommand's --threads worker processes and streams the JSON
-# output; the image's org.opencontainers.image.revision label names that commit. The image installs the trviz
-# python library (docker/Dockerfile).
-DOCKER_IMAGE = "weisburd/str-analysis@sha256:e6b94be0ed54b5169f0a4356e07f8e336b3fc1f8a5b4a1e3113a8052fdb61593"
+# Built by the str-analysis "build docker images" workflow from commit e32a856, which writes the genotype TSV and
+# JSON outputs in parallel when --threads is above 1. It includes 9b5bc98 (basic motif splitting for loci whose
+# motif has bases trviz rejects, eg. GCN in the TRExplorer v2.1 catalog) and b79d91c (trviz motif composition
+# inside the genotype subcommand's --threads worker processes, and streamed JSON output). The image's
+# org.opencontainers.image.revision label names e32a856, and it installs the trviz python library
+# (docker/Dockerfile).
+DOCKER_IMAGE = "weisburd/str-analysis@sha256:f6583c9cde61c4d3dc8e2da96ebbd015297ca13e314150217e0c9afdf3fc1078"
+#DOCKER_IMAGE = "weisburd/str-analysis@sha256:703c8e32c86626d0f8da005f14176dddcfaf05562e94877d9389346d6a93d851"
 #DOCKER_IMAGE = "weisburd/str-analysis@sha256:2545406b14c2280d53238c86dfbc82cad883d6edf3c85d1e0f719bdaa01be7fa"
 #DOCKER_IMAGE = "weisburd/str-analysis@sha256:ea30c4500de79b5114471ef111ff8f4c2457f5c28042b1e5d6734aa1e06200af"
 #DOCKER_IMAGE = "weisburd/str-analysis@sha256:4fa33584da2ab7cb2acaac2472eb6a78b8b9eff773244fa311df61e0514d4387"
