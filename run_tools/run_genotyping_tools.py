@@ -1088,7 +1088,8 @@ def _scrape_benchmark_metrics(batch_id, billing_project, sizes, tool):
 
     Matches this tool's genotyping jobs by BENCHMARK_TOOL_CONFIG[tool]["job_name"], parses the catalog size from the
     'trexplorer_top_{size}' token in the job name, the wall-clock runtime and peak RSS from the /usr/bin/time --verbose
-    output in the job log, and the cost from the Hail Batch client. Runtime is reported as CPU-hours (wall-clock x
+    output in the job log, and the cost of the job's completed attempt from the Hail Batch client (preempted attempts
+    are excluded, see _compute_cost_of_completed_attempt). Runtime is reported as CPU-hours (wall-clock x
     the job's actual allocated cpu) so different-VM tools are comparable; memory as peak RSS in GB. For each size it
     also records the batch id, job id, and the sanitized genotyping command line (from that job's `set -x` echo) so
     every data point is traceable back to the job that produced it.
@@ -1125,11 +1126,16 @@ def _scrape_benchmark_metrics(batch_id, billing_project, sizes, tool):
         if size not in sizes:
             continue
 
+        # a job that didn't succeed (failed, cancelled, or killed for running out of memory) records nothing: the
+        # /usr/bin/time summary is still printed when the tool is killed, so its runtime and RSS would describe a
+        # partial run.
+        if job_info["state"] != "Success":
+            print(f"WARNING: skipping catalog size {size}: job {job_info['job_id']} ended in state {job_info['state']}")
+            continue
+
         job = batch.get_job(job_info["job_id"])
         status = job.status()
-        cost = status.get("cost")
-        if isinstance(cost, str):
-            cost = float(cost.lstrip("$")) if cost.strip() else None
+        cost = _compute_cost_of_completed_attempt(job, status.get("cost"))
 
         # runtime CPU-hours = wall-clock x the cores the tool actually uses (its thread count), NOT the provisioned
         # cpu -- e.g. HipSTR is single-threaded on a cpu=2 VM (2nd core only for RAM), so its idle core isn't counted.
@@ -1176,6 +1182,35 @@ def _scrape_benchmark_metrics(batch_id, billing_project, sizes, tool):
             print(f"WARNING: no {tool} genotyping job found for catalog size {size}")
             metrics[size] = {k: None for k in ("runtime", "memory", "cost", "batch_id", "job_id", "command")}
     return metrics, vm
+
+
+def _compute_cost_of_completed_attempt(job, total_job_cost):
+    """Return the cost of a job's completed attempt, excluding the cost of any attempts that were preempted.
+
+    Hail Batch reports one cost per job, summed over all of its attempts, so a job that was preempted and retried
+    looks more expensive than the same work done in one attempt. Every attempt of a job runs on the same resources
+    and Hail bills them per unit time, so the completed attempt's cost is the job's total cost times the completed
+    attempt's share of the total attempt duration.
+
+    Args:
+        job: the hailtop batch_client Job.
+        total_job_cost: the job's total cost from its status (a float, or a "$1.23" string).
+
+    Returns:
+        float: the completed attempt's cost in USD, or None if the job's cost or the completed attempt's duration is
+        unknown (for example, a job that was cancelled or never completed).
+    """
+    if isinstance(total_job_cost, str):
+        total_job_cost = float(total_job_cost.lstrip("$")) if total_job_cost.strip() else None
+    if total_job_cost is None:
+        return None
+
+    attempts = job.attempts() or []
+    total_duration_ms = sum(a.get("duration_ms") or 0 for a in attempts)
+    completed_duration_ms = sum(a.get("duration_ms") or 0 for a in attempts if a.get("reason") == "completed")
+    if total_duration_ms == 0 or completed_duration_ms == 0:
+        return None
+    return total_job_cost * completed_duration_ms / total_duration_ms
 
 
 def _write_resource_metrics_json(metrics_by_size, sizes, tool, coverage_dir, vm):
