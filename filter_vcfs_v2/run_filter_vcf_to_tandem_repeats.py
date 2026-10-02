@@ -65,6 +65,16 @@ def get_dipcall_input_dir(row, input_dir):
     return os.path.join(input_dir, row.sample_id)
 
 
+def get_output_sample_dir(row, output_dir):
+    """Return the directory for a sample's outputs, mirroring its dipcall batch: {output_dir}/[{subdirectory}/]{sample_id}.
+
+    filter_vcf_v2/ uses the same batch subdirectories as dipcall_pipeline/ (top level, HPRC_release2/,
+    human579_assemblies/), so a sample assembled in more than one batch can have truth from each without the two
+    overwriting each other. See sample_to_dipcall_batch.tsv for the batch of every sample in filter_vcf_v2/.
+    """
+    return get_dipcall_input_dir(row, output_dir)
+
+
 def create_high_confidence_regions_vcf_step(bp, row, input_dir, output_dir, use_preemptibles=True):
     """Restrict the sample's dipcall VCF to its high-confidence regions and fix the two dipcall quirks described below.
 
@@ -358,7 +368,7 @@ def main():
     vcf_steps = []
     filter_steps = []
     for row_i, (_, row) in enumerate(df.iterrows()):
-        output_dir = os.path.join(args.output_dir, row.sample_id)
+        output_dir = get_output_sample_dir(row, args.output_dir)
         vcf_step = create_high_confidence_regions_vcf_step(bp, row, args.input_dir, output_dir,
                                                            use_preemptibles=not args.use_nonpreemptibles)
         filter_step = create_filter_step(bp, row, vcf_step, output_dir,
@@ -378,7 +388,7 @@ def main():
     genotype_catalog_bed_path = args.genotype_catalog or combine_step.get_outputs()[0].output_path
     genotype_subdir = f"{args.genotype_catalog_name or get_catalog_name_from_catalog_bed_path(genotype_catalog_bed_path)}_genotypes"
     for (_, row), vcf_step, filter_step in zip(df.iterrows(), vcf_steps, filter_steps):
-        sample_dir = os.path.join(args.output_dir, row.sample_id)
+        sample_dir = get_output_sample_dir(row, args.output_dir)
         create_genotype_step(bp, row, genotype_catalog_bed_path, vcf_step, filter_step,
                              None if args.genotype_catalog else combine_step,
                              input_dir=args.input_dir,

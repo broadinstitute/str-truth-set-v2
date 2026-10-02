@@ -163,18 +163,52 @@ BENCHMARK_MAX_MOTIF_SIZE_BP = 9
 BENCHMARK_MAX_LOCUS_SPAN_BP = 120
 
 
-def get_truth_set_genotypes_tsv_path(args, sample_id):
+# filter_vcf_v2/ keeps each sample under the same batch subdirectory as its dipcall run in dipcall_pipeline/ (top
+# level, HPRC_release2/ or human579_assemblies/). This table, built from evidence by
+# filter_vcfs_v2/build_sample_to_dipcall_batch_table.py, says which batch each sample's truth came from.
+SAMPLE_TO_DIPCALL_BATCH_TSV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "filter_vcfs_v2",
+                                                "sample_to_dipcall_batch.tsv")
+TOP_LEVEL_DIPCALL_BATCH = "top_level"
+
+
+def load_dipcall_batch_by_sample_id():
+    """Return {sample_id: dipcall batch} from sample_to_dipcall_batch.tsv."""
+    df = pd.read_table(SAMPLE_TO_DIPCALL_BATCH_TSV_PATH, keep_default_na=False)
+    return dict(zip(df.sample_id, df.dipcall_batch))
+
+
+def get_filter_vcf_sample_dir(base_dir, sample_id, dipcall_batch_by_sample_id):
+    """Return a sample's directory under a filter_vcf_v2-style base dir: {base_dir}/[{batch}/]{sample_id}.
+
+    A sample missing from the batch table (e.g. one with no assembly-based truth) is placed at the top level.
+
+    Args:
+        base_dir (str): base dir, e.g. gs://str-truth-set-v2/filter_vcf_v2
+        sample_id (str): sample id
+        dipcall_batch_by_sample_id (dict): from load_dipcall_batch_by_sample_id()
+
+    Returns:
+        str: the sample's directory
+    """
+    batch = dipcall_batch_by_sample_id.get(sample_id, TOP_LEVEL_DIPCALL_BATCH)
+    if batch == TOP_LEVEL_DIPCALL_BATCH:
+        return os.path.join(base_dir, sample_id)
+    return os.path.join(base_dir, batch, sample_id)
+
+
+def get_truth_set_genotypes_tsv_path(args, sample_id, dipcall_batch_by_sample_id):
     """Return the path of a sample's truth set genotypes TSV for the catalog named by --truth-set-catalog-name.
 
     Args:
         args (argparse.Namespace): parsed command-line args, with truth_set_genotypes_dir and truth_set_catalog_name
         sample_id (str): sample id
+        dipcall_batch_by_sample_id (dict): from load_dipcall_batch_by_sample_id()
 
     Returns:
-        str: {truth_set_genotypes_dir}/{sample_id}/{truth_set_catalog_name}_genotypes/{sample_id}.tandem_repeat_genotypes.tsv.gz
+        str: {truth_set_genotypes_dir}/[{batch}/]{sample_id}/{truth_set_catalog_name}_genotypes/{sample_id}.tandem_repeat_genotypes.tsv.gz
     """
-    return os.path.join(args.truth_set_genotypes_dir, sample_id, f"{args.truth_set_catalog_name}_genotypes",
-                        f"{sample_id}.tandem_repeat_genotypes.tsv.gz")
+    return os.path.join(get_filter_vcf_sample_dir(args.truth_set_genotypes_dir, sample_id, dipcall_batch_by_sample_id),
+                        f"{args.truth_set_catalog_name}_genotypes", f"{sample_id}.tandem_repeat_genotypes.tsv.gz")
 
 
 def main():
@@ -194,12 +228,13 @@ def main():
     parser.add_argument("--data-type", action="append", choices=SHORT_READ_DATA_TYPES|LONG_READ_DATA_TYPES, help="Which data type(s) to process")
     parser.add_argument("-k", "--filename-keyword", help="If specified, only BAM paths that contain this keyword will be processed", action="append")
     parser.add_argument("--filter-vcf-dir", default="gs://str-truth-set-v2/filter_vcf_v2",
-                        help="Base dir under which the per-sample tool catalogs live ({sample_id}/{sample_id}.EHv5* "
-                             "etc.). The build-catalogs step writes them here (from the truth set in "
+                        help="Base dir under which the per-sample tool catalogs live ([{batch}/]{sample_id}/{sample_id}.EHv5* "
+                             "etc., where batch comes from filter_vcfs_v2/sample_to_dipcall_batch.tsv and is omitted "
+                             "for top-level samples). The build-catalogs step writes them here (from the truth set in "
                              "--truth-set-genotypes-dir) and the genotyping steps read them back from here.")
     parser.add_argument("--truth-set-genotypes-dir", default="gs://str-truth-set-v2/filter_vcf_v2",
                         help="Base dir for the filter_vcf_to_tandem_repeats genotype step output "
-                             "({sample_id}/{truth-set-catalog-name}_genotypes/{sample_id}.tandem_repeat_genotypes.tsv.gz), "
+                             "([{batch}/]{sample_id}/{truth-set-catalog-name}_genotypes/{sample_id}.tandem_repeat_genotypes.tsv.gz), "
                              "used as the truth set (it carries the per-allele repeat purity used by the "
                              "purity-stratified plots)")
     parser.add_argument("--truth-set-catalog-name", required=True,
@@ -246,6 +281,7 @@ def main():
                              "this already-finished Hail Batch id (printed by an earlier run) and (re)write "
                              "resource_metrics.json. Use the same --benchmark-* args as the original run.")
     args = bp.parse_known_args()
+    dipcall_batch_by_sample_id = load_dipcall_batch_by_sample_id()
 
     if args.benchmark_resources:
         run_resource_benchmark(bp, args, df)
@@ -354,8 +390,8 @@ def main():
                     variant_catalog_steps[row.sample_id] = create_variant_catalogs_step(
                         bp,
                         sample_id=row.sample_id,
-                        genotypes_tsv_path=get_truth_set_genotypes_tsv_path(args, row.sample_id),
-                        output_dir=os.path.join(args.filter_vcf_dir, row.sample_id))
+                        genotypes_tsv_path=get_truth_set_genotypes_tsv_path(args, row.sample_id, dipcall_batch_by_sample_id),
+                        output_dir=get_filter_vcf_sample_dir(args.filter_vcf_dir, row.sample_id, dipcall_batch_by_sample_id))
                 build_catalogs_step, catalog_paths_by_tool = variant_catalog_steps[row.sample_id]
 
             # Resolve the catalog path(s) this tool reads. With --custom-catalog-path, hfs.ls it as before.
@@ -412,7 +448,7 @@ def main():
                             eh_catalog_path=source_eh_catalog_path,
                             reference_fasta=REFERENCE_FASTA_PATH,
                             reference_fasta_fai=REFERENCE_FASTA_FAI_PATH,
-                            output_dir=os.path.join(args.filter_vcf_dir, row.sample_id))
+                            output_dir=get_filter_vcf_sample_dir(args.filter_vcf_dir, row.sample_id, dipcall_batch_by_sample_id))
                         # the prefilter reads the build-catalogs step's EHv5 json, so it must wait for that step
                         if build_catalogs_step is not None:
                             prefilter_step[0].depends_on(build_catalogs_step)
@@ -648,7 +684,7 @@ def main():
                 coverage_label=coverage_label,
                 sample_id=row.sample_id,
                 output_dir=output_dir,
-                truth_set_genotypes_path=get_truth_set_genotypes_tsv_path(args, row.sample_id),
+                truth_set_genotypes_path=get_truth_set_genotypes_tsv_path(args, row.sample_id, dipcall_batch_by_sample_id),
                 tool_catalog_loci_bed_path=(
                     catalog_paths_by_tool["inquiSTR"]
                     if args.restrict_truth_set_to_tool_catalog_loci and not args.custom_catalog_path else None),

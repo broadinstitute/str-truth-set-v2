@@ -1,0 +1,322 @@
+sample_id	dipcall_batch	evidence	metadata_table_batch	candidate_batches	n_variants_tested	n_outside_by_batch
+APR-F	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	97023	human579_assemblies:0
+APR-M	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	99684	human579_assemblies:0
+APR001	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	99757	human579_assemblies:0
+APR002	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	98441	human579_assemblies:0
+APR003	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	94533	human579_assemblies:0
+APR004	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	96856	human579_assemblies:0
+APR005	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	94999	human579_assemblies:0
+APR006	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	100708	human579_assemblies:0
+APR007	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	97631	human579_assemblies:0
+APR008	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	99110	human579_assemblies:0
+APR009	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	99948	human579_assemblies:0
+APR010	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	93788	human579_assemblies:0
+APR011	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	97231	human579_assemblies:0
+APR012	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	96084	human579_assemblies:0
+APR013	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	97189	human579_assemblies:0
+APR014	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	97291	human579_assemblies:0
+APR015	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	98030	human579_assemblies:0
+APR016	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	98418	human579_assemblies:0
+APR018	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	94465	human579_assemblies:0
+APR019	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	97931	human579_assemblies:0
+APR020	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	100886	human579_assemblies:0
+APR021	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	97755	human579_assemblies:0
+APR022	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	94202	human579_assemblies:0
+APR023	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	101060	human579_assemblies:0
+APR024	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	99189	human579_assemblies:0
+APR025	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	102654	human579_assemblies:0
+APR026	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	96694	human579_assemblies:0
+APR027	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	93476	human579_assemblies:0
+APR029	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	95054	human579_assemblies:0
+APR030	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	98525	human579_assemblies:0
+APR031	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	94263	human579_assemblies:0
+APR032	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	96403	human579_assemblies:0
+APR033	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	101841	human579_assemblies:0
+APR034	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	97460	human579_assemblies:0
+APR035	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	103902	human579_assemblies:0
+APR036	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	101528	human579_assemblies:0
+APR037	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	97098	human579_assemblies:0
+APR038	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	105388	human579_assemblies:0
+APR039	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	97216	human579_assemblies:0
+APR040	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	98216	human579_assemblies:0
+APR041	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	96381	human579_assemblies:0
+APR042	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	99826	human579_assemblies:0
+APR043	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	102272	human579_assemblies:0
+APR044	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	102016	human579_assemblies:0
+APR045	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	100443	human579_assemblies:0
+APR046	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	98337	human579_assemblies:0
+APR047	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	97984	human579_assemblies:0
+APR048	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	97566	human579_assemblies:0
+APR049	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	94893	human579_assemblies:0
+APR050	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	101330	human579_assemblies:0
+APR051	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	99617	human579_assemblies:0
+APR052	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	100931	human579_assemblies:0
+CHM1_CHM13	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	94539	top_level:0
+CN1	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	95326	human579_assemblies:0
+HG00096	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	95481	top_level:0
+HG00097	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95254	HPRC_release2:0
+HG00099	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95237	HPRC_release2:0
+HG00126	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94395	HPRC_release2:0
+HG00128	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95080	HPRC_release2:0
+HG00133	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95632	HPRC_release2:0
+HG00140	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94402	HPRC_release2:0
+HG00146	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95233	HPRC_release2:0
+HG00171	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	96863	top_level:0
+HG002	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	95455	top_level:0,HPRC_release2:189
+HG00232	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94947	HPRC_release2:0
+HG00235	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95306	HPRC_release2:0
+HG00253	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95374	HPRC_release2:0
+HG00272	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94842	HPRC_release2:0
+HG00280	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94516	HPRC_release2:0
+HG00290	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94320	HPRC_release2:0
+HG00320	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94915	HPRC_release2:0
+HG00321	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94446	HPRC_release2:0
+HG00323	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95537	HPRC_release2:0
+HG00329	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94901	HPRC_release2:0
+HG00344	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95005	HPRC_release2:0
+HG00350	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95093	HPRC_release2:0
+HG00408	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95747	HPRC_release2:0
+HG00423	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95643	HPRC_release2:0
+HG00438	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	95844	top_level:0,HPRC_release2:319
+HG005	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	95387	top_level:0,HPRC_release2:462
+HG00512	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	98084	top_level:0
+HG00513	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	98189	top_level:0
+HG00514	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	118898	top_level:0
+HG00544	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95421	HPRC_release2:0
+HG00558	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94891	HPRC_release2:0
+HG00597	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95591	HPRC_release2:0
+HG00609	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95112	HPRC_release2:0
+HG00621	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	94956	top_level:0,HPRC_release2:146
+HG00639	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	99998	HPRC_release2:0
+HG00642	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97406	HPRC_release2:0
+HG00658	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95323	HPRC_release2:0
+HG00673	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	94866	top_level:0,HPRC_release2:555
+HG00706	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95379	HPRC_release2:0
+HG00731	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	93985	top_level:0
+HG00732	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	98165	top_level:0
+HG00733	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	96550	top_level:0,HPRC_release2:297
+HG00735	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	98897	top_level:0,HPRC_release2:230
+HG00738	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97257	HPRC_release2:0
+HG00741	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	98868	top_level:0,HPRC_release2:303
+HG00864	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	97894	top_level:0
+HG01071	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	98110	top_level:0,HPRC_release2:265
+HG01074	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97081	HPRC_release2:0
+HG01081	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	100549	HPRC_release2:0
+HG01099	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97666	HPRC_release2:0
+HG01106	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	97441	top_level:0,HPRC_release2:176
+HG01109	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	108126	top_level:0,HPRC_release2:261
+HG01114	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	105405	top_level:0
+HG01123	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	98271	top_level:0,HPRC_release2:365
+HG01150	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	99198	HPRC_release2:0
+HG01167	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	101708	HPRC_release2:0
+HG01175	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	98200	top_level:0,HPRC_release2:258
+HG01192	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	99127	HPRC_release2:0
+HG01243	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	110021	top_level:0,HPRC_release2:298
+HG01252	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97519	HPRC_release2:0
+HG01255	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	98575	HPRC_release2:0
+HG01258	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	96208	top_level:0,HPRC_release2:378
+HG01261	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97860	HPRC_release2:0
+HG01346	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97981	HPRC_release2:0
+HG01358	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	95850	top_level:0,HPRC_release2:349
+HG01361	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	97556	top_level:0,HPRC_release2:357
+HG01433	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97821	HPRC_release2:0
+HG01496	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	99941	HPRC_release2:0
+HG01505	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	94910	top_level:0
+HG01530	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95509	HPRC_release2:0
+HG01596	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	98771	top_level:0
+HG01784	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95711	HPRC_release2:0
+HG01786	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95524	HPRC_release2:0
+HG01884	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	117244	HPRC_release2:0
+HG01891	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	116092	top_level:0,HPRC_release2:355
+HG01928	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	91921	top_level:0,HPRC_release2:383
+HG01934	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95606	HPRC_release2:0
+HG01940	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94395	HPRC_release2:0
+HG01943	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	93460	HPRC_release2:0
+HG01952	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	93444	top_level:0,HPRC_release2:277
+HG01960	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	113245	HPRC_release2:0
+HG01969	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94917	HPRC_release2:0
+HG01975	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94516	HPRC_release2:0
+HG01978	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	94157	top_level:0,HPRC_release2:207
+HG01981	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95659	HPRC_release2:0
+HG01993	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94477	HPRC_release2:0
+HG02004	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	93939	HPRC_release2:0
+HG02011	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	110805	top_level:0
+HG02015	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95502	HPRC_release2:0
+HG02027	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95292	HPRC_release2:0
+HG02040	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95399	HPRC_release2:0
+HG02055	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	115174	top_level:0,HPRC_release2:306
+HG02056	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95109	HPRC_release2:0
+HG02071	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95355	HPRC_release2:0
+HG02074	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95301	HPRC_release2:0
+HG02080	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	96062	top_level:0,HPRC_release2:311
+HG02083	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95008	HPRC_release2:0
+HG02109	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	114592	top_level:0,HPRC_release2:337
+HG02129	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95600	HPRC_release2:0
+HG02132	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	96001	HPRC_release2:0
+HG02135	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94856	HPRC_release2:0
+HG02145	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	114100	top_level:0,HPRC_release2:194
+HG02148	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	92699	top_level:0,HPRC_release2:422
+HG02155	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95318	HPRC_release2:0
+HG02165	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95922	HPRC_release2:0
+HG02178	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95729	HPRC_release2:0
+HG02257	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	114184	top_level:0,HPRC_release2:373
+HG02258	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	114956	HPRC_release2:0
+HG02273	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	91535	HPRC_release2:0
+HG02280	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	115923	HPRC_release2:0
+HG02293	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	93068	HPRC_release2:0
+HG02300	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95224	HPRC_release2:0
+HG02391	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94778	HPRC_release2:0
+HG02392	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94061	HPRC_release2:0
+HG02451	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	116268	HPRC_release2:0
+HG02486	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	113875	top_level:0,HPRC_release2:158
+HG02492	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	95337	top_level:0
+HG02514	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95154	HPRC_release2:0
+HG02523	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95667	HPRC_release2:0
+HG02559	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	115591	top_level:0,HPRC_release2:391
+HG02572	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	114576	top_level:0,HPRC_release2:427
+HG02583	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	115967	HPRC_release2:0
+HG02587	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	119753	top_level:0
+HG02602	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97340	HPRC_release2:0
+HG02615	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	115479	HPRC_release2:0
+HG02622	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	116198	top_level:0,HPRC_release2:273
+HG02630	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	116561	top_level:0,HPRC_release2:487
+HG02647	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	114803	HPRC_release2:0
+HG02668	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	114951	HPRC_release2:0
+HG02698	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	96922	HPRC_release2:0
+HG02717	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	115242	top_level:0,HPRC_release2:157
+HG02723	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	116112	top_level:0,HPRC_release2:322
+HG02735	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97057	HPRC_release2:0
+HG02738	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95708	HPRC_release2:0
+HG02809	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	116028	HPRC_release2:0
+HG02818	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	115575	top_level:0,HPRC_release2:276
+HG02841	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	116107	HPRC_release2:0
+HG02886	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	115595	top_level:0,HPRC_release2:256
+HG02922	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	117300	HPRC_release2:0
+HG02965	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	115510	HPRC_release2:0
+HG02976	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	117143	HPRC_release2:0
+HG02984	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	114742	HPRC_release2:0
+HG03009	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	100264	top_level:0
+HG03017	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97231	HPRC_release2:0
+HG03041	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	116326	HPRC_release2:0
+HG03050	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	114828	HPRC_release2:0
+HG03065	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	114018	top_level:0
+HG03098	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	116810	top_level:0,HPRC_release2:279
+HG03125	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	115303	top_level:0
+HG03130	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	115298	HPRC_release2:0
+HG03139	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	115307	HPRC_release2:0
+HG03195	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	116407	HPRC_release2:0
+HG03209	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	116432	HPRC_release2:0
+HG03225	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	116506	HPRC_release2:0
+HG03239	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97477	HPRC_release2:0
+HG03270	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	116557	HPRC_release2:0
+HG03369	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	116224	HPRC_release2:0
+HG03371	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	112486	top_level:0
+HG03453	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	117209	top_level:0,HPRC_release2:207
+HG03470	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	118045	HPRC_release2:0
+HG03471	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	116633	HPRC_release2:0
+HG03486	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	117485	top_level:0,HPRC_release2:385
+HG03492	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	97881	top_level:0
+HG03516	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	115924	top_level:0,HPRC_release2:233
+HG03521	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	114342	HPRC_release2:0
+HG03540	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	115714	top_level:0,HPRC_release2:298
+HG03579	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	115845	top_level:0,HPRC_release2:199
+HG03583	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	118205	HPRC_release2:0
+HG03654	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97771	HPRC_release2:0
+HG03669	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97817	HPRC_release2:0
+HG03683	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	97922	top_level:0
+HG03688	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97371	HPRC_release2:0
+HG03704	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97079	HPRC_release2:0
+HG03710	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97613	HPRC_release2:0
+HG03732	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	98635	top_level:0
+HG03742	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97191	HPRC_release2:0
+HG03784	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	96977	HPRC_release2:0
+HG03804	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	98091	HPRC_release2:0
+HG03816	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97765	HPRC_release2:0
+HG03831	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	98135	HPRC_release2:0
+HG03834	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97910	HPRC_release2:0
+HG03874	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	98143	HPRC_release2:0
+HG03927	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	98307	HPRC_release2:0
+HG03942	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97055	HPRC_release2:0
+HG04115	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	96893	HPRC_release2:0
+HG04157	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97513	HPRC_release2:0
+HG04160	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	96877	HPRC_release2:0
+HG04184	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97780	HPRC_release2:0
+HG04187	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97280	HPRC_release2:0
+HG04199	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97177	HPRC_release2:0
+HG04204	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97674	HPRC_release2:0
+HG04228	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97213	HPRC_release2:0
+HG06807	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	115752	HPRC_release2:0
+I002C	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	97544	human579_assemblies:0
+KOREF1	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	95028	human579_assemblies:0
+KSA001	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	100885	human579_assemblies:0
+NA12329	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	96490	top_level:0
+NA12878	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	93806	top_level:0
+NA18505	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	116558	HPRC_release2:0
+NA18508	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	116878	HPRC_release2:0
+NA18522	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	115209	HPRC_release2:0
+NA18534	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	96833	top_level:0
+NA18565	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95268	HPRC_release2:0
+NA18570	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95868	HPRC_release2:0
+NA18608	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95285	HPRC_release2:0
+NA18620	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94578	HPRC_release2:0
+NA18747	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95319	HPRC_release2:0
+NA18879	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	115913	HPRC_release2:0
+NA18906	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	115767	top_level:0,HPRC_release2:341
+NA18939	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	97059	top_level:0
+NA18940	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	91781	HPRC_release2:0
+NA18943	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95270	HPRC_release2:0
+NA18944	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94843	HPRC_release2:0
+NA18945	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94812	HPRC_release2:0
+NA18948	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94987	HPRC_release2:0
+NA18952	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94804	HPRC_release2:0
+NA18959	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95260	HPRC_release2:0
+NA18960	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95645	HPRC_release2:0
+NA18967	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95147	HPRC_release2:0
+NA18970	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95457	HPRC_release2:0
+NA18971	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94681	HPRC_release2:0
+NA18974	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95074	HPRC_release2:0
+NA18976	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95444	HPRC_release2:0
+NA18982	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95234	HPRC_release2:0
+NA18983	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95589	HPRC_release2:0
+NA19036	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	117348	HPRC_release2:0
+NA19043	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	115538	HPRC_release2:0
+NA19087	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95513	HPRC_release2:0
+NA19159	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	117028	HPRC_release2:0
+NA19185	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	116816	HPRC_release2:0
+NA19238	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	114934	top_level:0
+NA19239	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	114768	top_level:0
+NA19240	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	115454	top_level:0,HPRC_release2:188
+NA19338	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	116663	HPRC_release2:0
+NA19391	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	117053	HPRC_release2:0
+NA19443	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	115843	HPRC_release2:0
+NA19468	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	116854	HPRC_release2:0
+NA19650	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	107024	top_level:0
+NA19682	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	96268	HPRC_release2:0
+NA19700	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	114110	HPRC_release2:0
+NA19776	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	99650	HPRC_release2:0
+NA19835	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	115493	HPRC_release2:0
+NA19909	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	115198	HPRC_release2:0
+NA19983	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	114414	top_level:0
+NA20129	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	114034	top_level:0,HPRC_release2:199
+NA20282	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	114150	HPRC_release2:0
+NA20346	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	113512	HPRC_release2:0
+NA20503	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	96356	HPRC_release2:0
+NA20509	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	102302	top_level:0
+NA20752	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95247	HPRC_release2:0
+NA20762	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95250	HPRC_release2:0
+NA20799	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95505	HPRC_release2:0
+NA20805	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94481	HPRC_release2:0
+NA20806	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	95227	HPRC_release2:0
+NA20809	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	94968	HPRC_release2:0
+NA20827	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	96072	HPRC_release2:0
+NA20847	top_level	only candidate batch; all tested variants inside its BED	top_level	top_level	103297	top_level:0
+NA20850	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	96261	HPRC_release2:0
+NA20870	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	96597	HPRC_release2:0
+NA20905	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97178	HPRC_release2:0
+NA21093	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	96473	HPRC_release2:0
+NA21102	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97521	HPRC_release2:0
+NA21106	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97318	HPRC_release2:0
+NA21110	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97722	HPRC_release2:0
+NA21144	HPRC_release2	only candidate batch; all tested variants inside its BED	HPRC_release2	HPRC_release2	97096	HPRC_release2:0
+NA21309	top_level	the only candidate batch whose BED contains all tested variants	top_level	top_level,HPRC_release2	113169	top_level:0,HPRC_release2:342
+YAO	human579_assemblies	only candidate batch; all tested variants inside its BED	human579_assemblies	human579_assemblies	95579	human579_assemblies:0
