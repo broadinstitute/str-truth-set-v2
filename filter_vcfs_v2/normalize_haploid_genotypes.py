@@ -21,10 +21,15 @@ Usage:
 import argparse
 import sys
 
-# hg38 chrX pseudoautosomal regions, copied from dipcall's data/hs38.PAR.bed, so each pair is a BED start and end.
-# dipcall calls a record pseudoautosomal when start <= POS and POS + len(REF) <= end, and reproducing that comparison
-# on these exact bounds is what keeps this script's notion of a haploid record identical to dipcall's.
-CHRX_PAR_INTERVALS = ((0, 2781479), (155701383, 156030895))
+# chrX pseudoautosomal regions of each reference, copied from the PAR BED file dipcall_pipeline/run_dipcall_pipeline.py
+# passes to dipcall for that reference (hg38: dipcall's data/hs38.PAR.bed, CHM13: chm13v2.0_PAR.bed), so each pair is
+# a BED start and end. dipcall calls a record pseudoautosomal when start <= POS and POS + len(REF) <= end, and
+# reproducing that comparison on these exact bounds is what keeps this script's notion of a haploid record identical
+# to dipcall's.
+CHRX_PAR_INTERVALS_BY_REFERENCE = {
+    "hg38": ((0, 2781479), (155701383, 156030895)),
+    "chm13": ((0, 2394410), (153925834, 154259566)),
+}
 
 PROVENANCE_HEADER_LINE = (
     '##normalizeHaploidGenotypes=<sex={sex},Description="chrX outside the PAR and all of chrY were genotyped from a '
@@ -32,7 +37,7 @@ PROVENANCE_HEADER_LINE = (
     'one missing haplotype (.|1)">\n')
 
 
-def is_haploid_region(chrom, pos_1based, ref, sex):
+def is_haploid_region(chrom, pos_1based, ref, sex, reference="hg38"):
     """Whether dipcall genotyped this record from a single assembly haplotype.
 
     Args:
@@ -40,6 +45,7 @@ def is_haploid_region(chrom, pos_1based, ref, sex):
         pos_1based (int): the record's POS.
         ref (str): the record's REF allele.
         sex (str): "male" or "female".
+        reference (str): the reference genome dipcall aligned to, "hg38" or "chm13".
 
     Returns:
         bool: True if the record falls in a region dipcall treats as haploid.
@@ -54,7 +60,8 @@ def is_haploid_region(chrom, pos_1based, ref, sex):
     if chrom != "X":
         return False
 
-    return not any(start <= pos_1based and pos_1based + len(ref) <= end for start, end in CHRX_PAR_INTERVALS)
+    return not any(start <= pos_1based and pos_1based + len(ref) <= end
+                   for start, end in CHRX_PAR_INTERVALS_BY_REFERENCE[reference])
 
 
 def genotype(fields):
@@ -106,12 +113,13 @@ def haploid_genotype(gt):
     return None
 
 
-def normalize_line(line, sex):
+def normalize_line(line, sex, reference="hg38"):
     """Rewrite one VCF line's genotype as haploid if dipcall genotyped that record from a single haplotype.
 
     Args:
         line (str): one line of a VCF, including its trailing newline. Header lines are returned unchanged.
         sex (str): "male" or "female". A female sample has no haploid regions, so every line is returned unchanged.
+        reference (str): the reference genome dipcall aligned to, "hg38" or "chm13".
 
     Returns:
         tuple: (line, changed), where changed is True only if the genotype was rewritten.
@@ -123,7 +131,7 @@ def normalize_line(line, sex):
     if len(fields) != 10:
         raise ValueError(f"Expected 10 tab-delimited fields in a single-sample VCF, found {len(fields)}: {line!r}")
 
-    if not is_haploid_region(fields[0], int(fields[1]), fields[3], sex) or genotype(fields) is None:
+    if not is_haploid_region(fields[0], int(fields[1]), fields[3], sex, reference) or genotype(fields) is None:
         return line, False
 
     new_gt = haploid_genotype(genotype(fields))
@@ -138,13 +146,14 @@ def normalize_line(line, sex):
     return "\t".join(fields) + "\n", True
 
 
-def normalize_vcf(input_lines, output_file, sex):
+def normalize_vcf(input_lines, output_file, sex, reference="hg38"):
     """Write the VCF with the genotypes of dipcall's haploid regions rewritten as haploid, and count what changed.
 
     Args:
         input_lines (iterable): the input VCF's lines.
         output_file (file): where to write the output VCF.
         sex (str): "male" or "female".
+        reference (str): the reference genome dipcall aligned to, "hg38" or "chm13".
 
     Returns:
         dict: counts of records whose genotype was "rewritten", and of records that have exactly one missing haplotype
@@ -159,7 +168,7 @@ def normalize_vcf(input_lines, output_file, sex):
             output_file.write(line)
             continue
 
-        output_line, changed = normalize_line(line, sex)
+        output_line, changed = normalize_line(line, sex, reference)
         output_file.write(output_line)
 
         if changed:
@@ -178,9 +187,11 @@ def main():
     p.add_argument("--sex", choices=["male", "female"], required=True,
                    help="The sample's sex. Only a male sample has haploid chrX/chrY regions, so a female sample's VCF "
                         "is passed through unchanged and only checked.")
+    p.add_argument("--reference", choices=CHRX_PAR_INTERVALS_BY_REFERENCE.keys(), default="hg38",
+                   help="The reference genome dipcall aligned the assemblies to, which sets the chrX PAR bounds.")
     args = p.parse_args()
 
-    counts = normalize_vcf(sys.stdin, sys.stdout, args.sex)
+    counts = normalize_vcf(sys.stdin, sys.stdout, args.sex, args.reference)
 
     print(f"Rewrote {counts['rewritten']:,d} genotypes as haploid", file=sys.stderr)
     print(f"Left {counts['half_missing_not_rewritten']:,d} records with a missing haplotype alone", file=sys.stderr)

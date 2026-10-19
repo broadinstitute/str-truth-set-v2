@@ -44,9 +44,9 @@ import sys
 
 GIAB_BASE_URL = ("https://ftp-trace.ncbi.nlm.nih.gov/ReferenceSamples/giab/data/AshkenazimTrio/analysis/"
                  "NIST_HG002_DraftBenchmark_defrabbV0.020-20250117")
-GIAB_TRUTH_VCF_FILENAME = "GRCh38_HG2-T2TQ100-V1.1_smvar.vcf.gz"
-GIAB_BENCHMARK_BED_FILENAME = "GRCh38_HG2-T2TQ100-V1.1_smvar.benchmark.bed"
-GIAB_FILENAMES = (GIAB_TRUTH_VCF_FILENAME, GIAB_TRUTH_VCF_FILENAME + ".tbi", GIAB_BENCHMARK_BED_FILENAME)
+
+# GIAB publishes the same benchmark on each reference, with the reference's name as the filename prefix
+GIAB_FILENAME_PREFIX_BY_REFERENCE_GENOME = {"hg38": "GRCh38", "chm13": "CHM13v2.0"}
 
 # Aardvark drops any variant that is not fully contained in a region, so the catalog intervals are widened before
 # being intersected with the two confident region sets. Without this, a variant that straddles a locus edge would be
@@ -59,8 +59,13 @@ MIN_VARIANT_GAP_BP = 1000
 
 CHROMOSOMES = tuple([f"chr{i}" for i in range(1, 23)] + ["chrX", "chrY"])
 
-DEFAULT_BASELINE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                     "truthset_release_check_baseline.tsv")
+DEFAULT_BASELINE_PATH_BY_REFERENCE_GENOME = {
+    reference_genome: os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
+    for reference_genome, filename in [
+        ("hg38", "truthset_release_check_baseline.tsv"),
+        ("chm13", "truthset_release_check_baseline.chm13.tsv"),
+    ]
+}
 
 # A drop this large in a rate that normally sits above 0.98 is a real regression rather than run-to-run noise.
 # Aardvark is deterministic, so the only reason a metric moves at all is that an input changed.
@@ -289,18 +294,33 @@ def read_summary_tsv(path):
         return list(csv.DictReader(f, delimiter="\t"))
 
 
-def download_giab_files(work_dir):
+def giab_filenames(reference_genome):
+    """The filenames of the GIAB T2T-Q100 benchmark on the given reference.
+
+    Args:
+        reference_genome (str): "hg38" or "chm13".
+
+    Returns:
+        tuple: (truth VCF filename, benchmark regions BED filename).
+    """
+    prefix = GIAB_FILENAME_PREFIX_BY_REFERENCE_GENOME[reference_genome]
+    return f"{prefix}_HG2-T2TQ100-V1.1_smvar.vcf.gz", f"{prefix}_HG2-T2TQ100-V1.1_smvar.benchmark.bed"
+
+
+def download_giab_files(work_dir, reference_genome):
     """Download the GIAB T2T-Q100 benchmark files, skipping any that are already present.
 
     Args:
         work_dir (str): the check's working directory.
+        reference_genome (str): "hg38" or "chm13".
 
     Returns:
         str: the directory holding the downloaded files.
     """
     giab_dir = os.path.join(work_dir, "giab")
     os.makedirs(giab_dir, exist_ok=True)
-    for filename in GIAB_FILENAMES:
+    giab_truth_vcf_filename, giab_benchmark_bed_filename = giab_filenames(reference_genome)
+    for filename in giab_truth_vcf_filename, giab_truth_vcf_filename + ".tbi", giab_benchmark_bed_filename:
         path = os.path.join(giab_dir, filename)
         if not os.path.exists(path) or os.path.getsize(path) == 0:
             run(f"curl -fsS -o {path} {GIAB_BASE_URL}/{filename}")
@@ -351,7 +371,10 @@ def prepare_audit_regions(catalog_bed_path, giab_benchmark_bed_path, dipcall_con
     os.makedirs(regions_dir, exist_ok=True)
 
     if dipcall_confident_bed_path.startswith("gs://"):
-        local_dipcall_bed_path = os.path.join(regions_dir, os.path.basename(dipcall_confident_bed_path))
+        # Name the cached copy after the whole gs:// path rather than its basename, since the hg38 and CHM13 dipcall
+        # outputs have the same basename (eg. HG002.dip.bed.gz) and the work dir is shared by both references.
+        local_dipcall_bed_path = os.path.join(
+            regions_dir, dipcall_confident_bed_path[len("gs://"):].replace("/", "__"))
         if not os.path.exists(local_dipcall_bed_path):
             run(f"gsutil -q cp {dipcall_confident_bed_path} {local_dipcall_bed_path}")
         dipcall_confident_bed_path = local_dipcall_bed_path
@@ -412,14 +435,14 @@ def write_stratification(audit_regions_path, work_dir):
     return root_path
 
 
-def run_aardvark(aardvark_path, reference_path, giab_dir, query_vcf_path, query_sample, audit_regions_path,
+def run_aardvark(aardvark_path, reference_path, giab_truth_vcf_path, query_vcf_path, query_sample, audit_regions_path,
                  stratification_path, threads, output_dir):
     """Score the truth set against the GIAB benchmark.
 
     Args:
         aardvark_path (str): the aardvark binary.
         reference_path (str): the reference FASTA.
-        giab_dir (str): the directory holding the downloaded GIAB files.
+        giab_truth_vcf_path (str): the downloaded GIAB truth VCF.
         query_vcf_path (str): the uppercased truth set VCF.
         query_sample (str): the sample name to read from the query VCF.
         audit_regions_path (str): the audit regions BED.
@@ -435,7 +458,7 @@ def run_aardvark(aardvark_path, reference_path, giab_dir, query_vcf_path, query_
 
     run(f"{aardvark_path} compare "
         f"--reference {reference_path} "
-        f"--truth-vcf {os.path.join(giab_dir, GIAB_TRUTH_VCF_FILENAME)} --truth-sample HG002 "
+        f"--truth-vcf {giab_truth_vcf_path} --truth-sample HG002 "
         f"--query-vcf {query_vcf_path} --query-sample {query_sample} "
         f"--regions {audit_regions_path} "
         f"--stratifications {stratification_path} "
@@ -479,7 +502,11 @@ def main():
     p.add_argument("--truth-vcf", required=True, help="The truth set VCF to check.")
     p.add_argument("--catalog-bed", required=True, help="The merged tandem repeat catalog BED, used to pick the "
                                                         "regions to score.")
-    p.add_argument("-R", "--reference", required=True, help="The hg38 reference FASTA.")
+    p.add_argument("--reference-genome", choices=GIAB_FILENAME_PREFIX_BY_REFERENCE_GENOME.keys(), default="hg38",
+                   help="The reference genome the truth set is on, which picks the matching GIAB benchmark files and "
+                        "the default --baseline. Not named --reference, since -R/--reference is the FASTA path.")
+    p.add_argument("-R", "--reference", required=True, help="The reference FASTA (hg38 or CHM13, matching "
+                                                              "--reference-genome).")
     p.add_argument("--dipcall-confident-bed", required=True,
                    help="The sample's dipcall confident regions BED. A gs:// path is copied locally first.")
     p.add_argument("--query-sample", default="syndip", help="The sample name to read from the truth set VCF.")
@@ -488,7 +515,9 @@ def main():
                         "binary built from source.")
     p.add_argument("--work-dir", default="truthset_release_check",
                    help="Where to cache the GIAB download and write intermediate files.")
-    p.add_argument("--baseline", default=DEFAULT_BASELINE_PATH, help="The baseline TSV to compare against.")
+    p.add_argument("--baseline", help="The baseline TSV to compare against. Defaults to " + ", ".join(
+        f"{reference_genome} => {os.path.basename(path)}"
+        for reference_genome, path in DEFAULT_BASELINE_PATH_BY_REFERENCE_GENOME.items()))
     p.add_argument("--tolerance", type=float, default=DEFAULT_TOLERANCE,
                    help="How far below its baseline a metric may fall before it counts as a regression.")
     p.add_argument("--threads", type=int, default=os.cpu_count(), help="How many threads to give Aardvark.")
@@ -503,14 +532,21 @@ def main():
         p.error(f"aardvark not found at {args.aardvark!r}. Pass --aardvark, or see docs/install.md in "
                 f"https://github.com/PacificBiosciences/aardvark. Building from source is required on macOS.")
 
+    if not args.baseline:
+        args.baseline = DEFAULT_BASELINE_PATH_BY_REFERENCE_GENOME[args.reference_genome]
+    if not args.update_baseline and not os.path.isfile(args.baseline):
+        p.error(f"Baseline file not found: {args.baseline}. Create it with --update-baseline.")
+
     os.makedirs(args.work_dir, exist_ok=True)
 
-    giab_dir = download_giab_files(args.work_dir)
+    giab_dir = download_giab_files(args.work_dir, args.reference_genome)
+    giab_truth_vcf_filename, giab_benchmark_bed_filename = giab_filenames(args.reference_genome)
     query_vcf_path, lowercase_record_count = prepare_query_vcf(args.truth_vcf, args.work_dir)
-    audit_regions_path = prepare_audit_regions(args.catalog_bed, os.path.join(giab_dir, GIAB_BENCHMARK_BED_FILENAME),
+    audit_regions_path = prepare_audit_regions(args.catalog_bed, os.path.join(giab_dir, giab_benchmark_bed_filename),
                                                args.dipcall_confident_bed, args.work_dir)
     summary_tsv_path = run_aardvark(
-        args.aardvark, args.reference, giab_dir, query_vcf_path, args.query_sample, audit_regions_path,
+        args.aardvark, args.reference, os.path.join(giab_dir, giab_truth_vcf_filename), query_vcf_path,
+        args.query_sample, audit_regions_path,
         write_stratification(audit_regions_path, args.work_dir), args.threads,
         os.path.join(args.work_dir, "aardvark_out"))
 
@@ -532,7 +568,7 @@ def main():
             # The basename rather than the path, so a baseline generated from a scratch copy of the VCF still reads
             # as a description of the release rather than of one machine's directory layout.
             f.write(format_baseline_tsv(observed, f"{os.path.basename(args.truth_vcf)} scored against GIAB "
-                                                  f"{GIAB_TRUTH_VCF_FILENAME} over catalog loci padded "
+                                                  f"{giab_truth_vcf_filename} over catalog loci padded "
                                                   f"{CATALOG_PADDING_BP}bp and intersected with both the GIAB and "
                                                   f"the dipcall confident regions."))
         print(f"Wrote {len(observed):,d} metrics to {args.baseline}")

@@ -23,6 +23,23 @@ from step_pipeline import pipeline, Backend, Localize
 
 DOCKER_IMAGE = "weisburd/dipcall-pipeline@sha256:bf74b72c4b0a44932f5d659350153526b3a56015463ea63d0121371b769dc76e"
 
+# dipcall requires the chrY pseudoautosomal regions (PARs) to be hard-masked in the reference, and takes a BED of the
+# chrX PARs for male samples (see the dipcall README). hg38.fa's chrY PARs are masked, and the dipcall kit in the
+# docker image includes hs38.PAR.bed. For CHM13, Broad's public copy of chm13v2.0.maskedY.fasta has its chrY PARs
+# masked, unlike gs://str-truth-set/chm13/ref/chm13v2.0.fa.
+REFERENCE_GENOMES = {
+    "hg38": {
+        "fasta": "gs://str-truth-set/hg38/ref/hg38.fa",
+        "pseudoautosomal_regions_bed": "/dipcall.kit/hs38.PAR.bed",
+        "output_dir": "gs://str-truth-set-v2/dipcall_pipeline",
+    },
+    "chm13": {
+        "fasta": "gs://gcp-public-data--broad-references/t2t/v2/chm13v2.0.maskedY.fasta",
+        "pseudoautosomal_regions_bed": "gs://gcp-public-data--broad-references/t2t/v2/chm13v2.0_PAR.bed",
+        "output_dir": "gs://str-truth-set-v2/chm13/dipcall_pipeline",
+    },
+}
+
 bp = pipeline("dipcall pipeline", backend=Backend.HAIL_BATCH_SERVICE, config_file_path="~/.step_pipeline")
 
 parser = bp.get_config_arg_parser()
@@ -34,8 +51,22 @@ parser.add_argument("--sample-table", default="hprc_assemblies.tsv", help="Sampl
 g = parser.add_mutually_exclusive_group(required=True)
 g.add_argument("--urls-table", help="URLs table path")   # default="hprc_assembly_urls.tsv"
 g.add_argument("--agc-archive-url", help="Output table path")   # default="https://zenodo.org/records/17772289/files/human579.agc" or "gs://str-truth-set/hg38/ref/human579.agc"
-parser.add_argument("--output-dir", default="gs://str-truth-set-v2/dipcall_pipeline", help="Output bucket path")
+parser.add_argument("--reference", choices=REFERENCE_GENOMES.keys(), default="hg38",
+                    help="Reference genome to align the assemblies to")
+parser.add_argument("--output-dir", help="Output bucket path. Defaults to " + ", ".join(
+    f"{reference} => {files['output_dir']}" for reference, files in REFERENCE_GENOMES.items()))
 args = bp.parse_known_args()
+
+reference_genome = REFERENCE_GENOMES[args.reference]
+if not args.output_dir:
+    args.output_dir = reference_genome["output_dir"]
+elif (args.reference != "hg38" and args.reference not in args.output_dir) or any(
+        reference in args.output_dir for reference in REFERENCE_GENOMES if reference != args.reference):
+    # step_pipeline skips a job whose outputs already exist, so pointing a run at a folder of another reference's
+    # results would silently report those results as this reference's.
+    parser.error(f"--output-dir {args.output_dir} doesn't match --reference {args.reference}. To keep each "
+                 f"reference's results apart, a non-hg38 folder must include the reference's name, and no folder may "
+                 f"include another reference's name.")
 
 df = pd.read_table(args.sample_table)
 if args.urls_table:
@@ -67,9 +98,9 @@ for i, (_, row) in enumerate(df.iterrows()):
 
     s1_steps.append(s1)
 
-    hg38_fasta_input, _ = s1.inputs(
-        "gs://str-truth-set/hg38/ref/hg38.fa",
-        "gs://str-truth-set/hg38/ref/hg38.fa.fai",
+    reference_fasta_input, _ = s1.inputs(
+        reference_genome["fasta"],
+        f"{reference_genome['fasta']}.fai",
         localize_by=Localize.COPY)
 
     s1.command("set -exuo pipefail")
@@ -89,11 +120,16 @@ for i, (_, row) in enumerate(df.iterrows()):
     else:
         parser.error("Must specify either --urls-table or --agc-archive-url")
 
-    pseudoautosomal_region_arg = "-x /dipcall.kit/hs38.PAR.bed" if row.sex == "male" else ""
+    pseudoautosomal_region_arg = ""
+    if row.sex == "male":
+        pseudoautosomal_regions_bed = reference_genome["pseudoautosomal_regions_bed"]
+        if pseudoautosomal_regions_bed.startswith("gs://"):
+            pseudoautosomal_regions_bed = s1.input(pseudoautosomal_regions_bed, localize_by=Localize.COPY)
+        pseudoautosomal_region_arg = f"-x {pseudoautosomal_regions_bed}"
     s1.command(f"/dipcall.kit/run-dipcall "
                f"{pseudoautosomal_region_arg} "
                f"{row.sample_id} "
-               f"{hg38_fasta_input} "
+               f"{reference_fasta_input} "
                f"{father_fasta_path} "
                f"{mother_fasta_path} > out.mak")
 

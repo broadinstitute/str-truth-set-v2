@@ -57,6 +57,24 @@ class IsHaploidRegionTests(unittest.TestCase):
         self.assertFalse(is_haploid_region("X", 1_000_000, "A", "male"))
         self.assertFalse(is_haploid_region("1", 3_000_000, "A", "male"))
 
+    def test_chm13_par_bounds(self):
+        # CHM13's chrX PAR1 ends at 2,394,410 rather than hg38's 2,781,479, and its PAR2 starts at 153,925,834
+        self.assertFalse(is_haploid_region("chrX", 2_394_409, "A", "male", "chm13"))
+        self.assertTrue(is_haploid_region("chrX", 2_394_410, "A", "male", "chm13"))
+        self.assertTrue(is_haploid_region("chrX", 2_500_000, "A", "male", "chm13"))
+        self.assertFalse(is_haploid_region("chrX", 2_500_000, "A", "male", "hg38"))
+        self.assertFalse(is_haploid_region("chrX", 154_000_000, "A", "male", "chm13"))
+        self.assertTrue(is_haploid_region("chrX", 154_000_000, "A", "male", "hg38"))
+        self.assertTrue(is_haploid_region("chrY", 1_000_000, "A", "male", "chm13"))
+
+    def test_normalize_line_uses_the_reference_par_bounds(self):
+        # chrX:2,500,000 is inside hg38's PAR1 but outside CHM13's
+        line, changed = normalize_line(record(chrom="chrX", pos=2_500_000, sample_values=".|1:0,1"), "male", "chm13")
+        self.assertTrue(changed)
+        self.assertEqual(line.rstrip("\n").split("\t")[9], "1:0,1")
+        _, changed = normalize_line(record(chrom="chrX", pos=2_500_000, sample_values=".|1:0,1"), "male", "hg38")
+        self.assertFalse(changed)
+
 
 class GenotypeParsingTests(unittest.TestCase):
 

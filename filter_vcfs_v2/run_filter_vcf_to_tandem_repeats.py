@@ -1,5 +1,5 @@
 """Hail Batch pipeline for running str_analysis.filter_vcf_to_tandem_repeats on DipCall ouptut VCFs generated from
-aligning T2T assemblies to hg38. This is the next iteration of the str_analysis.filter_vcf_to_STRs method.
+aligning T2T assemblies to hg38 or CHM13. This is the next iteration of the str_analysis.filter_vcf_to_STRs method.
 """
 
 #import hailtop.fs as hfs
@@ -19,6 +19,20 @@ DOCKER_IMAGE = "weisburd/str-analysis@sha256:76b259c37425eea7e60b7368f7d9d3cca73
 #DOCKER_IMAGE = "weisburd/str-analysis@sha256:ea30c4500de79b5114471ef111ff8f4c2457f5c28042b1e5d6734aa1e06200af"
 #DOCKER_IMAGE = "weisburd/str-analysis@sha256:4fa33584da2ab7cb2acaac2472eb6a78b8b9eff773244fa311df61e0514d4387"
 #DOCKER_IMAGE = "us-central1-docker.pkg.dev/cmg-analysis/docker-repo/str-analysis@sha256:16191eb046706d19f2cc031f06e12c4da65e3e5f2e6d2a606b1aa8331bc2acae"
+
+# The reference FASTA must be the one dipcall_pipeline/run_dipcall_pipeline.py aligned the assemblies to.
+REFERENCE_GENOMES = {
+    "hg38": {
+        "fasta": "gs://str-truth-set/hg38/ref/hg38.fa",
+        "input_dir": "gs://str-truth-set-v2/dipcall_pipeline",
+        "output_dir": "gs://str-truth-set-v2/filter_vcf_v2",
+    },
+    "chm13": {
+        "fasta": "gs://gcp-public-data--broad-references/t2t/v2/chm13v2.0.maskedY.fasta",
+        "input_dir": "gs://str-truth-set-v2/chm13/dipcall_pipeline",
+        "output_dir": "gs://str-truth-set-v2/chm13/filter_vcf_v2",
+    },
+}
 
 def parse_args(bp):
     parser = bp.get_config_arg_parser()
@@ -41,11 +55,28 @@ def parse_args(bp):
     parser.add_argument("--metadata-tsv", default="../dipcall_pipeline/all_assemblies.tsv")
     parser.add_argument("--exclude-samples-tsv", help="Skip the samples listed in the sample_id column of this table "
                         "(eg. samples_excluded_from_downstream_analyses.tsv).")
-    parser.add_argument("--input-dir", default="gs://str-truth-set-v2/dipcall_pipeline")
-    parser.add_argument("--output-dir", default="gs://str-truth-set-v2/filter_vcf_v2")
+    parser.add_argument("--reference", choices=REFERENCE_GENOMES.keys(), default="hg38",
+                        help="Reference genome that dipcall aligned the assemblies to")
+    parser.add_argument("--input-dir", help="Directory of the dipcall pipeline outputs. Defaults to " + ", ".join(
+        f"{reference} => {files['input_dir']}" for reference, files in REFERENCE_GENOMES.items()))
+    parser.add_argument("--output-dir", help="Output directory. Defaults to " + ", ".join(
+        f"{reference} => {files['output_dir']}" for reference, files in REFERENCE_GENOMES.items()))
     parser.add_argument("--cpu", type=float, default=4)
     parser.add_argument("--memory", default="standard", choices=["lowmem", "standard", "highmem"])
     args = bp.parse_known_args()
+
+    other_references = [reference for reference in REFERENCE_GENOMES if reference != args.reference]
+    for key in "input_dir", "output_dir":
+        path = getattr(args, key)
+        if not path:
+            setattr(args, key, REFERENCE_GENOMES[args.reference][key])
+        elif (args.reference != "hg38" and args.reference not in path) or any(
+                reference in path for reference in other_references):
+            # step_pipeline skips a job whose outputs already exist, so pointing a run at a folder of another
+            # reference's results would silently report those results as this reference's.
+            parser.error(f"--{key.replace('_', '-')} {path} doesn't match --reference {args.reference}. To keep "
+                         f"each reference's files apart, a non-hg38 folder must include the reference's name, and no "
+                         f"folder may include another reference's name.")
 
     return args
 
@@ -75,7 +106,7 @@ def get_output_sample_dir(row, output_dir):
     return get_dipcall_input_dir(row, output_dir)
 
 
-def create_high_confidence_regions_vcf_step(bp, row, input_dir, output_dir, use_preemptibles=True):
+def create_high_confidence_regions_vcf_step(bp, row, input_dir, output_dir, reference, use_preemptibles=True):
     """Restrict the sample's dipcall VCF to its high-confidence regions and fix the two dipcall quirks described below.
 
     This is its own step, rather than part of the filter step, so that the VCF can be regenerated (eg. after a fix to
@@ -124,7 +155,7 @@ def create_high_confidence_regions_vcf_step(bp, row, input_dir, output_dir, use_
     vcf_step.command(f"bedtools intersect -header -f 1 -wa -u \
             -a {dipcall_vcf_input}  \
             -b {dipcall_high_confidence_regions_bed_input} \
-            | python3 -u {normalize_haploid_genotypes_input} --sex {row.sex} \
+            | python3 -u {normalize_haploid_genotypes_input} --sex {row.sex} --reference {reference} \
             | python3 -u {uppercase_ref_and_alt_input} \
             | bgzip > {row.sample_id}.high_confidence_regions.vcf.gz")
     vcf_step.command(f"tabix -f {row.sample_id}.high_confidence_regions.vcf.gz")
@@ -135,7 +166,7 @@ def create_high_confidence_regions_vcf_step(bp, row, input_dir, output_dir, use_
     return vcf_step
 
 
-def create_filter_step(bp, row, vcf_step, output_dir,
+def create_filter_step(bp, row, vcf_step, output_dir, reference_fasta_path,
                        allow_multiple_trf_results_per_locus=False,
                        exclude_homopolymers=False,
                        use_preemptibles=True,
@@ -155,9 +186,7 @@ def create_filter_step(bp, row, vcf_step, output_dir,
 
     filter_step.depends_on(vcf_step)
 
-    hg38_fasta_input, _ = filter_step.inputs(
-        "gs://str-truth-set/hg38/ref/hg38.fa",
-        "gs://str-truth-set/hg38/ref/hg38.fa.fai")
+    reference_fasta_input, _ = filter_step.inputs(reference_fasta_path, f"{reference_fasta_path}.fai")
 
     high_confidence_regions_vcf_input, _ = filter_step.inputs(
         os.path.join(output_dir, f"{row.sample_id}.high_confidence_regions.vcf.gz"),
@@ -170,7 +199,7 @@ def create_filter_step(bp, row, vcf_step, output_dir,
     min_repeat_unit_length = 2 if exclude_homopolymers else 1
     allow_multiple_arg = "--allow-multiple-trf-results-per-locus" if allow_multiple_trf_results_per_locus else ""
     filter_step.command(f"python3 -u -m str_analysis.filter_vcf_to_tandem_repeats catalog \
-            -R {hg38_fasta_input} \
+            -R {reference_fasta_input} \
             --min-repeat-unit-length {min_repeat_unit_length} \
             --min-repeats 3 \
             --min-tandem-repeat-length 9 \
@@ -200,7 +229,7 @@ def create_filter_step(bp, row, vcf_step, output_dir,
     return filter_step
 
 
-def create_combine_step(bp, filter_steps, data_dir, cpu=2, memory="highmem"):
+def create_combine_step(bp, filter_steps, data_dir, reference_fasta_path, local_results_dir, cpu=2, memory="highmem"):
 
     # A single-catalog run named its output "combined.1_catalogs", which every other single-sample run into the
     # same directory also writes, so the second one silently overwrote the first (this is how HG002's catalog was
@@ -233,12 +262,10 @@ def create_combine_step(bp, filter_steps, data_dir, cpu=2, memory="highmem"):
 
     combine_step.command("set -exuo pipefail")
 
-    hg38_fasta_input, _ = combine_step.inputs(
-        "gs://str-truth-set/hg38/ref/hg38.fa",
-        "gs://str-truth-set/hg38/ref/hg38.fa.fai")
+    reference_fasta_input, _ = combine_step.inputs(reference_fasta_path, f"{reference_fasta_path}.fai")
 
     combine_step.command(f"python3 -u -m str_analysis.filter_vcf_to_tandem_repeats merge \
-            -R {hg38_fasta_input} \
+            -R {reference_fasta_input} \
             --write-detailed-bed \
             --verbose \
             --output-prefix {output_prefix} \
@@ -248,8 +275,8 @@ def create_combine_step(bp, filter_steps, data_dir, cpu=2, memory="highmem"):
 
     combine_step.output(f"{output_prefix}.tandem_repeats.bed.gz")
     combine_step.output(f"{output_prefix}.tandem_repeats.bed.gz.tbi")
-    combine_step.output(f"{output_prefix}.tandem_repeats.detailed.bed.gz", download_to_dir="results")
-    combine_step.output(f"{output_prefix}.tandem_repeats.detailed.bed.gz.tbi", download_to_dir="results")
+    combine_step.output(f"{output_prefix}.tandem_repeats.detailed.bed.gz", download_to_dir=local_results_dir)
+    combine_step.output(f"{output_prefix}.tandem_repeats.detailed.bed.gz.tbi", download_to_dir=local_results_dir)
     combine_step.output(f"{output_prefix}.log")
 
     return combine_step
@@ -272,7 +299,8 @@ def get_catalog_name_from_catalog_bed_path(catalog_bed_path):
 
 
 def create_genotype_step(bp, row, combined_catalog_bed_path, vcf_step, filter_step, combine_step, input_dir,
-                         sample_dir, output_dir, add_motif_composition="trviz", threads=1, cpu=4, memory="standard",
+                         sample_dir, output_dir, reference_fasta_path, add_motif_composition="trviz", threads=1, cpu=4,
+                         memory="standard",
                          use_preemptibles=True, show_progress_bar=False):
 
     genotype_step = bp.new_step(
@@ -293,9 +321,7 @@ def create_genotype_step(bp, row, combined_catalog_bed_path, vcf_step, filter_st
     if combine_step is not None:
         genotype_step.depends_on(combine_step)
 
-    hg38_fasta_input, _ = genotype_step.inputs(
-        "gs://str-truth-set/hg38/ref/hg38.fa",
-        "gs://str-truth-set/hg38/ref/hg38.fa.fai")
+    reference_fasta_input, _ = genotype_step.inputs(reference_fasta_path, f"{reference_fasta_path}.fai")
 
     catalog_bed_input = genotype_step.input(combined_catalog_bed_path)
     high_confidence_regions_vcf_input, _ = genotype_step.inputs(
@@ -320,7 +346,7 @@ def create_genotype_step(bp, row, combined_catalog_bed_path, vcf_step, filter_st
 
     trf_args = f"--trf-executable-path /usr/bin/trf --trf-threads {int(2*cpu)}" if add_motif_composition == "trf" else ""
     genotype_step.command(f"python3 -u -m str_analysis.filter_vcf_to_tandem_repeats genotype \
-            -R {hg38_fasta_input} \
+            -R {reference_fasta_input} \
             --catalog-bed {catalog_within_regions_path} \
             --write-json \
             --add-motif-composition {add_motif_composition} {trf_args} \
@@ -365,13 +391,14 @@ def main():
         raise ValueError(f"{len(samples_without_a_sex):,d} sample(s) in {args.metadata_tsv} have a sex other than "
                          f"'male' or 'female': {', '.join(samples_without_a_sex.sample_id)}")
 
+    reference_fasta_path = REFERENCE_GENOMES[args.reference]["fasta"]
     vcf_steps = []
     filter_steps = []
     for row_i, (_, row) in enumerate(df.iterrows()):
         output_dir = get_output_sample_dir(row, args.output_dir)
-        vcf_step = create_high_confidence_regions_vcf_step(bp, row, args.input_dir, output_dir,
+        vcf_step = create_high_confidence_regions_vcf_step(bp, row, args.input_dir, output_dir, args.reference,
                                                            use_preemptibles=not args.use_nonpreemptibles)
-        filter_step = create_filter_step(bp, row, vcf_step, output_dir,
+        filter_step = create_filter_step(bp, row, vcf_step, output_dir, reference_fasta_path,
                                          allow_multiple_trf_results_per_locus=args.allow_multiple_trf_results_per_locus,
                                          exclude_homopolymers=args.exclude_homopolymers,
                                          use_preemptibles=not args.use_nonpreemptibles,
@@ -383,7 +410,11 @@ def main():
 
 
     # Skip the combine step entirely when genotyping against a custom catalog, since its merged output is unused.
-    combine_step = None if args.genotype_catalog else create_combine_step(bp, filter_steps, args.output_dir)
+    # The combined catalog's filename doesn't include the reference, so a non-hg38 run downloads it into its own
+    # subfolder rather than overwriting the hg38 copy in results/
+    local_results_dir = "results" if args.reference == "hg38" else os.path.join("results", args.reference)
+    combine_step = None if args.genotype_catalog else create_combine_step(
+        bp, filter_steps, args.output_dir, reference_fasta_path, local_results_dir)
 
     genotype_catalog_bed_path = args.genotype_catalog or combine_step.get_outputs()[0].output_path
     genotype_subdir = f"{args.genotype_catalog_name or get_catalog_name_from_catalog_bed_path(genotype_catalog_bed_path)}_genotypes"
@@ -394,6 +425,7 @@ def main():
                              input_dir=args.input_dir,
                              sample_dir=sample_dir,
                              output_dir=os.path.join(sample_dir, genotype_subdir),
+                             reference_fasta_path=reference_fasta_path,
                              add_motif_composition=args.add_motif_composition,
                              threads=args.genotype_threads,
                              cpu=args.cpu,
