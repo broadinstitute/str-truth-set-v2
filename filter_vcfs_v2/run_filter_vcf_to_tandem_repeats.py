@@ -26,11 +26,18 @@ REFERENCE_GENOMES = {
         "fasta": "gs://str-truth-set/hg38/ref/hg38.fa",
         "input_dir": "gs://str-truth-set-v2/dipcall_pipeline",
         "output_dir": "gs://str-truth-set-v2/filter_vcf_v2",
+        "metadata_tsv": "../dipcall_pipeline/all_assemblies.tsv",
     },
     "chm13": {
         "fasta": "gs://gcp-public-data--broad-references/t2t/v2/chm13v2.0.maskedY.fasta",
         "input_dir": "gs://str-truth-set-v2/chm13/dipcall_pipeline",
         "output_dir": "gs://str-truth-set-v2/chm13/filter_vcf_v2",
+        # The hg38 truth set was built by passing --metadata-tsv all_assemblies_v2.321_samples.tsv (see run.sh) rather
+        # than relying on hg38's default above. Unlike that table, this one uses HPRC release 2 assemblies for the 46
+        # individuals that are also in HPRC release 1, since release 2 gives more and less fragmented dipcall confident
+        # regions, and HGSVC3 assemblies for the 28 HGSVC2 individuals that have them, since the HGSVC2 assemblies of
+        # males have chrX and chrY in both haplotypes (see dipcall_pipeline/generate_hgsvc3_assembly_tables.py)
+        "metadata_tsv": "all_assemblies_v2.321_samples.preferring_hprc_release2_and_hgsvc3.tsv",
     },
 }
 
@@ -52,7 +59,8 @@ def parse_args(bp):
     parser.add_argument("--show-progress-bar", action="store_true", help="Show a progress bar in the genotype step.")
     parser.add_argument("-n", type=int, help="Number of samples to process")
     parser.add_argument("-s", "--sample-id", action="append", help="Process only this sample. Can be specified more than once.")
-    parser.add_argument("--metadata-tsv", default="../dipcall_pipeline/all_assemblies.tsv")
+    parser.add_argument("--metadata-tsv", help="Table of the samples to process. Defaults to " + ", ".join(
+        f"{reference} => {files['metadata_tsv']}" for reference, files in REFERENCE_GENOMES.items()))
     parser.add_argument("--exclude-samples-tsv", help="Skip the samples listed in the sample_id column of this table "
                         "(eg. samples_excluded_from_downstream_analyses.tsv).")
     parser.add_argument("--reference", choices=REFERENCE_GENOMES.keys(), default="hg38",
@@ -77,6 +85,9 @@ def parse_args(bp):
             parser.error(f"--{key.replace('_', '-')} {path} doesn't match --reference {args.reference}. To keep "
                          f"each reference's files apart, a non-hg38 folder must include the reference's name, and no "
                          f"folder may include another reference's name.")
+
+    if not args.metadata_tsv:
+        args.metadata_tsv = REFERENCE_GENOMES[args.reference]["metadata_tsv"]
 
     return args
 

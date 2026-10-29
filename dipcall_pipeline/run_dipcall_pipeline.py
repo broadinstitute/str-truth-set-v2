@@ -44,6 +44,9 @@ bp = pipeline("dipcall pipeline", backend=Backend.HAIL_BATCH_SERVICE, config_fil
 
 parser = bp.get_config_arg_parser()
 parser.add_argument("-s", "--sample-id", action="append", help="Process only this sample. Can be specified more than once.")
+parser.add_argument("--exclude-samples-tsv", action="append", help="Skip the samples listed in the sample_id column of "
+                    "this table (eg. hprc_assemblies_release2.tsv, to skip individuals whose HPRC release 2 assemblies are "
+                    "used instead). Can be specified more than once.")
 parser.add_argument("-n", "--num-samples", type=int, help="Process only this number of samples.")
 parser.add_argument("--offset", type=int, help="Skip the first N samples.")
 parser.add_argument("--more-memory", action="store_true", help="Run with 2x more memory")
@@ -77,6 +80,11 @@ if args.urls_table:
 
 if args.sample_id:
     df = df[df["sample_id"].isin(args.sample_id)]
+
+for exclude_samples_tsv in args.exclude_samples_tsv or []:
+    excluded_sample_ids = set(pd.read_table(exclude_samples_tsv).sample_id)
+    print(f"Excluding {df.sample_id.isin(excluded_sample_ids).sum():,d} sample(s) listed in {exclude_samples_tsv}")
+    df = df[~df.sample_id.isin(excluded_sample_ids)]
 
 if args.offset:
     df = df.iloc[args.offset:]
@@ -133,6 +141,38 @@ for i, (_, row) in enumerate(df.iterrows()):
                f"{father_fasta_path} "
                f"{mother_fasta_path} > out.mak")
 
+    # Hail Batch restarts a preempted job from the beginning on a new machine (in the 2025 HPRC release 2 batches, this
+    # wasted 32% to 45% of the compute). So save each pair of minimap2 alignments, about 45 minutes of work, as soon as
+    # it's done, and restore them when the job restarts. The folder name includes the assembly file names because the 4
+    # samples in both the HPRC release 1 and HGSVC tables are run from different assemblies into the same folder.
+    saved_alignments_dir = os.path.join(
+        args.output_dir, row.sample_id, "saved_alignments", f"{father_fasta_path}__{mother_fasta_path}")
+    alignment_paths_by_stage = [
+        [f"{row.sample_id}.hap1.paf.gz", f"{row.sample_id}.hap2.paf.gz"],
+        [f"{row.sample_id}.hap1.sam.gz", f"{row.sample_id}.hap2.sam.gz"],
+    ]
+    all_alignment_paths = [path for alignment_paths in alignment_paths_by_stage for path in alignment_paths]
+    s1.gcloud_auth_activate_service_account()
+    # if the restore fails partway, remove what it copied so that minimap2 reruns
+    s1.command(f"gcloud storage cp '{saved_alignments_dir}/*' . || "
+               f"(echo 'No saved alignments restored from {saved_alignments_dir}'; rm -f {' '.join(all_alignment_paths)})")
+    for path in all_alignment_paths:
+        # make reruns minimap2 unless the alignment is newer than the assembly
+        s1.command(f"if [ -f {path} ]; then touch {path}; fi")
+
+    for alignment_paths in alignment_paths_by_stage:
+        s1.command(f"make -j2 -f out.mak {' '.join(alignment_paths)}")
+        for path in alignment_paths:
+            # dipcall's Makefile pipes minimap2 into gzip, so make reports success even when minimap2 is killed.
+            # minimap2 prints its "Real time" line only after writing all of its output.
+            s1.command(f"grep -q -F '[M::main] Real time' {path}.log || "
+                       f"(echo 'ERROR: minimap2 did not finish writing {path}'; cat {path}.log; exit 1)")
+        # save the logs first, so that a restored alignment always comes with its log
+        s1.command(f"(gcloud storage cp --no-clobber {' '.join(path + '.log' for path in alignment_paths)} "
+                   f"'{saved_alignments_dir}/' && "
+                   f"gcloud storage cp --no-clobber {' '.join(alignment_paths)} '{saved_alignments_dir}/') || "
+                   f"echo 'WARNING: failed to save {' '.join(alignment_paths)}'")
+
     s1.command(f"make -j2 -f out.mak")
 
     s1.command("ls -lhtr")
@@ -142,6 +182,9 @@ for i, (_, row) in enumerate(df.iterrows()):
     s1.command(f"tabix {row.sample_id}.dip.bed.gz")
 
     s1.command(f"tabix {row.sample_id}.dip.vcf.gz")
+
+    s1.command(f"gcloud storage rm --recursive '{saved_alignments_dir}' || "
+               f"echo 'WARNING: failed to delete {saved_alignments_dir}'")
 
     s1.output(f"{row.sample_id}.dip.vcf.gz")
     s1.output(f"{row.sample_id}.dip.vcf.gz.tbi")
