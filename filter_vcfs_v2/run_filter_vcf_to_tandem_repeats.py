@@ -240,7 +240,7 @@ def create_filter_step(bp, row, vcf_step, output_dir, reference_fasta_path,
     return filter_step
 
 
-def create_combine_step(bp, filter_steps, data_dir, reference_fasta_path, local_results_dir, cpu=2, memory="highmem"):
+def create_combine_step(bp, filter_steps, data_dir, reference, reference_fasta_path, cpu=2, memory="highmem"):
 
     # A single-catalog run named its output "combined.1_catalogs", which every other single-sample run into the
     # same directory also writes, so the second one silently overwrote the first (this is how HG002's catalog was
@@ -252,6 +252,11 @@ def create_combine_step(bp, filter_steps, data_dir, reference_fasta_path, local_
         output_prefix = f"combined.{sample_id}_catalog"
     else:
         output_prefix = f"combined.{len(filter_steps)}_catalogs"
+
+    # Name a non-hg38 catalog after its reference (eg. combined.321_catalogs.chm13.tandem_repeats.bed.gz) so that it
+    # can't be mistaken for, or overwrite, the hg38 one in results/. hg38 keeps its original names.
+    if reference != "hg38":
+        output_prefix += f".{reference}"
 
     combine_step = bp.new_step(
         f"combine (cpu={cpu}): {len(filter_steps):,d} catalogs",
@@ -286,8 +291,8 @@ def create_combine_step(bp, filter_steps, data_dir, reference_fasta_path, local_
 
     combine_step.output(f"{output_prefix}.tandem_repeats.bed.gz")
     combine_step.output(f"{output_prefix}.tandem_repeats.bed.gz.tbi")
-    combine_step.output(f"{output_prefix}.tandem_repeats.detailed.bed.gz", download_to_dir=local_results_dir)
-    combine_step.output(f"{output_prefix}.tandem_repeats.detailed.bed.gz.tbi", download_to_dir=local_results_dir)
+    combine_step.output(f"{output_prefix}.tandem_repeats.detailed.bed.gz", download_to_dir="results")
+    combine_step.output(f"{output_prefix}.tandem_repeats.detailed.bed.gz.tbi", download_to_dir="results")
     combine_step.output(f"{output_prefix}.log")
 
     return combine_step
@@ -421,11 +426,8 @@ def main():
 
 
     # Skip the combine step entirely when genotyping against a custom catalog, since its merged output is unused.
-    # The combined catalog's filename doesn't include the reference, so a non-hg38 run downloads it into its own
-    # subfolder rather than overwriting the hg38 copy in results/
-    local_results_dir = "results" if args.reference == "hg38" else os.path.join("results", args.reference)
     combine_step = None if args.genotype_catalog else create_combine_step(
-        bp, filter_steps, args.output_dir, reference_fasta_path, local_results_dir)
+        bp, filter_steps, args.output_dir, args.reference, reference_fasta_path)
 
     genotype_catalog_bed_path = args.genotype_catalog or combine_step.get_outputs()[0].output_path
     genotype_subdir = f"{args.genotype_catalog_name or get_catalog_name_from_catalog_bed_path(genotype_catalog_bed_path)}_genotypes"
