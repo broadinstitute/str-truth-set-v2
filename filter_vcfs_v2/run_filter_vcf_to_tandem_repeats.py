@@ -27,6 +27,11 @@ REFERENCE_GENOMES = {
         "input_dir": "gs://str-truth-set-v2/dipcall_pipeline",
         "output_dir": "gs://str-truth-set-v2/filter_vcf_v2",
         "metadata_tsv": "../dipcall_pipeline/all_assemblies.tsv",
+        # The Miga lab's centromeric satellite (CenSat) annotation of hg38, unmodified from
+        # https://raw.githubusercontent.com/hloucks/CenSatData/fb50a32b8ce443b9b0ea718e3c0c47b91507e59c/HG38/hg38.cenSatv1.0.bed
+        # It is the file TRExplorer's Centromere and Satellite Regions column was made from. The genotype step leaves
+        # out catalog loci that overlap any of its regions other than the centromeric transition (ct) regions.
+        "centromeric_satellite_regions_bed": "gs://str-truth-set-v2/reference_annotations/hg38/hg38.cenSatv1.0.bed",
     },
     "chm13": {
         "fasta": "gs://gcp-public-data--broad-references/t2t/v2/chm13v2.0.maskedY.fasta",
@@ -38,6 +43,11 @@ REFERENCE_GENOMES = {
         # regions, and HGSVC3 assemblies for the 28 HGSVC2 individuals that have them, since the HGSVC2 assemblies of
         # males have chrX and chrY in both haplotypes (see dipcall_pipeline/generate_hgsvc3_assembly_tables.py)
         "metadata_tsv": "all_assemblies_v2.321_samples.preferring_hprc_release2_and_hgsvc3.tsv",
+        # The Miga lab's CenSat annotation of CHM13, unmodified from
+        # https://raw.githubusercontent.com/hloucks/CenSatData/fb50a32b8ce443b9b0ea718e3c0c47b91507e59c/CHM13/chm13v2.0.cenSatv2.1.bed
+        # It is the file TRExplorer's CHM13 catalog took its Centromere and Satellite Regions from, made with the same
+        # workflow and class names as the hg38 one (unlike the T2T consortium's chm13v2.0_censat_v2.1.bed).
+        "centromeric_satellite_regions_bed": "gs://str-truth-set-v2/reference_annotations/chm13/chm13v2.0.cenSatv2.1.bed",
     },
 }
 
@@ -315,7 +325,8 @@ def get_catalog_name_from_catalog_bed_path(catalog_bed_path):
 
 
 def create_genotype_step(bp, row, combined_catalog_bed_path, vcf_step, filter_step, combine_step, input_dir,
-                         sample_dir, output_dir, reference_fasta_path, add_motif_composition="trviz", threads=1, cpu=4,
+                         sample_dir, output_dir, reference_fasta_path, centromeric_satellite_regions_bed_path,
+                         add_motif_composition="trviz", threads=1, cpu=4,
                          memory="standard",
                          use_preemptibles=True, show_progress_bar=False):
 
@@ -355,9 +366,18 @@ def create_genotype_step(bp, row, combined_catalog_bed_path, vcf_step, filter_st
     catalog_within_regions_path = "catalog_loci_within_high_confidence_regions.bed.gz"
     genotype_step.command(f"gzip -dc {dipcall_high_confidence_regions_bed_input} | cut -f 1-3 | sort -k1,1 -k2,2n "
                           f"| bedtools merge > high_confidence_regions.merged.bed")
+    # Also leave out loci that overlap any CenSat region other than the centromeric transition (ct) regions, which are
+    # the sequence between a centromere's satellite arrays rather than an array itself. Besides centromeric and
+    # pericentromeric arrays, this includes satellite arrays away from the centromeres, such as subtelomeric TAR1 and,
+    # in CHM13, the Yq12 heterochromatin.
+    centromeric_satellite_regions_bed_input = genotype_step.input(centromeric_satellite_regions_bed_path)
+    genotype_step.command(f"awk -F'\\t' '!/^track/ && $4 != \"ct\"' {centromeric_satellite_regions_bed_input} "
+                          f"> centromeric_satellite_regions_other_than_ct.bed")
     genotype_step.command(f"bedtools intersect -a {catalog_bed_input} -b high_confidence_regions.merged.bed -f 1.0 -u "
+                          f"| bedtools intersect -a stdin -b centromeric_satellite_regions_other_than_ct.bed -v "
                           f"| bgzip > {catalog_within_regions_path}")
-    genotype_step.command(f"echo \"Catalog loci within {row.sample_id}'s high-confidence regions: "
+    genotype_step.command(f"echo \"Catalog loci within {row.sample_id}'s high-confidence regions and outside "
+                          f"CenSat regions other than ct: "
                           f"$(gzip -dc {catalog_within_regions_path} | wc -l) of $(gzip -dc {catalog_bed_input} | wc -l)\"")
 
     trf_args = f"--trf-executable-path /usr/bin/trf --trf-threads {int(2*cpu)}" if add_motif_composition == "trf" else ""
@@ -439,6 +459,8 @@ def main():
                              sample_dir=sample_dir,
                              output_dir=os.path.join(sample_dir, genotype_subdir),
                              reference_fasta_path=reference_fasta_path,
+                             centromeric_satellite_regions_bed_path=REFERENCE_GENOMES[args.reference][
+                                 "centromeric_satellite_regions_bed"],
                              add_motif_composition=args.add_motif_composition,
                              threads=args.genotype_threads,
                              cpu=args.cpu,
