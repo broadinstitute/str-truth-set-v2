@@ -7,12 +7,14 @@ import os
 import pandas as pd
 from step_pipeline import pipeline, Backend, Localize, Delocalize
 
-# Built by the str-analysis "build docker images" workflow from commit bd68a2a, which counts repeat insertions that
-# DipCall's left-alignment placed up to one motif length before a locus (eg. the FXN, NOP56 and C9ORF72 expansions)
-# instead of reporting the reference length there. The image's org.opencontainers.image.revision label names
-# bd68a2a. The previous image, from e32a856 (genotype TSV and JSON written in parallel when --threads is above 1),
-# produced the 2026-09-29 truth genotypes.
-DOCKER_IMAGE = "weisburd/str-analysis@sha256:76b259c37425eea7e60b7368f7d9d3cca73f2ae9afb59525d7bf2af8cafd081f"
+# Built by the str-analysis "build docker images" workflow from commit d32b0ee, which includes e9f6877: the genotype
+# subcommand sets a locus to no call when an insertion or deletion at its edge could equally be placed inside or
+# outside it and that would change a repeat count. The image's org.opencontainers.image.revision label names
+# d32b0ee. The previous image, from bd68a2a (counts repeat insertions that DipCall's left-alignment placed up to one
+# motif length before a locus, eg. the FXN, NOP56 and C9ORF72 expansions), produced the truth genotypes before this
+# change; the one before that, from e32a856, produced the 2026-09-29 truth genotypes.
+DOCKER_IMAGE = "weisburd/str-analysis@sha256:93c34758975addea03d4efbed9d2263c12b93e88937c7b571c0fc6b9a1410ed9"
+#DOCKER_IMAGE = "weisburd/str-analysis@sha256:76b259c37425eea7e60b7368f7d9d3cca73f2ae9afb59525d7bf2af8cafd081f"
 #DOCKER_IMAGE = "weisburd/str-analysis@sha256:f6583c9cde61c4d3dc8e2da96ebbd015297ca13e314150217e0c9afdf3fc1078"
 #DOCKER_IMAGE = "weisburd/str-analysis@sha256:703c8e32c86626d0f8da005f14176dddcfaf05562e94877d9389346d6a93d851"
 #DOCKER_IMAGE = "weisburd/str-analysis@sha256:2545406b14c2280d53238c86dfbc82cad883d6edf3c85d1e0f719bdaa01be7fa"
