@@ -211,6 +211,25 @@ def get_truth_set_genotypes_tsv_path(args, sample_id, dipcall_batch_by_sample_id
                         f"{args.truth_set_catalog_name}_genotypes", f"{sample_id}.tandem_repeat_genotypes.tsv.gz")
 
 
+def get_per_shard_vcf_paths(tool_output_dir, catalog_paths):
+    """Return the vcf paths that HipSTR, GangSTR or LongTR write for the given catalog shards.
+
+    These tools write one vcf per catalog shard under {tool_output_dir}/vcf/, named after the shard's bed file. The
+    paths are derived from the current catalog shards rather than by listing {tool_output_dir}/vcf/, because that
+    folder can also hold the vcfs of an older, differently-sharded run (older runs used a 6-way split), which would be
+    silently mixed with this run's output.
+
+    Args:
+        tool_output_dir (str): the tool's {sample}/{data_type}/{tool}/{coverage}_coverage output folder
+        catalog_paths (list): the tool's catalog shard paths (*.bed or *.bed.gz)
+
+    Returns:
+        list: {tool_output_dir}/vcf/{shard bed name without .bed or .bed.gz}.vcf.gz, one per shard
+    """
+    return [os.path.join(tool_output_dir, "vcf", re.sub(r"\.bed(\.gz)?$", "", os.path.basename(path)) + ".vcf.gz")
+            for path in catalog_paths]
+
+
 def main():
     sample_table_path = "HPRC_all_aligned_short_read_and_long_read_samples.tsv"
     df = pd.read_table(sample_table_path)
@@ -604,21 +623,22 @@ def main():
                 tool_results_base = os.path.join(args.output_dir, row.sample_id, row.sequencing_data_type)
                 eh_json_glob = os.path.join(
                     tool_results_base, ENSEMBLETR_EH_SOURCE_TOOL, f"{coverage_label}_coverage", "json", "*.json*")
-                hipstr_vcf_glob = os.path.join(
-                    tool_results_base, "HipSTR", f"{coverage_label}_coverage", "vcf", "*.vcf.gz")
                 eh_json_paths = sorted(x.path for x in hfs.ls(eh_json_glob))
-                hipstr_vcf_paths = sorted(x.path for x in hfs.ls(hipstr_vcf_glob))
                 if not eh_json_paths:
                     raise ValueError(f"No ExpansionHunter json files found for EnsembleTR at {eh_json_glob}")
-                if not hipstr_vcf_paths:
-                    raise ValueError(f"No HipSTR vcf files found for EnsembleTR at {hipstr_vcf_glob}")
-                gangstr_vcf_paths = None
-                if tool == "EnsembleTR-EH+HipSTR+GangSTR":
-                    gangstr_vcf_glob = os.path.join(
-                        tool_results_base, "GangSTR", f"{coverage_label}_coverage", "vcf", "*.vcf.gz")
-                    gangstr_vcf_paths = sorted(x.path for x in hfs.ls(gangstr_vcf_glob))
-                    if not gangstr_vcf_paths:
-                        raise ValueError(f"No GangSTR vcf files found for EnsembleTR at {gangstr_vcf_glob}")
+                caller_vcf_paths = {}
+                for caller in ("HipSTR", "GangSTR") if tool == "EnsembleTR-EH+HipSTR+GangSTR" else ("HipSTR",):
+                    caller_catalog_paths = (
+                        [x.path for x in hfs.ls(args.custom_catalog_path)] if args.custom_catalog_path
+                        else [catalog_paths_by_tool[caller]])
+                    caller_vcf_paths[caller] = get_per_shard_vcf_paths(
+                        os.path.join(tool_results_base, caller, f"{coverage_label}_coverage"), caller_catalog_paths)
+                    missing_vcf_paths = [path for path in caller_vcf_paths[caller] if not hfs.exists(path)]
+                    if missing_vcf_paths:
+                        raise ValueError(f"EnsembleTR needs {caller}'s vcf(s) for the current catalog, which don't "
+                                         f"exist (genotype {caller} first): {', '.join(missing_vcf_paths)}")
+                hipstr_vcf_paths = caller_vcf_paths["HipSTR"]
+                gangstr_vcf_paths = caller_vcf_paths.get("GangSTR")
                 current_step = create_ensembletr_steps(
                     bp,
                     reference_fasta=REFERENCE_FASTA_PATH,
@@ -654,14 +674,7 @@ def main():
                         output_dir=output_dir)
                 else:
                     if tool in ("HipSTR", "LongTR"):
-                        # HipSTR and LongTR write one vcf per catalog shard under {output_dir}/vcf/, named after the
-                        # shard's bed file. Derive the expected path(s) from this run's own catalog shards -- globbing
-                        # {output_dir}/vcf/ would also pick up stale shard vcfs left over from an older, differently-
-                        # sharded catalog (older runs used a 6-way split) and silently mix them with this run's output.
-                        tool_vcf_paths = [
-                            os.path.join(output_dir, "vcf",
-                                         re.sub(r"\.bed(\.gz)?$", "", os.path.basename(catalog_path)) + ".vcf.gz")
-                            for catalog_path in repeat_catalog_paths]
+                        tool_vcf_paths = get_per_shard_vcf_paths(output_dir, repeat_catalog_paths)
                     else:
                         tool_vcf_paths = [os.path.join(output_dir, f"{row.sample_id}.{tool}.vcf.gz")]
 
